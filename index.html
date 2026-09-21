@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v38">
+<link rel="manifest" href="./manifest.json?v=v39">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v38">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v38">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v39">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v39">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -831,7 +831,7 @@
      see that flag's own comment for why. */
   body.viewer-mode #newBtn, body.viewer-mode #openBtn,
   body.viewer-mode #openProjectBtn, body.viewer-mode #insertImageBtn,
-  body.viewer-mode #fileNameBtn, body.viewer-mode #saveBtn,
+  body.viewer-mode #fileNameBtn, body.viewer-mode #userIdentityBtn, body.viewer-mode #saveBtn,
   body.viewer-mode #autoBackupGroup, body.viewer-mode #lockAllBtn,
   body.viewer-mode #snapGridBtn, body.viewer-mode #snapHVBtn,
   body.viewer-mode #undoBtn, body.viewer-mode #redoBtn,
@@ -947,6 +947,19 @@
     <button class="tbtn" id="fileNameBtn" title="Rename this plan — Save, Save PDF, Share and auto-backup all use this name">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.4 3.6l4 4-9 9-4.6.9.9-4.6z"/></svg>
       <span id="fileNameBtnLabel">plan</span>
+    </button>
+    <!-- Shared device identity (UTZLINE Data Standard v1, §6, added v39):
+         one name per device/browser profile, stored in a small IndexedDB
+         database ("utzline-identity") that Site Measure, Viewer and the
+         ITP app all read from the same origin -- so a name set once here
+         also shows up in ITP without retyping it. Stamped into every save
+         (see projectPayload()'s "savedBy" field) so a permanent overlay
+         layer can eventually be attributed to a real person instead of
+         whoever happened to be typing. Hidden in Viewer builds (see the
+         body.viewer-mode rule above) since the Viewer never saves. -->
+    <button class="tbtn" id="userIdentityBtn" title="Your name — attributed on every save. Click to set or change it for this device.">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6.6" r="3.1"/><path d="M3.5 17c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>
+      <span id="userIdentityBtnLabel">Set your name</span>
     </button>
     <button class="tbtn" id="switchProjectBtn" title="Switch to a different level in this project, start a new level, or go back to all projects" style="display:none;">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="6.4" height="6.4" rx="1"/><rect x="11.1" y="4" width="6.4" height="6.4" rx="1"/><rect x="2.5" y="12.4" width="6.4" height="6.4" rx="1"/><rect x="11.1" y="12.4" width="6.4" height="6.4" rx="1"/></svg>
@@ -1330,6 +1343,21 @@
       </div>
     </div>
 
+    <!-- Shared device identity dialog (added v39, see userIdentityBtn's own
+         comment above) -- deliberately the same rename-input modal shape as
+         renameBackdrop, so it feels like the same family of small "type one
+         thing and confirm" dialogs already throughout this app. -->
+    <div class="modal-backdrop" id="userIdentityBackdrop" hidden>
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="userIdentityLabel">
+        <p id="userIdentityLabel">Your name — attributed on every save on this device:</p>
+        <input type="text" class="rename-input" id="userIdentityInput" maxlength="60" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="e.g. Andrew">
+        <div class="modal-actions">
+          <button class="mbtn" id="userIdentityCancel">Cancel</button>
+          <button class="mbtn mbtn-accent" id="userIdentityOk">Save</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Placing a room-link marker on a level's plan now creates one
          JOINERY ITEM (a room can hold several dots, one per item), not one
          marker per room -- requested by Andrew, 2026-09-18: "the popup
@@ -1448,7 +1476,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v38";
+  var APP_VERSION = "v39";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2058,6 +2086,71 @@
         rq.onerror = function(){ rej(rq.error); };
       });
     });
+  }
+
+  // ---- shared device identity (UTZLINE Data Standard v1, §6, added v39) ----
+  // A tiny IndexedDB database of its OWN -- deliberately separate from
+  // DB_NAME/STORE above ("redline-db"/"session", this app's own autosave
+  // store) -- named and shaped so the ITP app (a completely different
+  // index.html, its own IDB_NAME "utzline-itp-kv") can open the exact same
+  // database name/store and read back whatever name was set here, since
+  // IndexedDB is scoped per-ORIGIN, not per-page, and every UTZLINE app
+  // lives on the one GitHub Pages origin. Keeping this in its own tiny
+  // database (rather than adding a key to redline-db) means the ITP app
+  // never has to know redline-db's schema at all, just this one shared
+  // name/store pair -- see redline-itp-pwa/index.html's own copy of this
+  // same block for the other side of the pairing.
+  var IDENTITY_DB_NAME = "utzline-identity", IDENTITY_STORE = "kv", IDENTITY_KEY = "deviceUserName";
+  var deviceUserName = ""; // cached in memory once loaded -- see loadDeviceUserName()
+  function identityDbOpen(){
+    return new Promise(function(res, rej){
+      try{
+        var r = indexedDB.open(IDENTITY_DB_NAME, 1);
+        r.onupgradeneeded = function(){ r.result.createObjectStore(IDENTITY_STORE); };
+        r.onsuccess = function(){ res(r.result); };
+        r.onerror = function(){ rej(r.error); };
+      }catch(e){ rej(e); }
+    });
+  }
+  function getDeviceUserName(){
+    return identityDbOpen().then(function(db){
+      return new Promise(function(res, rej){
+        var tx = db.transaction(IDENTITY_STORE, "readonly");
+        var rq = tx.objectStore(IDENTITY_STORE).get(IDENTITY_KEY);
+        rq.onsuccess = function(){ res(rq.result || ""); };
+        rq.onerror = function(){ rej(rq.error); };
+      });
+    });
+  }
+  function setDeviceUserName(name){
+    name = String(name || "").trim();
+    return identityDbOpen().then(function(db){
+      return new Promise(function(res, rej){
+        var tx = db.transaction(IDENTITY_STORE, "readwrite");
+        tx.objectStore(IDENTITY_STORE).put(name, IDENTITY_KEY);
+        tx.oncomplete = function(){ res(name); };
+        tx.onerror = function(){ rej(tx.error); };
+      });
+    });
+  }
+  // Loads the saved name into the in-memory cache and refreshes the
+  // toolbar button's label -- called once at boot, and again right after
+  // the dialog below saves a change. Never rejects the caller's chain:
+  // a device with no name set yet (or a browser with IndexedDB blocked)
+  // just falls back to the "Set your name" label, same as before this
+  // feature existed, rather than breaking boot.
+  function loadDeviceUserName(){
+    return getDeviceUserName().then(function(name){
+      deviceUserName = name || "";
+      updateUserIdentityBtn();
+    }).catch(function(){
+      deviceUserName = "";
+      updateUserIdentityBtn();
+    });
+  }
+  function updateUserIdentityBtn(){
+    var label = document.getElementById("userIdentityBtnLabel");
+    if (label) label.textContent = deviceUserName || "Set your name";
   }
   // ---- "resume where I was" pointer ----
   // Added (v32, 2026-09-18) after Andrew reported that taking a photo
@@ -7684,6 +7777,62 @@
     else if (e.key === "Escape"){ e.preventDefault(); closeRename(null); }
   });
 
+  /* ---- Shared device identity dialog (added v39) ----
+     Same small-modal shape/wiring as the rename dialog just above, kept as
+     its own separate backdrop/input rather than reusing showRenameDialog()
+     since this one persists to the identity IndexedDB (see
+     setDeviceUserName() above) instead of state.fileBase, and needs its
+     own sanitisation rules (a person's name, not a filename fragment --
+     still strips the same filesystem-hostile characters up front, per
+     UTZLINE Data Standard v1 §5's filename-sanitisation decision, since
+     this name will eventually be embedded directly into every saved
+     overlay's filename). */
+  var userIdentityBackdrop = document.getElementById("userIdentityBackdrop");
+  var userIdentityInput = document.getElementById("userIdentityInput");
+  var userIdentityOk = document.getElementById("userIdentityOk");
+  var userIdentityCancel = document.getElementById("userIdentityCancel");
+  var userIdentityBtn = document.getElementById("userIdentityBtn");
+  var userIdentityResolve = null;
+  function sanitizeUserName(name){
+    var cleaned = String(name || "")
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, "")
+      .trim()
+      .replace(/\s+/g, " ");
+    return cleaned.slice(0, 60);
+  }
+  function showUserIdentityDialog(){
+    userIdentityInput.value = deviceUserName || "";
+    userIdentityBackdrop.hidden = false;
+    userIdentityInput.focus();
+    userIdentityInput.select();
+    return new Promise(function(resolve){ userIdentityResolve = resolve; });
+  }
+  function closeUserIdentity(value){
+    userIdentityBackdrop.hidden = true;
+    var resolve = userIdentityResolve; userIdentityResolve = null;
+    if (resolve) resolve(value);
+  }
+  userIdentityBtn.addEventListener("click", function(){
+    showUserIdentityDialog().then(function(value){
+      if (value === null) return; // cancelled
+      var clean = sanitizeUserName(value);
+      setDeviceUserName(clean).then(function(saved){
+        deviceUserName = saved;
+        updateUserIdentityBtn();
+        showToast(saved ? "Saves on this device will be attributed to “" + saved + "”." : "Cleared — saves on this device will show no name.");
+      }).catch(function(){
+        showToast("Couldn't save your name on this device.");
+      });
+    });
+  });
+  userIdentityOk.addEventListener("click", function(){ closeUserIdentity(userIdentityInput.value); });
+  userIdentityCancel.addEventListener("click", function(){ closeUserIdentity(null); });
+  userIdentityBackdrop.addEventListener("click", function(e){ if (e.target === userIdentityBackdrop) closeUserIdentity(null); });
+  userIdentityInput.addEventListener("keydown", function(e){
+    if (e.key === "Enter"){ e.preventDefault(); closeUserIdentity(userIdentityInput.value); }
+    else if (e.key === "Escape"){ e.preventDefault(); closeUserIdentity(null); }
+  });
+
   /* ---- Project info (Project No. / Project Name / Head Contractor) ----
      A small per-project metadata file, "project-meta.json", written into
      the PROJECT's own folder (a sibling of its level folders, not inside
@@ -10275,7 +10424,17 @@
       utzlineProject: 1,
       imageDataURL: state.imageDataURL, imageW: state.imageW, imageH: state.imageH,
       imageTiles: state.imageTiles || null,
-      fileBase: state.fileBase, objects: state.objects, style: defaultStyle()
+      fileBase: state.fileBase, objects: state.objects, style: defaultStyle(),
+      // Shared device identity (added v39, UTZLINE Data Standard v1 §6) --
+      // whoever this device is currently set to, at the moment of this
+      // particular save. Purely additive: an empty string on a device that
+      // never set a name reads exactly like every save before this field
+      // existed, so old files, and files saved before a name was set,
+      // still open with no special-casing anywhere else in the app. This
+      // is the forerunner of the permanent overlay format's own "user"
+      // field (§5) -- once overlays replace this continuously-overwritten
+      // file, this is the value that field will be populated from.
+      savedBy: deviceUserName || ""
     };
   }
   function saveProject(){
@@ -10409,6 +10568,11 @@
     // actually running, on any device, without digging into devtools.
     var hintTextEl = document.getElementById("emptyHintText");
     if (hintTextEl) hintTextEl.appendChild(document.createTextNode(" · " + APP_VERSION));
+    // Shared device identity (added v39) -- independent of the
+    // project-gate flow below, so it loads (and the toolbar button's
+    // label updates) whether or not a Projects folder is even chosen yet.
+    // Never blocks boot: loadDeviceUserName() swallows its own errors.
+    if (!VIEW_ONLY_MODE) loadDeviceUserName();
     if (window.claude && window.claude.use){
       window.claude.use("downloads").then(function(d){ downloadsApi = d; }).catch(function(){});
     }

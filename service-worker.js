@@ -672,7 +672,17 @@
 // header styling and every app's own icon-*.png artwork, per Andrew's
 // note: "i want all logos to look like this (UTZ text colours to match the
 // logo like the itp one does)".)
-var CACHE_NAME = "utzline-sitemeasure-cache-v38";
+//
+// (v39: first piece of UTZLINE Data Standard v1 -- a shared "device
+// identity" (a name, set once per device/browser profile via a new
+// toolbar button, stored in its own small IndexedDB database
+// "utzline-identity") stamped into every save's "savedBy" field.
+// Deliberately its own database, separate from this app's usual
+// "redline-db" autosave store, so the ITP app (a different index.html on
+// the same origin) can read the same name back with no knowledge of this
+// app's own schema. Purely additive to the save file shape -- an empty
+// "savedBy" reads exactly like a save from before this field existed.)
+var CACHE_NAME = "utzline-sitemeasure-cache-v39";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

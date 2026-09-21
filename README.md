@@ -1,6 +1,6 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v38** (bump this line, and the "Shipped in vNN" heading it points at, every time a new build ships — see `next-version-notes.md` in the project for the full per-version changelog.)
+**Current version: v39** (bump this line, and the "Shipped in vNN" heading it points at, every time a new build ships — see `next-version-notes.md` in the project for the full per-version changelog.)
 
 This folder is the self-contained, installable version of the app. It
 was originally built as a separate "UTZLINE Projects" fork of the
