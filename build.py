@@ -1,40 +1,37 @@
 #!/usr/bin/env python3
 """
-Rebuilds /home/claude/redline-viewer-pwa/index.html from the exact same
-canonical Artifact source as the main editor PWA
-(/home/claude/redline-projects-pwa/), at /home/claude/redline-projects/
-source.html.
+Rebuilds /home/claude/redline-projects-pwa/index.html from the canonical
+Artifact source at /home/claude/redline-projects/source.html. This was
+originally a separate "UTZLINE Projects" fork, kept intentionally
+independent from the single-plan UTZLINE Site Measure at
+/home/claude/redline/source.html so nothing here could affect that one.
+As of v11 this per-project-folders app IS UTZLINE Site Measure going
+forward -- the old single-plan version at /home/claude/redline is
+retired -- but this build script and its output directory keep their
+existing "redline-projects" names to avoid a pointless churn of paths
+that nothing outside this workspace depends on.
 
-This is a SEPARATE, independently-installable PWA -- not a mode of the main
-app reachable only from inside it. The two apps share one source file (the
-read-only "viewer" build is a mode flag read from the URL at load, see
-VIEW_ONLY_MODE's own comment in source.html, not a fork) but are packaged
-into two entirely separate app shells, each with its own manifest.json
-(different name, start_url, and icons) and its own service-worker.js/cache
-namespace, so installing this one produces its own distinct icon and window
-on the Windows taskbar/Start menu/desktop -- a drafting-office viewer who
-should never be able to edit a plan installs ONLY this one and never even
-sees the main app's editing toolbar.
+The Artifact source is a bare fragment (title/link/script/style/body --
+no doctype/html/head/body) meant to be dropped into claude.ai's own page
+shell, and it loads three libraries straight from CDNs plus a Google
+Fonts stylesheet. A self-hosted, installable, offline-capable PWA can't
+rely on any of that reaching the browser, so this script:
 
-This build hard-codes `VIEW_ONLY_MODE = true` in its OUTPUT (step 1a below)
--- it does NOT rely on manifest.json's start_url "?viewer=1" query string
-alone. That query string still matters for a *installed* launch (Windows
-passes it straight through), but a bare visit to this app's URL in an
-ordinary browser tab -- exactly what step 2 of this app's own README asks
-you to do once, to let the service worker cache it -- has no query string
-at all, so relying only on the URL flag left that bare visit rendering the
-FULL EDITABLE APP (same toolbar, same orange branding) with no read-only
-lock whatsoever. Hard-coding the flag in this bundle's own index.html means
-every possible way of reaching this app -- the bare URL, a bookmark, a
-shared link, the installed PWA's start_url, anything -- is read-only,
-because it's now a property of the bundle, not of how it happened to be
-opened. Everything else below mirrors redline-projects-pwa/build.py step for step;
-see that script's own top-of-file comment for the full rationale behind
-each step (vendoring CDN scripts, local fonts, wrapping in a full document,
-the icon/manifest cache-busting query strings).
+  1. Rewrites the three CDN <script src> URLs to the local vendored
+     copies already sitting next to this script (jspdf, svg2pdf, pdf.js).
+  2. Drops the Google Fonts <link> and instead points the *same two*
+     custom fonts (IBM Plex Sans/Mono, weight 500 -- the only weight the
+     app ever draws with) at local woff2 files via @font-face, so the
+     app still looks right with zero network access.
+  3. Inserts the PWA-specific <head> tags (manifest link, theme-color,
+     touch icons, apple-mobile-web-app-* tags) right after <title>.
+  4. Wraps the whole thing in a real <!DOCTYPE html><html lang="en">...
+     </html> document, since the fragment has none.
+  5. Appends the service-worker registration script at the very end.
 
-Run this whenever source.html changes (the same run that updates the main
-app's own build), then bump this file's own service-worker.js CACHE_NAME.
+Run this every time source.html changes, then bump service-worker.js's
+CACHE_NAME (with a comment saying what changed) so installed copies
+actually pick up the update instead of serving a stale cached shell.
 """
 
 import json
@@ -47,10 +44,6 @@ OUT = Path(__file__).parent / "index.html"
 MANIFEST = Path(__file__).parent / "manifest.json"
 
 APP_VERSION_RE = re.compile(r'var APP_VERSION = "(v\d+)"')
-
-VIEW_ONLY_MODE_RE = re.compile(
-    r'var VIEW_ONLY_MODE = /\[\?&\]viewer=1\(&\|\$\)/\.test\(location\.search\);'
-)
 
 CDN_REPLACEMENTS = [
     (
@@ -81,19 +74,40 @@ LOCAL_FONT_FACE_BLOCK = (
 )
 
 def pwa_head_tags(version):
-    # See redline-projects-pwa/build.py's own comment on why every
-    # icon-bearing href needs a "?v=<version>" cache-buster -- same
-    # reasoning, own cache namespace/icon files.
+    # The manifest/icon links carry a "?v=<APP_VERSION>" cache-buster.
+    # Without it, a browser that already has this origin's favicon and
+    # install icon cached can keep serving those cached bitmaps forever --
+    # favicon caches in particular are notorious for ignoring normal
+    # Cache-Control revalidation and surviving a full uninstall/reinstall
+    # of an installed PWA, since the OS/browser regenerates the pinned
+    # shortcut icon from whatever it has cached for that exact icon URL,
+    # not from a fresh fetch. Changing the URL itself (not just the file
+    # contents behind it) is the only fix that reliably busts that cache,
+    # so every icon-bearing href here must vary with APP_VERSION.
     return (
+        # Without this, mobile browsers (Chrome on Android included, inside
+        # the installed TWA) fall back to laying the page out at a virtual
+        # desktop width (~980px) and then zooming the whole thing out to fit
+        # the real screen -- everything looks small, and CSS media queries
+        # keyed to the real device width (like the phone-toolbar layout
+        # below) never match, so portrait falls back to the cramped
+        # multi-row wrap layout instead of the intended single scrolling row
+        # of full-size buttons. Landscape happens to look "close enough"
+        # without this fix purely because a landscape phone's width is
+        # already closer to that assumed 980px, not because anything is
+        # actually working correctly. The claude.ai Artifact preview never
+        # showed this bug because the Artifact platform inserts its own
+        # viewport meta tag automatically -- this self-hosted PWA build has
+        # to do it explicitly.
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f'<link rel="manifest" href="./manifest.json?v={version}">\n'
-        '<meta name="theme-color" content="#16283a">\n'
+        '<meta name="theme-color" content="#1b2224">\n'
         f'<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v={version}">\n'
         f'<link rel="apple-touch-icon" href="./icons/icon-192.png?v={version}">\n'
         '<meta name="mobile-web-app-capable" content="yes">\n'
         '<meta name="apple-mobile-web-app-capable" content="yes">\n'
         '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n'
-        '<meta name="apple-mobile-web-app-title" content="UTZLINE Viewer">\n'
+        '<meta name="apple-mobile-web-app-title" content="UTZLINE Site Measure">\n'
     )
 
 SERVICE_WORKER_SCRIPT = (
@@ -101,7 +115,7 @@ SERVICE_WORKER_SCRIPT = (
     'if ("serviceWorker" in navigator) {\n'
     '  window.addEventListener("load", function () {\n'
     '    navigator.serviceWorker.register("./service-worker.js").catch(function (err) {\n'
-    '      console.warn("UTZLINE Viewer: service worker registration failed", err);\n'
+    '      console.warn("UTZLINE Site Measure: service worker registration failed", err);\n'
     "    });\n"
     "  });\n"
     "}\n"
@@ -132,18 +146,6 @@ def build():
             sys.exit(f"Expected CDN URL not found in source.html: {remote}")
         html = html.replace(remote, local)
 
-    # 1a. Force read-only mode unconditionally in THIS bundle -- see the
-    #     top-of-file comment for why this can't be left to the URL's query
-    #     string alone. Only this build does this; the editor's build.py
-    #     leaves the shared source's own line untouched.
-    if not VIEW_ONLY_MODE_RE.search(html):
-        sys.exit(
-            "Could not find the expected `var VIEW_ONLY_MODE = ...` line in "
-            "source.html -- it may have changed shape; check this script's "
-            "assumptions before proceeding."
-        )
-    html = VIEW_ONLY_MODE_RE.sub("var VIEW_ONLY_MODE = true;", html, count=1)
-
     # 2. Swap the Google Fonts <link> for local @font-face rules.
     if not GOOGLE_FONTS_LINK_RE.search(html):
         sys.exit("Expected Google Fonts <link> not found in source.html")
@@ -153,8 +155,17 @@ def build():
     title_line_end = html.index("\n", html.index("<title>")) + 1
     html = html[:title_line_end] + pwa_head_tags(version) + html[title_line_end:]
 
-    # 4. Wrap in a full document (see main app's build.py for why the
-    #    explicit charset comes first).
+    # 4. Wrap in a full document. <meta charset="utf-8"> goes first, before
+    #    even <title> -- without an explicit charset, the browser falls back
+    #    to guessing from the HTTP Content-Type header (GitHub Pages happens
+    #    to send charset=utf-8 for .html by default, so this was invisible
+    #    there) or, with no header at all -- e.g. opening the file directly,
+    #    or a local test harness loading it via file:// -- to a locale-
+    #    dependent default that isn't always UTF-8. This app's UI text is
+    #    full of non-ASCII characters (curly quotes, en/em dashes, arrows,
+    #    the multiply sign), so a wrong guess renders as mojibake instead of
+    #    quietly doing nothing. Being explicit removes the dependency on
+    #    whatever's serving these files ever getting that header right.
     html = '<!DOCTYPE html>\n<html lang="en">\n<meta charset="utf-8">\n' + html + "\n</html>\n"
 
     # 5. Append the service worker registration, before the closing </html>.
@@ -165,7 +176,11 @@ def build():
     OUT.write_text(html, encoding="utf-8")
     print(f"Wrote {OUT} ({len(html)} bytes)")
 
-    # 6. Keep manifest.json's icon URLs cache-busted the same way.
+    # 6. Keep manifest.json's icon URLs cache-busted the same way and for
+    #    the same reason as the <link> tags above -- browsers use the
+    #    manifest's icon list (not just <link rel="icon">) to generate an
+    #    installed PWA's home-screen/taskbar icon, and that path is just as
+    #    prone to caching the old bitmap under an unchanged URL.
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     for icon in manifest.get("icons", []):
         icon["src"] = icon["src"].split("?", 1)[0] + f"?v={version}"

@@ -1,100 +1,177 @@
-# UTZLINE Viewer — installable app
+# UTZLINE Site Measure — installable app
 
-**Current version: v39** (kept in lockstep with the editor's own version, since both are built from the same `source.html` — bump this line every time a new build ships.)
+**Current version: v39** (bump this line, and the "Shipped in vNN" heading it points at, every time a new build ships — see `next-version-notes.md` in the project for the full per-version changelog.)
 
-This folder is the self-contained, installable **read-only viewer**
-companion to **UTZLINE Site Measure**. It shares the exact same
-underlying app code as the editor (see `source.html`'s own
-`VIEW_ONLY_MODE` comment) — a mode flag read from the URL at load, not
-a separate fork — but it is packaged here as its own completely
-separate installable app: own name ("UTZLINE Viewer"), own icon (blue,
-so it's easy to tell apart from the orange editor icon at a glance),
-own `manifest.json`, and own offline cache. Installing it on Windows
-(or any desktop) produces its own distinct taskbar/Start-menu/desktop
-icon and its own window, separate from "UTZLINE Site Measure" — so a
-drafting-office person can be given only this one, and they will never
-see the editor's toolbar or be able to create/edit/delete anything.
+This folder is the self-contained, installable version of the app. It
+was originally built as a separate "UTZLINE Projects" fork of the
+older, single-plan **UTZLINE Site Measure** — as of v11, this app IS
+UTZLINE Site Measure going forward, and the old single-plan version is
+retired. Everything in the app itself (page title, toolbar brand,
+opening screen, installed-app name) says "UTZLINE Site Measure" now.
 
-It can open a project's folder to browse projects, levels, and rooms —
-pan, zoom, view markups and dimensions, follow room-link markers, and
-use Share/print — with every action that would create, edit, move, or
-delete something blocked, both in the app's own logic (every actual
-save/delete/insert/create function is a no-op in this mode) and at the
-OS level (it only ever requests **read** permission on the folder you
-pick, never write).
+**The repo/hosting cleanup this was waiting on is now underway
+(2026-09-16):** the old retired single-plan repo (`Utzline-Site-Measure`)
+is being deleted, and the live repo hosting THIS app (previously named
+`UTZLINE-Projects`) is being renamed to match — `UTZLINE-Site-Measure`
+— once that old name is free. Everything below already reflects that
+target end state (repo name, hosted URL, and the new `viewer/`
+subfolder for the standalone read-only Viewer app). If you're reading
+this before finishing that rename, the live URL is still the old
+`utzy79.github.io/UTZLINE-Projects/` one for now — GitHub's automatic
+redirect for a renamed repo should carry old links/installs over once
+it's done.
 
-## How this relates to the editor app
+It shares the same underlying markup/photo-annotation and PDF-export
+code as the old version, but adds an opening project picker. A project is a folder of
+**levels** (e.g. "Level 1", "Level 2") — each level is a fully
+independent plan/photo with its own markup, its own `saves/` subfolder
+(the working file you reopen) and its own `pdfs/` subfolder (every PDF
+you export), all kept apart by project and level name. Everything the
+app needs (PDF libraries, fonts) is bundled locally; nothing loads from
+the internet once it's cached.
 
-Both apps are built from the one canonical source
-(`/home/claude/redline-projects/source.html`) by near-identical
-`build.py` scripts — this folder's own `build.py` is the same steps as
-`redline-projects-pwa/build.py` (vendor the CDN libraries locally,
-swap in local fonts, wrap in a full HTML document, register a service
-worker), with the one meaningful difference being this app's
-`manifest.json` sets `start_url` to `./index.html?viewer=1` — that's
-what puts every launch of this installed app into read-only mode.
-Whenever `source.html` changes, rebuild **both** apps
-(`redline-projects-pwa/build.py` and this folder's `build.py`) from it,
-and bump both service workers' `CACHE_NAME` (each already carries its
-own running changelog at the top of `service-worker.js`, same
-convention as the editor's).
+## How the pieces fit together
 
-## Getting this installed as its own Windows app
+There are several things in play here, same as with UTZLINE Site
+Measure — easy to mix them up:
 
-Settled (2026-09-16): this lives as a **subfolder of the same GitHub
-Pages site** the editor uses — one repo, two separately-installable
-apps — rather than a second repo:
+1. **The claude.ai artifact** — good for a quick look, and it falls back
+   gracefully to a normal single-plan view (no project picker) on any
+   browser that doesn't support the underlying folder-picker API.
+   claude.ai embeds it in a cross-origin iframe, though, and Chrome
+   flatly refuses to open a folder picker from a cross-origin iframe —
+   so the actual per-project-folders feature only ever works once this
+   app is hosted on its own domain or installed. Not what your installed
+   copies run.
+2. **This bundle, hosted on GitHub Pages** — the
+   [`UTZLINE-Site-Measure`](https://github.com/utzy79/UTZLINE-Site-Measure) repo,
+   live at
+   [`https://utzy79.github.io/UTZLINE-Site-Measure/`](https://utzy79.github.io/UTZLINE-Site-Measure/) —
+   separate from [`utzy79.github.io`](https://github.com/utzy79/utzy79.github.io)
+   (the old `Utzline-Site-Measure` repo this name was freed from is retired
+   and deleted). The standalone read-only **Viewer** app lives right
+   alongside this, in the same repo's `viewer/` subfolder — see
+   `../redline-viewer-pwa/README.md` for that one specifically.
+   This is the real thing: fully offline-capable, and the only place the
+   folder picker actually works from a browser tab.
+3. **A desktop install** — Chrome/Edge's "Install this site as an app"
+   pointed at that hosted URL. Just a shortcut to the same site.
+4. **The Android app (the APK)** — also a thin wrapper (a Trusted Web
+   Activity) around that same hosted URL, built via
+   [PWABuilder](https://www.pwabuilder.com/), with its own package ID and
+   its own signing key. **The APK does not contain the app's code.** It
+   loads whatever is live at
+   [`utzy79.github.io/UTZLINE-Site-Measure`](https://utzy79.github.io/UTZLINE-Site-Measure/)
+   right now, so updating the app is a matter of updating the *files* in
+   the repo, never rebuilding the APK — except when the app's identity
+   changes (name, icon, package ID). If the APK was built pointing at the
+   old `UTZLINE-Projects` URL, GitHub's redirect for the renamed repo
+   should keep it working; rebuilding it to point at the new URL directly
+   is worth doing eventually so it's not relying on that redirect forever,
+   but isn't urgent.
+5. **Optionally, chrome-less full-screen mode** (no browser address bar)
+   for the Android app — this needs a `.well-known/assetlinks.json` on
+   the domain the app claims to represent, verifying the APK's signing
+   fingerprint. Since
+   [`utzy79.github.io`](https://github.com/utzy79/utzy79.github.io)
+   already hosts that file for UTZLINE Site Measure, the same file can
+   likely just get a second entry added for this app's package
+   name/fingerprint — not set up yet, ask if you want to do this once the
+   APK exists.
 
-1. In the `UTZLINE-Site-Measure` repo (the one `redline-projects-pwa/`
-   is uploaded to, at its root), add everything from *this* folder
-   under a `viewer/` subfolder — so it ends up live at
-   `https://utzy79.github.io/UTZLINE-Site-Measure/viewer/`. Keep the
-   `icons/` folder structure intact, same as the main app.
-2. Open that URL once in a normal browser tab while online (to let the
-   service worker cache it for offline use).
-3. Install it: Chrome/Edge's install icon in the address bar ("Install
-   this site as an app") while on that `viewer/` URL specifically —
-   *not* the main app's URL. Because it's a different path with its
-   own `manifest.json` (different `name`/`start_url`/icons), Chrome and
-   Windows treat it as a wholly separate app from "UTZLINE Site
-   Measure" — its own tile/shortcut, its own icon, its own window.
+## Updating the app (this is the main thing you'll do)
 
-## Updating this app
+Whenever new files show up in chat as a zip:
 
-Same process as the editor (see its own README's "Updating the app"
-section) — unzip whatever's shared in chat, upload the files into this
-app's own folder in the repo (overwriting existing ones, keeping
-`icons/` intact), commit, wait for GitHub Pages to redeploy, then close
-and reopen the installed app to pick up the change.
+1. Unzip it.
+2. Go to the
+   [`UTZLINE-Site-Measure`](https://github.com/utzy79/UTZLINE-Site-Measure) repo
+   on GitHub (not `utzy79.github.io` — and note this app's files go at the
+   repo **root**, not inside `viewer/`, which is the separate Viewer app).
+3. Upload the files from the zip, overwriting the existing ones (drag
+   them onto the repo page, or use **Add file → Upload files**), keeping
+   the `icons` folder structure intact. Commit.
+4. Wait about a minute for GitHub Pages to redeploy, then check it took:
+   open
+   [`https://utzy79.github.io/UTZLINE-Site-Measure/`](https://utzy79.github.io/UTZLINE-Site-Measure/)
+   directly in a normal browser tab and confirm the change is there.
+5. Get each installed copy to pick it up:
+   - **Desktop install**: close and reopen it; a refresh is usually
+     enough.
+   - **Android app**: fully close it — swipe it away from recent apps,
+     don't just background it — then reopen. If it still looks old, do
+     that twice, or clear the app's cache (Settings → Apps → UTZLINE
+     Projects → Storage & cache → **Clear cache**, not "Clear data" —
+     that also wipes any project-root folder permission you'd granted)
+     and reopen again.
+
+No APK rebuild, no re-signing, nothing through PWABuilder — that's only
+ever needed if the app's *identity* changes (name, icon, package ID),
+not for ordinary fixes or features.
 
 ## Things worth knowing
 
-- **This app never needs "readwrite" permission on anything.** The
-  folder picker here always asks for read-only access — even if you
-  say yes to a broader prompt by accident, every actual mutating
-  function in the shared app code refuses to run while in this mode.
-- **Picking a project's own folder, or even a single level's own
-  folder, works too** — you don't have to pick the top-level "Projects"
-  folder specifically. It detects what kind of folder you picked and
-  lands you straight on the right screen (that project's level list, or
-  a level's own canvas) instead of an empty or confusing list.
-- **"Share" (and printing) work exactly as they do in the editor** —
-  read-only mode only blocks things that would change a saved
-  project's files, never viewing or exporting a copy of what's on
-  screen right now.
+- **The project picker only appears where the folder-picker API is
+  actually available** — desktop Chrome/Edge, and Android Chrome (from
+  a real installed/hosted context, not the claude.ai artifact). On any
+  other browser, the app behaves exactly like UTZLINE Site Measure
+  always has: it loads straight into a single ongoing plan, no picker,
+  no per-project folders.
+- **Opening a project takes you to its level list, not straight to a
+  plan.** A brand-new project starts with no levels — hit **+ New
+  Level** to create the first one ("Level 1", "Ground Floor", whatever
+  fits the job). Each level is entirely independent: its own plan
+  image, its own markup, its own save file and pdfs history.
+- **"Switch level" in the toolbar** takes you back to the current
+  project's level list — it'll ask you to confirm first if the current
+  plan has unsaved marks on it. From there, **← All projects** steps out
+  one more level to the full project picker.
+- **Save always drops a fresh, timestamped PDF into the level's pdfs
+  folder alongside the plan file** — not just when you explicitly
+  export. If either half fails, the toast says exactly which one didn't
+  land (rather than a single generic "Saved" that could paper over a
+  failed PDF export), so try Save again if you see that.
+- **Choosing a Projects folder is a one-time setup per device/browser
+  profile.** If permission to it ever lapses (browser data cleared, a
+  fresh profile), the app shows a "Reconnect" screen naming the folder
+  it remembers rather than silently losing your projects.
+- **Creating a project or level with a name that already exists**
+  doesn't overwrite it — it silently appends a number (`Building H` →
+  `Building H 2`, or `Level 1` → `Level 1 2` within the same project) so
+  you never lose an existing one by mistake.
 
 ## What's in this folder
 
-- `index.html` — the app itself (identical app code to the editor's
-  `index.html`; only ever differs in which URL launches it)
-- `manifest.json`, `service-worker.js` — what makes this installable
-  and offline-capable as its **own** app, separate from the editor
-- `icons/` — this app's own blue-accented icon set, generated from the
-  editor's orange originals so the two are easy to tell apart at a
-  glance while still clearly being the same family/brand
-- `jspdf.umd.min.js`, `svg2pdf.umd.min.js`, `pdf.min.js`,
-  `pdf.worker.min.js`, `sans.woff2`, `mono.woff2` — bundled libraries
-  and fonts (all local, no CDN), same as the editor
-- `build.py` — regenerates `index.html` from the canonical source;
-  only relevant if you're working on the code directly rather than
-  through chat
+- `index.html` — the app itself
+- `manifest.json`, `service-worker.js` — what makes it installable/offline
+  (the version comment at the top of `service-worker.js` is a running
+  changelog of every fix that's shipped)
+- `icons/` — app icons
+- `jspdf.umd.min.js`, `svg2pdf.umd.min.js`, `pdf.min.js`, `pdf.worker.min.js`,
+  `sans.woff2`, `mono.woff2` — bundled libraries and fonts (all local, no CDN)
+- `build.py` — regenerates `index.html` from the canonical claude.ai source;
+  only relevant if you're working on the code directly rather than through
+  chat
+
+## Setting this up fresh (e.g. on a new account/device)
+
+You already have this running, so you shouldn't need this — but for
+reference, in case it's ever needed again from scratch:
+
+1. Create a **public** GitHub repo (this one is
+   [`UTZLINE-Site-Measure`](https://github.com/utzy79/UTZLINE-Site-Measure) —
+   a different name from `utzy79.github.io`, which is already taken by
+   its Digital Asset Links file). Upload every file from this bundle,
+   keeping the `icons` folder structure, at the repo **root**. Add the
+   Viewer app's own files (see `../redline-viewer-pwa/`) into a `viewer/`
+   subfolder of this same repo alongside it.
+2. Repo **Settings → Pages** → Source: **Deploy from a branch**, branch
+   **main**, folder **/(root)** → Save. Wait ~1 minute for the live URL —
+   [`https://utzy79.github.io/UTZLINE-Site-Measure/`](https://utzy79.github.io/UTZLINE-Site-Measure/)
+   (the Viewer app then lives at that same URL's `viewer/` path).
+3. Open that URL once while online (to cache it for offline use), then
+   install it: on Windows/Mac, the browser's install icon in the address
+   bar; on Android, Chrome's **⋮ → Add to Home screen** (or build a
+   proper APK via [PWABuilder.com](https://www.pwabuilder.com/) for a
+   real installable app with no browser chrome at all — its own package
+   ID and signing key, kept separate from other apps).
