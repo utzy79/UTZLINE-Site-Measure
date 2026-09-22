@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v44.4">
+<link rel="manifest" href="./manifest.json?v=v45.0">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44.4">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44.4">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.0">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.0">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1129,6 +1129,15 @@
       <button class="ibtn" id="layersBtn" title="Show all objects on this plan" aria-label="Toggle layers list">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M10 3l7 4-7 4-7-4z"/><path d="M3 11l7 4 7-4"/></svg>
       </button>
+      <!-- Only ever shown while a joinery item page with at least one OTHER
+           person's saved Site Measure layer is open -- see
+           renderOverlayLayers()'s own comment. Distinct from layersBtn
+           above (that one's per-OBJECT show/hide on the plan you're
+           editing; this one's per-PERSON, toggling whole other people's
+           saved layers on this same item on and off). -->
+      <button class="ibtn" id="overlayLayersBtn" title="Other people's saved Site Measure layers for this item" aria-label="Toggle Site Measure layers panel" style="display:none;">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="2.5" y="4" width="10" height="10" rx="1.5"/><rect x="7.5" y="9" width="10" height="10" rx="1.5"/></svg>
+      </button>
       <button class="ibtn" id="showHintBtn" title="Show the quick-help tip again (drag/pan/zoom controls)" aria-label="Show quick help tip">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.2"/><path d="M7.8 7.6a2.2 2.2 0 1 1 3.1 2c-.7.5-1.1.9-1.1 1.9"/><circle cx="10" cy="14" r="0.15" fill="currentColor"/></svg>
       </button>
@@ -1156,6 +1165,10 @@
         <image id="baseImage" href=""></image>
         <g id="baseImageTiles"></g>
         <g id="gridOverlay"></g>
+        <!-- Read-only, non-interactive: other people's saved Site Measure
+             layers for the joinery item currently open, tinted and
+             composited behind objectsLayer -- see renderOverlayLayers(). -->
+        <g id="overlayLayersGroup"></g>
         <g id="objectsLayer"></g>
         <g id="handlesLayer"></g>
       </g>
@@ -1176,6 +1189,21 @@
         </button>
       </div>
       <div class="layers-list" id="layersList"></div>
+    </div>
+
+    <!-- Per-PERSON layer toggles for a joinery item's Site Measure page
+         (UTZLINE Data Standard v1 -- requested directly by Andrew,
+         2026-09-22: "multi layer saves with user name and date time...
+         layer selecter to turn different layers off"). Same shape as the
+         Objects panel just above; see renderOverlayLayersPanel(). -->
+    <div class="layers-panel" id="overlayLayersPanel" style="display:none;">
+      <div class="layers-head">
+        <span>Site Measure layers</span>
+        <button class="ibtn" id="overlayLayersCloseBtn" title="Close" aria-label="Close Site Measure layers panel">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+        </button>
+      </div>
+      <div class="layers-list" id="overlayLayersList"></div>
     </div>
 
     <div class="status" id="status">
@@ -1499,7 +1527,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v44.4";
+  var APP_VERSION = "v45.0";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -1812,6 +1840,7 @@
   var baseImage = document.getElementById("baseImage");
   var baseImageTiles = document.getElementById("baseImageTiles");
   var gridOverlay = document.getElementById("gridOverlay");
+  var overlayLayersGroup = document.getElementById("overlayLayersGroup");
   var objectsLayer = document.getElementById("objectsLayer");
   var handlesLayer = document.getElementById("handlesLayer");
   var stage = document.getElementById("stage");
@@ -3032,6 +3061,188 @@
       return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
     });
   }
+
+  /* ---- Site Measure overlay layers (v45, 2026-09-22) ----
+     Andrew, asked directly whether multi-person layered saves existed yet:
+     "Do we have the multi layer saves with user name and date time on the
+     projects saves. So that multiple people can site measure and they all
+     get layered over each other. With a layer selecter to turn different
+     layers off." They didn't -- the block just above is a single mutable
+     file per joinery item, last-write-wins, with only a `savedBy` label
+     (added v39) that itself gets overwritten by whoever saves next. Asked
+     whether existing data needed preserving/migrating, Andrew said "I have
+     nothing to save. Proceed" -- so this is a clean cutover to the format
+     already designed (and referenced right there in that v39 comment) in
+     UTZLINE Data Standard v1 -- not an upgrade path for the old file,
+     which is simply left alone, unread, from here on.
+
+     New shape, one folder per item (key = resolveJoineryItemPageKey, same
+     as ever):
+       Project Saves/Site Measures/<key>/drafts/<user>.json    -- mutable,
+         one per device identity, silent-autosave's only target. Never
+         shown to anyone but the person it belongs to.
+       Project Saves/Site Measures/<key>/overlays/<user> - <stamp>.json --
+         IMMUTABLE. A brand new file every explicit Save (the Save button,
+         or choosing Save in the "leaving" confirm -- see
+         saveJoineryItemPageFile's own comment for exactly where the line
+         is drawn), never overwritten or deleted afterward. Every OTHER
+         user's newest one of these is what shows up as a toggleable
+         reference layer (see renderOverlayLayers) -- "layered over each
+         other" now literally means separate files, composited live,
+         rather than one file whoever saved last happened to win. */
+  function getJoineryItemDir(projectHandle, key, create){
+    return getSiteMeasuresDir(projectHandle, create).then(function(dirH){
+      return dirH.getDirectoryHandle(key, { create: !!create });
+    });
+  }
+  function getJoineryOverlaysDir(projectHandle, key, create){
+    return getJoineryItemDir(projectHandle, key, create).then(function(dirH){
+      return dirH.getDirectoryHandle("overlays", { create: !!create });
+    });
+  }
+  function getJoineryDraftsDir(projectHandle, key, create){
+    return getJoineryItemDir(projectHandle, key, create).then(function(dirH){
+      return dirH.getDirectoryHandle("drafts", { create: !!create });
+    });
+  }
+  // A person's name, filesystem-sanitised the same way the identity
+  // dialog's own sanitizeUserName already does (NOT sanitizeFileBase --
+  // that one's own empty-input fallback is the word "plan", which would
+  // be a deeply confusing thing for an anonymous device's layer to be
+  // named), PLUS a non-empty fallback of its own -- every overlay/draft
+  // filename needs SOME name segment, and while an explicit Save now
+  // always blocks on an empty name first (see ensureDeviceUserNameForSave),
+  // a draft can still be written silently before anyone's ever set one.
+  function overlayUserSlug(name){
+    var clean = String(name || "")
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, "")
+      .trim()
+      .replace(/^[._]+|[._\s]+$/g, "")
+      .slice(0, 60);
+    return clean || "Unnamed";
+  }
+  // A filesystem-safe stamp for "right now" -- colons aren't valid in a
+  // Windows filename, so this is the same moment a real ISO timestamp
+  // would give, just with the time portion's colons swapped for hyphens.
+  // Still purely numeric and zero-padded left-to-right, so plain string
+  // sorting on it is still exactly chronological sorting -- "newest" can
+  // just mean "last alphabetically" everywhere below, no date parsing
+  // needed.
+  function overlayTimestampStamp(d){
+    d = d || new Date();
+    function p2(n){ return (n < 10 ? "0" : "") + n; }
+    return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + " " +
+      p2(d.getHours()) + "-" + p2(d.getMinutes()) + "-" + p2(d.getSeconds());
+  }
+  function joineryDraftFileName(user){ return overlayUserSlug(user) + ".json"; }
+  function joineryOverlayFileName(user, stamp){ return overlayUserSlug(user) + " - " + stamp + ".json"; }
+  // The inverse of joineryOverlayFileName -- the filename itself, not
+  // anything inside the file, is treated as the source of truth for
+  // who/when (same convention UTZLINE Data Standard v1 §5 sets out), so a
+  // file that somehow got renamed or copied in from elsewhere still
+  // groups/sorts sensibly by whatever its name actually says.
+  function parseJoineryOverlayFileName(fileName){
+    var base = fileName.replace(/\.json$/i, "");
+    var idx = base.lastIndexOf(" - ");
+    if (idx < 0) return { user: base, stamp: "" };
+    return { user: base.slice(0, idx), stamp: base.slice(idx + 3) };
+  }
+  function readJsonFileHandle(fh){
+    return fh.getFile().then(function(file){ return file.text(); }).then(function(text){
+      try{
+        var parsed = JSON.parse(text);
+        return (parsed && typeof parsed === "object") ? parsed : null;
+      }catch(e){ return null; }
+    });
+  }
+  // Every saved overlay for this item, across every user, sorted so every
+  // user's own entries land together in chronological order -- an item
+  // nobody's ever explicitly Saved yet (brand new, or only ever
+  // autosaved to a draft) simply has no overlays/ folder, which is not an
+  // error, just an empty list.
+  function listJoineryOverlays(projectHandle, key){
+    return getJoineryOverlaysDir(projectHandle, key, false).then(function(dirH){
+      if (!dirH || typeof dirH.values !== "function") return [];
+      var out = [];
+      var iter = dirH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return out;
+          if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)){
+            var parsed = parseJoineryOverlayFileName(res.value.name);
+            out.push({ fileName: res.value.name, user: parsed.user, stamp: parsed.stamp, handle: res.value });
+          }
+          return step();
+        });
+      }
+      return step();
+    }, function(){ return []; }).then(function(list){
+      list.sort(function(a, b){ return (a.user + " \u0000 " + a.stamp).localeCompare(b.user + " \u0000 " + b.stamp); });
+      return list;
+    });
+  }
+  function readJoineryDraft(projectHandle, key, user){
+    return getJoineryDraftsDir(projectHandle, key, false).then(function(dirH){
+      return dirH.getFileHandle(joineryDraftFileName(user));
+    }).then(function(fh){
+      return readJsonFileHandle(fh);
+    }, function(){ return null; });
+  }
+  function writeJoineryDraft(projectHandle, key, user, data){
+    var payload = JSON.stringify(data);
+    return getJoineryDraftsDir(projectHandle, key, true).then(function(dirH){
+      return dirH.getFileHandle(joineryDraftFileName(user), { create: true });
+    }).then(function(fh){
+      return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
+    });
+  }
+  // Once an explicit Save creates the permanent overlay that supersedes
+  // it, a draft has nothing left to say that the new overlay doesn't
+  // already say better -- leaving it behind would just be stale, slightly
+  // older content that a later re-open could otherwise confuse with "my
+  // actual last Save". Best-effort: no draft to delete (the common case)
+  // is not an error.
+  function deleteJoineryDraft(projectHandle, key, user){
+    return getJoineryDraftsDir(projectHandle, key, false).then(function(dirH){
+      return dirH.removeEntry(joineryDraftFileName(user));
+    }).catch(function(){});
+  }
+  // Creates a brand-new, never-to-be-overwritten overlay file -- the one
+  // and only place a permanent Site Measure layer is ever created.
+  // Stamped with the current moment every time, so two Saves by the same
+  // person minutes apart become two distinct layers rather than one file
+  // overwriting the other -- the same "layered over each other" behaviour
+  // Andrew asked for, now for one person's own successive Saves too.
+  function writeJoineryOverlay(projectHandle, key, user, data){
+    var stamp = overlayTimestampStamp();
+    var payload = JSON.stringify(data);
+    return getJoineryOverlaysDir(projectHandle, key, true).then(function(dirH){
+      return dirH.getFileHandle(joineryOverlayFileName(user, stamp), { create: true });
+    }).then(function(fh){
+      return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
+    });
+  }
+  // Blocks an explicit Save until a name is actually set -- every overlay
+  // filename embeds who made it (that's the whole point: it's what lets a
+  // layer be attributed to a person at all), so an anonymous permanent
+  // layer would be a layer nobody could ever tell apart from anyone
+  // else's "Unnamed" one. A silent autosave draft (writeJoineryDraft
+  // above) deliberately has no such requirement -- it's never shown to
+  // anyone but its own owner, so there's nothing for a name to
+  // disambiguate yet.
+  function ensureDeviceUserNameForSave(){
+    if (deviceUserName) return Promise.resolve(deviceUserName);
+    showToast("Every Site Measure save needs a name first, so others can tell whose layer is whose.");
+    return showUserIdentityDialog().then(function(value){
+      var clean = value === null ? "" : sanitizeUserName(value);
+      if (!clean) return Promise.reject({ code: "name_required" });
+      return setDeviceUserName(clean).then(function(saved){
+        deviceUserName = saved;
+        updateUserIdentityBtn();
+        return saved;
+      });
+    });
+  }
   // Centralizes the "is a level/room genuinely open right now" check that
   // used to just be activeWorkSavesHandle() truthy -- a flat level has no
   // savesHandle of its own (its save path bypasses folder handles
@@ -3400,22 +3611,91 @@
       var key = resolveJoineryItemPageKey(levelName, obj);
       var displayName = joineryItemPageDisplayName(levelName, roomName, joineryCode);
       var create = !VIEW_ONLY_MODE;
+      // The old readJoineryItemPage(activeProjectHandle, key) single-file
+      // read is gone from here (v45) -- replaced by the real multi-layer
+      // overlay load below: this user's own most recent in-progress draft
+      // (falling back to this user's own most recent permanent Save, then
+      // blank), plus every OTHER user's most recent permanent Save as a
+      // toggleable reference layer. See the "Site Measure overlay layers"
+      // comment above listJoineryOverlays for the full design.
       return Promise.all([
         getFlatPdfsDir(activeProjectHandle, create).catch(function(){ return null; }),
         getFlatBackupsDirForLevel(activeProjectHandle, key, create).catch(function(){ return null; }),
-        readJoineryItemPage(activeProjectHandle, key)
+        listJoineryOverlays(activeProjectHandle, key),
+        // The Viewer never has a device identity of its own worth reading a
+        // draft for -- it never writes anything, ever (VIEW_ONLY_MODE), so
+        // there's no "my own in-progress work" concept to load for it at
+        // all; see the VIEW_ONLY_MODE branch just below.
+        VIEW_ONLY_MODE ? Promise.resolve(null) : readJoineryDraft(activeProjectHandle, key, deviceUserName)
       ]).then(function(results){
-        activeJoineryItemPage = {
-          levelName: levelName, roomName: roomName, joineryCode: joineryCode,
-          key: key, displayName: displayName,
-          pdfsHandle: results[0], backupsHandle: results[1]
-        };
-        var saved = results[2];
-        if (savedHasImage(saved)){
-          applyRestoredState(saved);
+        var pdfsHandle = results[0], backupsHandle = results[1], overlays = results[2], ownDraft = results[3];
+        // Newest overlay per user wins (listJoineryOverlays already sorts
+        // each user's own entries into chronological order, so the LAST
+        // entry seen for a given user in this forEach is that user's most
+        // recent one).
+        var latestByUser = {};
+        overlays.forEach(function(o){ latestByUser[o.user] = o; });
+        var baseEntry = null; // whichever overlay (if any) becomes the non-toggleable base view
+        if (!VIEW_ONLY_MODE){
+          // Site Measure itself: "my own" work is always the base, editable
+          // layer -- everyone else is a toggleable reference layer, same as
+          // ever regardless of who saved most recently.
+          var mySlug = overlayUserSlug(deviceUserName);
+          baseEntry = latestByUser[mySlug] || null;
+          delete latestByUser[mySlug];
         } else {
-          startBlankPlan(displayName);
+          // The Viewer has no "own" layer to prefer -- picks the single
+          // most recent overlay across EVERYONE as the base view, per the
+          // interim "most-recent-layer-wins" placeholder rule (the real
+          // "official layer" picker is still a separate, not-yet-built
+          // piece meant to live in UTZLINE Projects). Every other user's
+          // latest overlay is still offered as a toggleable reference layer
+          // underneath it.
+          // Compares stamps ALONE, never the user-name prefix -- the stamp
+          // is the only part that actually encodes chronological order
+          // (fixed-width, zero-padded, left-to-right), so comparing
+          // "user + stamp" here would have sorted by whoever's NAME comes
+          // later alphabetically whenever two different users' timestamps
+          // landed on opposite sides of their names' own alphabetical
+          // order -- a real bug caught before it shipped, not a real-world
+          // report.
+          var newest = null;
+          Object.keys(latestByUser).forEach(function(u){
+            var entry = latestByUser[u];
+            if (!newest || entry.stamp > newest.stamp) newest = entry;
+          });
+          baseEntry = newest;
+          if (baseEntry) delete latestByUser[baseEntry.user];
         }
+        var otherEntries = Object.keys(latestByUser).sort().map(function(u){ return latestByUser[u]; });
+        var otherLayersPromise = Promise.all(otherEntries.map(function(entry){
+          return readJsonFileHandle(entry.handle).then(function(data){
+            return { user: entry.user, stamp: entry.stamp, fileName: entry.fileName, visible: true, objects: (data && data.objects) || [] };
+          });
+        }));
+        // My own draft (if any) always wins over my own last permanent
+        // Save -- it's strictly newer work-in-progress by definition (a
+        // draft only ever gets written AFTER whatever overlay preceded it,
+        // and gets deleted the moment a fresh Save supersedes it -- see
+        // saveJoineryItemPageFile). Only read the base overlay file at all
+        // when there's no draft to prefer instead, to avoid an unneeded
+        // read on the common "opened, Saved, came back later" path. Never
+        // applies to the Viewer, which has no draft at all (see above).
+        var basePromise = ownDraft ? Promise.resolve(null) : (baseEntry ? readJsonFileHandle(baseEntry.handle) : Promise.resolve(null));
+        return Promise.all([otherLayersPromise, basePromise]).then(function(res){
+          activeJoineryItemPage = {
+            levelName: levelName, roomName: roomName, joineryCode: joineryCode,
+            key: key, displayName: displayName,
+            pdfsHandle: pdfsHandle, backupsHandle: backupsHandle,
+            layers: res[0], ownHasDraft: !!ownDraft
+          };
+          var saved = ownDraft || res[1];
+          if (savedHasImage(saved)){
+            applyRestoredState(saved);
+          } else {
+            startBlankPlan(displayName);
+          }
+        });
       });
     }).then(function(){
       // Set last, same reasoning openLevel/openRoom's own comments give --
@@ -3438,7 +3718,14 @@
       if (roomJumpSelect) roomJumpSelect.style.display = "none";
       updateBackBtnVisibility();
       persistLastActiveWorkPointer();
-      showToast("Opened “" + activeJoineryItemPage.displayName + "”.");
+      // Flagging it specifically when resuming from a draft (rather than a
+      // real, permanent Save) -- otherwise silently continuing autosaved-
+      // but-never-explicitly-Saved work could read as "my last Save" when
+      // it isn't one yet, and nobody else can see it as a layer until it
+      // is.
+      showToast(activeJoineryItemPage.ownHasDraft
+        ? "Opened “" + activeJoineryItemPage.displayName + "” — continuing your unsaved autosaved changes. Hit Save to make this a permanent, shared layer."
+        : "Opened “" + activeJoineryItemPage.displayName + "”.");
     }).catch(function(err){
       if (err && err.code === "nav_cancelled") return; // declined the save-before-leaving confirm -- just stay put
       console.error("Open joinery item page failed:", err);
@@ -3682,7 +3969,15 @@
   // Writes to whichever of the level's own saves/ folder or a room's own
   // saves/ folder is actually active right now (activeWorkSavesHandle/
   // activeWorkName -- a room's, if one is open, else the level's own).
-  function saveActiveLevelFile(){
+  // `explicit` (added v45) distinguishes a real, deliberate Save (the Save
+  // button, or choosing Save in the "leaving" confirm) from every other
+  // caller of this same chokepoint (the periodic auto-backup tick, the
+  // pre-picker/post-import flush) -- irrelevant to the level/room/flat
+  // save paths below, which behave exactly as before either way, but it's
+  // what saveJoineryItemPageFile uses to decide "new permanent overlay
+  // layer" versus "just keep my own draft current". See that function's
+  // own comment.
+  function saveActiveLevelFile(explicit){
     // The single chokepoint every write of the level's own canonical
     // project file funnels through (the Save button, and the
     // after-import/autosave path below) -- guarding here means a viewer
@@ -3691,7 +3986,7 @@
     if (VIEW_ONLY_MODE) return Promise.reject({ code: "view_only" });
     // A joinery item page takes priority over everything else here -- see
     // its own global's comment for why the two can never both be true.
-    if (activeJoineryItemPage) return saveJoineryItemPageFile();
+    if (activeJoineryItemPage) return saveJoineryItemPageFile(explicit);
     // A flat level (see the flat-structure interop block) has no saves/
     // folder to write into at all -- Rooms never exist there either, so
     // this can only mean the level's own plan, never a room's.
@@ -3735,21 +4030,51 @@
       unsavedSinceLastSave = false;
     });
   }
-  // The joinery-item-page counterpart to saveFlatLevelFile above -- see
-  // writeJoineryItemPage's own comment for why this is a plain whole-file
-  // overwrite with nothing of another app's to preserve. Stamps the
-  // item's own identity onto the payload (never read back by this app --
-  // applyRestoredState only ever looks at the fields it already knows
-  // about -- but worth having in the raw file itself for anyone opening it
-  // by hand, same spirit as savedBy).
-  function saveJoineryItemPageFile(){
+  // The joinery-item-page counterpart to saveFlatLevelFile above -- REWRITTEN
+  // v45 for the real multi-layer overlay architecture (see the "Site Measure
+  // overlay layers" comment above listJoineryOverlays). The old plain
+  // writeJoineryItemPage single-file overwrite is gone from here; every call
+  // now goes to one of two very different places depending on `explicit`:
+  //
+  //   explicit falsy (a silent autosave tick, or the pre-picker/post-import
+  //   flush) -- writes/overwrites ONLY this device's own mutable draft file.
+  //   Never touches the permanent overlays/ folder, so an autosave tick
+  //   firing once a minute during ordinary editing can never spam a new
+  //   "layer" into existence -- exactly the mutable-draft-vs-immutable-Save
+  //   separation Andrew's own design doc calls for.
+  //
+  //   explicit truthy (the Save button, or choosing Save in the "leaving"
+  //   confirm -- both a real, deliberate user action, not a timer) --
+  //   blocks on a device name being set (ensureDeviceUserNameForSave; a
+  //   permanent, shared layer has to be attributable to someone), then
+  //   writes a brand-new, never-to-be-overwritten overlay file stamped with
+  //   this exact moment, and clears this device's own draft (now stale --
+  //   the fresh overlay supersedes it).
+  //
+  // Stamps the item's own identity onto the payload either way (never read
+  // back by this app -- applyRestoredState only ever looks at the fields it
+  // already knows about -- but worth having in the raw file itself for
+  // anyone opening it by hand, same spirit as savedBy).
+  function saveJoineryItemPageFile(explicit){
     if (!activeProjectHandle || !activeJoineryItemPage) return Promise.reject({ code: "no_level" });
+    var key = activeJoineryItemPage.key;
     var payload = projectPayload();
     payload.levelName = activeJoineryItemPage.levelName;
     payload.roomName = activeJoineryItemPage.roomName;
     payload.joineryCode = activeJoineryItemPage.joineryCode;
-    return writeJoineryItemPage(activeProjectHandle, activeJoineryItemPage.key, payload).then(function(){
+    if (!explicit){
+      return writeJoineryDraft(activeProjectHandle, key, deviceUserName, payload).then(function(){
+        activeJoineryItemPage.ownHasDraft = true;
+        unsavedSinceLastSave = false;
+      });
+    }
+    return ensureDeviceUserNameForSave().then(function(name){
+      payload.savedBy = name;
+      return writeJoineryOverlay(activeProjectHandle, key, name, payload);
+    }).then(function(){
+      activeJoineryItemPage.ownHasDraft = false;
       unsavedSinceLastSave = false;
+      return deleteJoineryDraft(activeProjectHandle, key, deviceUserName);
     });
   }
 
@@ -3828,7 +4153,13 @@
       if (choice === "cancel") return Promise.reject({ code: "nav_cancelled" });
       if (choice === "discard") return Promise.resolve();
       state.objects.forEach(function(o){ o.locked = true; });
-      return saveActiveLevelFile();
+      // explicit=true (v45) -- choosing "Save" here is a deliberate,
+      // in-the-moment user decision (not a silent timer), so for a
+      // joinery item page this is one of the two places (alongside the
+      // Save button itself) that actually creates a new permanent Site
+      // Measure overlay layer rather than just updating this device's own
+      // draft. See saveJoineryItemPageFile's own comment.
+      return saveActiveLevelFile(true);
     });
   }
 
@@ -4130,7 +4461,11 @@
     if (!state.imageW){ showToast("Open a plan or photo first."); return; }
     var workName = activeWorkName();
     var jsonOK = false, pdfOK = false, pdfFilename = "", jsonErr = null, pdfErr = null;
-    saveActiveLevelFile().then(function(){
+    // explicit=true (v45) -- this IS the Save button; see
+    // saveJoineryItemPageFile's own comment for what that means for a
+    // joinery item page specifically (a new permanent overlay layer,
+    // rather than just this device's own draft).
+    saveActiveLevelFile(true).then(function(){
       jsonOK = true;
     }).catch(function(err){
       jsonErr = err;
@@ -5084,6 +5419,7 @@
     state.objects.forEach(function(o){ if (o.hidden) return; objectsLayer.appendChild(renderObject(o, false)); });
     renderHandles();
     renderGridOverlay();
+    renderOverlayLayers();
     renderPanel();
     renderLayersList();
     updateStatus();
@@ -7080,6 +7416,113 @@
         layersList.appendChild(row);
       })(state.objects[i]);
     }
+  }
+
+  /* ============================== Site Measure layer toggles (v45) ==============================
+     Per-PERSON layer visibility for a joinery item's Site Measure page --
+     see the "Site Measure overlay layers" comment above listJoineryOverlays
+     for the file-storage side of this. Deliberately separate from the
+     Objects panel/layersList just above (that one is per-OBJECT show/hide
+     on the plan you're actively editing; this one is per-PERSON, toggling
+     whole other people's saved layers on this same item on and off) --
+     nothing here ever touches state.objects, only activeJoineryItemPage's
+     own `layers` array, so a foreign layer can never accidentally become
+     selectable, editable, or included in a Save/PDF export. */
+  var overlayLayersPanelOpen = false;
+  var overlayLayersPanel = document.getElementById("overlayLayersPanel");
+  var overlayLayersList = document.getElementById("overlayLayersList");
+  function setOverlayLayersPanelOpen(open){
+    overlayLayersPanelOpen = open;
+    overlayLayersPanel.style.display = open ? "flex" : "none";
+    document.getElementById("overlayLayersBtn").classList.toggle("active", open);
+    if (open) renderOverlayLayersPanel();
+  }
+  document.getElementById("overlayLayersBtn").addEventListener("click", function(){ setOverlayLayersPanelOpen(!overlayLayersPanelOpen); });
+  document.getElementById("overlayLayersCloseBtn").addEventListener("click", function(){ setOverlayLayersPanelOpen(false); });
+  // A raw "YYYY-MM-DD HH-MM-SS" filename stamp turned back into a readable
+  // label -- purely cosmetic, the hyphenated form in the actual filename
+  // (and everywhere else in this code) is unaffected.
+  function formatOverlayStamp(stamp){
+    var m = /^(\d{4}-\d{2}-\d{2}) (\d{2})-(\d{2})-(\d{2})$/.exec(stamp || "");
+    if (!m) return stamp || "";
+    return m[1] + " " + m[2] + ":" + m[3];
+  }
+  // Draws every currently-visible OTHER layer's objects, tinted and
+  // composited into overlayLayersGroup -- which sits (see the SVG markup)
+  // behind objectsLayer but above the base photo, so a person's own
+  // current work always renders on top of everyone else's reference
+  // layers rather than getting buried under them. Called from renderAll()
+  // itself (unconditionally -- cheap no-op when there's nothing to show),
+  // so it never needs its own separate call sites to stay in sync with
+  // navigation, visibility toggles, or a fresh load.
+  //
+  // Purely a drawing pass: hitObject()/findObj()/deleteSelected() etc. all
+  // key off state.objects alone (confirmed directly in code before this
+  // was built), and none of this ever touches state.objects, so a layer
+  // object can never be selected, dragged, or deleted no matter how it's
+  // drawn here -- reusing renderObject(obj, true) (the same function an
+  // in-progress drawing PREVIEW already uses) for the actual per-object
+  // SVG is what gets that "definitely not a real, interactive object"
+  // behaviour (no data-id class the way a live object has) for free.
+  function renderOverlayLayers(){
+    overlayLayersGroup.innerHTML = "";
+    var btn = document.getElementById("overlayLayersBtn");
+    var layers = (activeJoineryItemPage && activeJoineryItemPage.layers) || [];
+    if (btn) btn.style.display = layers.length ? "" : "none";
+    if (!layers.length){
+      if (overlayLayersPanelOpen) setOverlayLayersPanelOpen(false);
+      return;
+    }
+    // A small rotating palette rather than one fixed tint -- with more
+    // than one other contributor on the same item, each one's layer needs
+    // to read as visually distinct from the others, not just distinct
+    // from your own current (untinted) work. First slot is a purple tint,
+    // matching what Andrew's own request already called it ("purples
+    // layers") -- likely just autocorrect for "different", but a
+    // reasonable default to lead with regardless.
+    var palette = [
+      "sepia(1) saturate(6) hue-rotate(235deg) brightness(0.85)",
+      "sepia(1) saturate(6) hue-rotate(130deg) brightness(0.85)",
+      "sepia(1) saturate(6) hue-rotate(15deg) brightness(0.95)",
+      "sepia(1) saturate(6) hue-rotate(320deg) brightness(0.9)",
+      "sepia(1) saturate(6) hue-rotate(60deg) brightness(0.9)"
+    ];
+    layers.forEach(function(layer, i){
+      if (!layer.visible || !layer.objects || !layer.objects.length) return;
+      var g = el("g", { style: "opacity:0.6; pointer-events:none; filter:" + palette[i % palette.length] + ";" });
+      layer.objects.forEach(function(o){
+        if (o.hidden) return;
+        try{ g.appendChild(renderObject(o, true)); }catch(e){ /* a malformed foreign object should never break rendering of everything else */ }
+      });
+      overlayLayersGroup.appendChild(g);
+    });
+  }
+  function renderOverlayLayersPanel(){
+    if (!overlayLayersPanelOpen) return;
+    overlayLayersList.innerHTML = "";
+    var layers = (activeJoineryItemPage && activeJoineryItemPage.layers) || [];
+    if (!layers.length){
+      var empty = document.createElement("div"); empty.className = "layers-empty";
+      empty.textContent = "Nobody else has saved this item yet.";
+      overlayLayersList.appendChild(empty);
+      return;
+    }
+    layers.forEach(function(layer){
+      var row = document.createElement("div");
+      row.className = "layer-row";
+      var cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = layer.visible !== false;
+      cb.title = layer.visible === false ? "Show this layer" : "Hide this layer";
+      cb.addEventListener("change", function(){
+        layer.visible = cb.checked;
+        renderOverlayLayers();
+      });
+      row.appendChild(cb);
+      var lab = document.createElement("span"); lab.className = "layer-label";
+      lab.textContent = (layer.user || "Unnamed") + " — " + formatOverlayStamp(layer.stamp);
+      row.appendChild(lab);
+      overlayLayersList.appendChild(row);
+    });
   }
 
   /* ============================== snap to grid toggle ============================== */
@@ -10835,6 +11278,50 @@
       // needs its own "|| 0" fallback for a field that might not exist yet.
       if (o.type === "image" && typeof o.rot !== "number") o.rot = 0;
     });
+    // BUG FIX (v44.5, 2026-09-22, reported by Andrew: two joinery items on
+    // the same room -- "if i left click on them they seem to be linked. if
+    // i dlete on ehtey both dissaPEAR"): a roomlink marker's own `id` is
+    // assigned by UTZLINE Projects' planUid() counter, which restarts at 1
+    // on every fresh page load of that app and (before this same day's
+    // Projects fix, see its own changelog) was never resynced against
+    // markers already placed on the level -- so two markers placed in two
+    // different Projects sessions could end up sharing the exact same id.
+    // Every bit of Site Measure/Viewer's own select/delete/highlight logic
+    // keys purely off `id`: findObj() returns the FIRST object with a
+    // matching id, "is this object selected" rendering checks compare every
+    // object's id against state.selectedId, and deleteSelected() filters
+    // OUT every object whose id matches. Two objects sharing one id are
+    // therefore indistinguishable to all of that code -- selecting either
+    // one highlights both (both match the same selectedId), and deleting
+    // either one removes both. Site Measure's own uid()/nextId (just below)
+    // already resyncs against every id already on a loaded plan specifically
+    // to keep ITS OWN newly-created objects from colliding -- but that can't
+    // undo a collision already baked into a file loaded from disk. Fixed by
+    // healing any duplicate id the moment a plan is loaded, here, in the one
+    // function both the autosave-restore-on-boot path and every "open a
+    // saved level/room file" path already share: every object past the
+    // first one seen with a given id gets reassigned a fresh id, guaranteed
+    // higher than any id already on the plan. This is silent, lossless (only
+    // the id itself changes, nothing else about the object), and self-heals
+    // the file on disk the next time it's saved. See also UTZLINE Projects'
+    // own matching fix to planUid() itself, which now prevents this exact
+    // collision from being created in the first place for any NEWLY placed
+    // marker -- this fix here is what protects data that's already broken.
+    (function dedupeObjectIds(){
+      var maxNum = 0;
+      state.objects.forEach(function(o){
+        maxNum = Math.max(maxNum, parseInt((o.id || "o0").slice(1), 10) || 0);
+      });
+      var seenIds = {};
+      state.objects.forEach(function(o){
+        var id = o.id || "";
+        if (seenIds[id]){
+          maxNum += 1;
+          o.id = "o" + maxNum;
+        }
+        seenIds[o.id] = true;
+      });
+    })();
     state.nextId = 1 + state.objects.reduce(function(m, o){ return Math.max(m, parseInt((o.id||"o0").slice(1), 10) || 0); }, 0);
     state.selectedId = null;
     applyImageToDom();

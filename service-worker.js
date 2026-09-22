@@ -874,7 +874,88 @@
 // (reproduces (2) against a real exported PDF, inspected with poppler) and
 // run_joinery_item_duplicate_code.js (proves (1) both at the key-resolution
 // level and end-to-end through two real, separately-persisted pages).
-var CACHE_NAME = "utzline-sitemeasure-cache-v44.4";
+//
+// v44.5 (2026-09-22): a further real bug found by Andrew on the very same
+// two same-room-code markers v44.4 fixed the PAGE side of: "if i right
+// click on each on individually they go to thier seperate joinery items,
+// which is great. but, if i left click on them they seem to be linked. if
+// i dlete on ehtey both dissaPEAR." Root cause: a roomlink marker's own
+// `id` is minted by UTZLINE Projects' planUid() counter, which restarted
+// at 1 on every fresh page load of that app and (before this same day's
+// matching Projects fix) was never resynced against markers already
+// placed on the level -- so two markers placed in two separate Projects
+// sessions could end up sharing the exact same `id` once saved into the
+// shared level file. Site Measure/Viewer's own select/delete/highlight
+// logic all key purely off `id` (findObj() returns the FIRST object with
+// a matching id; deleteSelected() filters OUT every object whose id
+// matches) -- so two objects sharing one id are indistinguishable to that
+// code: left-clicking either one highlights BOTH, and deleting either one
+// removes BOTH. Fixed with a new dedupeObjectIds() healing step inside
+// applyRestoredState() (the one function both the autosave-restore-on-boot
+// path and every "open a saved level/room file" path already share): the
+// moment a plan loads, every object past the first one seen with a given
+// id gets reassigned a fresh, guaranteed-unique id -- silent, lossless,
+// and self-healing on disk the next time the plan is saved. A matching fix
+// in UTZLINE Projects' own planUid() (shipped as its own v12, same day)
+// stops this exact collision from being created in the first place for
+// any newly placed marker; this fix here is what protects data that's
+// already broken by the old, unfixed Projects. New regression test
+// run_duplicate_marker_id_healing.js builds a fixture with a forced id
+// collision (exactly the shape a corrupted file from the old Projects
+// would have produced), reopens the level, and confirms the two markers
+// end up with distinct ids, a real click/select on one never also selects
+// the other, and deleting one leaves the other completely untouched --
+// sanity-checked via the established revert-then-restore methodology
+// (confirmed to fail with the fix disabled, confirmed to pass once
+// restored). Full 76-test regression suite re-run clean afterward.
+//
+// v45.0 (2026-09-22, same day, per Andrew: "Do we have the multi layer
+// saves with user name and date time on the projects saves. So that
+// multiple people can site measure and they all get layered over each
+// other. With a layer selecter to turn different layers off.") -- this was
+// designed (UTZLINE Data Standard v1) but never built; only a single
+// mutable file per joinery item existed, last save wins, with a `savedBy`
+// label that itself got overwritten every time. Asked whether existing
+// data needed preserving, Andrew said "I have nothing to save. Proceed" --
+// a clean cutover, not a migration.
+//
+// New shape per joinery item (Project Saves/Site Measures/<key>/):
+// drafts/<user>.json -- mutable, one per device identity, the ONLY thing a
+// silent autosave (periodic tick, pre-picker/post-import flush) ever
+// touches; overlays/<user> - <stamp>.json -- IMMUTABLE, a brand-new file
+// every EXPLICIT Save (the Save button, or choosing Save in the "leaving"
+// confirm), never overwritten or deleted afterward. Opening an item now
+// loads your own draft (or your own last Save, or blank) as the editable
+// plan, plus every OTHER person's latest Save as a toggleable reference
+// layer -- a new "Site Measure layers" panel/toolbar button (hidden unless
+// at least one exists) lets you tick individual layers on/off, each
+// rendered tinted (a rotating purple/teal/orange/pink/green palette) and
+// completely non-interactive underneath your own work. The Viewer (which
+// never has an editable layer of its own) shows the single most recent
+// overlay across everyone as its base view, per the interim "most-recent-
+// layer-wins" placeholder rule (a real "official layer" picker is a
+// separate, still-unbuilt piece meant to live in UTZLINE Projects), with
+// every other overlay still offered as a toggleable reference layer. An
+// explicit Save now blocks on a device name being set first (every
+// permanent layer has to be attributable to someone) via the existing
+// identity dialog, same one already used for the old savedBy field.
+// New regression test run_site_measure_overlay_layers.js exercises this
+// end to end through the real save/load chokepoints (never by hand-writing
+// files): two different people's explicit Saves become two separate
+// layers; a silent autosave never creates a new layer, only updates its
+// own draft; re-opening resumes your own last Save while still offering
+// everyone else as reference layers, never yourself; the layer checkbox
+// actually hides/shows the rendered canvas objects; and a Save with no
+// name set blocks on the identity dialog and proceeds once one is given.
+// Full 77-test regression suite re-run afterward (73 pass; the same 4
+// pre-existing failures -- run_dead_backup_picker_removed,
+// run_level_backup_snapshots, run_view_snapshot_quality,
+// run_flat_structure_interop's own backup-snapshot check -- all share one
+// unrelated root cause, an SVG-to-PNG rasterization failure in this
+// sandbox's headless Chromium that reproduces even on a clean v44.5
+// baseline with none of this change's code, so they're a pre-existing
+// environment flake, not a regression from this work).
+var CACHE_NAME = "utzline-sitemeasure-cache-v45.0";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
