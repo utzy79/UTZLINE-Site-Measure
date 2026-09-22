@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.0">
+<link rel="manifest" href="./manifest.json?v=v45.1">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.0">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.0">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.1">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1527,7 +1527,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.0";
+  var APP_VERSION = "v45.1";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3357,20 +3357,25 @@
     });
   }
   function listExistingProjects(){ return listSubdirNames(projectsRootHandle); }
-  // "itp" and "itp-manufacture" are reserved project-wide folders (a
-  // sibling of "project-meta.json" -- now owned by UTZLINE Projects, see
-  // next-version-notes.md's 2026-09-22 cutover entry) written by the two
-  // separate ITP apps -- UTZLINE ITP (now specifically the install-stage
-  // app) and its sibling UTZLINE Manufacture ITP (the factory/pre-delivery
-  // stage app, forked from it) -- directly under a project's own folder,
-  // alongside its level folders -- excluded here the same way
-  // listExistingRooms excludes saves/pdfs/backup, so neither ever shows up
-  // mislabeled as a level someone could open and start drawing into.
+  // "itp", "itp-install", and "itp-manufacture" are reserved project-wide
+  // folders (a sibling of "project-meta.json" -- now owned by UTZLINE
+  // Projects, see next-version-notes.md's 2026-09-22 cutover entry)
+  // written by the two separate ITP apps -- UTZLINE ITP (now specifically
+  // the install-stage app) and its sibling UTZLINE Manufacture ITP (the
+  // factory/pre-delivery stage app, forked from it) -- directly under a
+  // project's own folder, alongside its level folders -- excluded here the
+  // same way listExistingRooms excludes saves/pdfs/backup, so none of them
+  // ever shows up mislabeled as a level someone could open and start
+  // drawing into. "itp" is Install ITP's OLD folder name, kept in this
+  // exclusion list as a legacy leftover even after its 2026-09-22 rename
+  // to "itp-install" (Unified Implementation Brief section O) -- an
+  // existing project's old folder isn't deleted or migrated by this app,
+  // just still hidden from the level list.
   function listExistingLevels(){
     return isFlatProject(activeProjectHandle).then(function(flat){
       if (flat) return listFlatLevelNames(activeProjectHandle);
       return listSubdirNames(activeProjectHandle).then(function(names){
-        return names.filter(function(n){ return n !== "itp" && n !== "itp-manufacture"; });
+        return names.filter(function(n){ return n !== "itp" && n !== "itp-install" && n !== "itp-manufacture"; });
       });
     });
   }

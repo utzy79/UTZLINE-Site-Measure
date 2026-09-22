@@ -955,7 +955,12 @@
 // sandbox's headless Chromium that reproduces even on a clean v44.5
 // baseline with none of this change's code, so they're a pre-existing
 // environment flake, not a regression from this work).
-var CACHE_NAME = "utzline-sitemeasure-cache-v45.0";
+// v45.1 (2026-09-22): both ITP apps' own "itp"/"itp-manufacture" level-list
+// exclusion additionally excludes "itp-install" now (Install ITP's own
+// folder rename, Unified Implementation Brief section O) -- Site Measure's
+// listExistingLevels() picks up the same exclusion so that folder never
+// shows up mislabeled as a level here either. No other functional change.
+var CACHE_NAME = "utzline-sitemeasure-cache-v45.1";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
