@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v44.2">
+<link rel="manifest" href="./manifest.json?v=v44.3">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44.2">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44.2">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44.3">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44.3">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -677,17 +677,19 @@
   .share-choice-title{ font-size:13.5px; font-weight:600; }
   .share-choice-sub{ font-size:11.5px; color:var(--text-secondary); line-height:1.35; }
 
-  /* ---------- Joinery Item dialog (v44) ----------
+  /* ---------- Joinery Item dialog (v44; own-page rebuilt v44.3) ----------
      Right-clicking/long-pressing a roomlink marker used to either navigate
      straight into that Room's own folder (legacy projects) or, as of v43,
      show a dead-end toast pointing at UTZLINE Projects (flat projects) --
      both wrong per Andrew's own correction: the marker's real destination is
      the JOINERY ITEM, never "the Room", in either project shape. This
-     dialog is that destination -- lets you add a photo/image straight from
-     Site Measure (saved into this project's own Project Saves/Site
-     Measures/ folder, so it's visible from every app, not just this one),
-     and, only for a legacy project where the Room still has a real plan of
-     its own, offers a secondary way to open that plan too. */
+     dialog is that destination -- "Open joinery item" opens THIS item's own
+     dedicated page (its own file, under this project's Project Saves/Site
+     Measures/ folder, visible from every app, not just this one), exactly
+     like the old Room view used to work before joinery items existed as
+     their own concept, and, only for a legacy project where the Room still
+     has a real plan of its own too, offers a secondary way to open that
+     plan instead. */
   .joinery-item-box{max-width:380px;}
   .modal-box .joinery-item-title{font-weight:700; margin-bottom:2px;}
   .modal-box .joinery-item-subtitle{font-size:12px; color:var(--text-secondary); margin-bottom:14px;}
@@ -1463,12 +1465,15 @@
       </div>
     </div>
 
-    <!-- Joinery Item dialog (v44; add-photo behaviour rebuilt in v44.2) --
+    <!-- Joinery Item dialog (v44; rebuilt v44.2; own-page rebuilt v44.3) --
          see the JS comment at openJoineryItemDialog for why this replaces
          the marker popover's old "Open room"/dead-end-toast behaviour, and
-         why "Add photo / image" now drops straight into the item's own
-         real page + the ordinary Insert Image flow rather than a separate
-         attachment file store. -->
+         the comment at openJoineryItemPage for why "Open joinery item" now
+         drops straight into that item's own dedicated page -- never the
+         shared Room/Level plan -- exactly like the old Room view used to
+         work before joinery items existed as their own concept. Once
+         there, the ordinary toolbar (Insert image included) works exactly
+         as it does anywhere else in the app. -->
     <div class="modal-backdrop" id="joineryItemBackdrop" hidden>
       <div class="modal-box joinery-item-box" role="dialog" aria-modal="true" aria-labelledby="joineryItemTitle">
         <p id="joineryItemTitle" class="joinery-item-title">Joinery Item</p>
@@ -1476,7 +1481,7 @@
         <div class="modal-actions">
           <button class="mbtn" id="joineryItemOpenRoomBtn" style="display:none;">Open this room's own plan</button>
           <button class="mbtn" id="joineryItemCloseBtn">Close</button>
-          <button class="mbtn mbtn-accent" id="joineryItemAddBtn">Add photo / image</button>
+          <button class="mbtn mbtn-accent" id="joineryItemOpenPageBtn">Open joinery item</button>
         </div>
       </div>
     </div>
@@ -1494,7 +1499,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v44.2";
+  var APP_VERSION = "v44.3";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2683,6 +2688,26 @@
   var activeRoomPdfsHandle = null;
   var activeRoomBackupsHandle = null;
 
+  // A JOINERY ITEM (v44.3, 2026-09-22) -- one narrower still than a room:
+  // its own dedicated page, exactly like the old Room view used to be for
+  // markers before joinery items existed as their own concept ("each
+  // joinery item should have its own page like the old room view did",
+  // Andrew, after v44.2 still landed a marker's photo on the shared
+  // Room/Level plan instead). Unlike a level or a room, a joinery item
+  // never has a real folder of its own in EITHER project shape -- see
+  // getSiteMeasuresDir/readJoineryItemPage/writeJoineryItemPage below,
+  // which give it the exact same "one flat JSON file, no folder handle"
+  // treatment a flat Level already gets, for the same reason. Set by
+  // openJoineryItemPage(), cleared by every "step back out" transition
+  // that already clears activeRoomName (see those call sites) plus
+  // backBtnClicked's own new branch. null whenever no item page is open;
+  // { levelName, roomName, joineryCode, key, displayName, pdfsHandle,
+  // backupsHandle } while one is. Takes priority over activeRoom*/
+  // activeLevel* in every activeWork*/hasActiveWork chokepoint below --
+  // a joinery item page can only ever be open instead of, never alongside,
+  // a room or a level's own plan.
+  var activeJoineryItemPage = null;
+
   // Whichever of "this level's own plan" or "a room inside it" is actually
   // open right now is what every Save/PDF/auto-backup/autosave call should
   // act on -- a room's handles take priority whenever one is active, falling
@@ -2691,9 +2716,9 @@
   // variables directly, so adding rooms never required touching their
   // internals beyond this.
   function activeWorkSavesHandle(){ return activeRoomSavesHandle || activeLevelSavesHandle; }
-  function activeWorkPdfsHandle(){ return activeRoomPdfsHandle || activeLevelPdfsHandle; }
-  function activeWorkBackupsHandle(){ return activeRoomBackupsHandle || activeLevelBackupsHandle; }
-  function activeWorkName(){ return activeRoomName || activeLevelName; }
+  function activeWorkPdfsHandle(){ return activeJoineryItemPage ? activeJoineryItemPage.pdfsHandle : (activeRoomPdfsHandle || activeLevelPdfsHandle); }
+  function activeWorkBackupsHandle(){ return activeJoineryItemPage ? activeJoineryItemPage.backupsHandle : (activeRoomBackupsHandle || activeLevelBackupsHandle); }
+  function activeWorkName(){ return activeJoineryItemPage ? activeJoineryItemPage.displayName : (activeRoomName || activeLevelName); }
 
   function projectSaveFilename(name){ return sanitizeFileBase(name) + ".utzline.json"; }
 
@@ -2742,20 +2767,25 @@
 
      Interim scope, disclosed rather than silently assumed: a flat
      Level's plan stays fully editable here exactly like a legacy
-     Level's always has -- dimensions/lines/text/etc. drawn on it are
-     saved straight into this same file's `objects`. This is NOT yet the
-     real joinery-item-scoped permanent-overlay workflow Andrew has
-     described for the future (a measurement belongs to whichever
-     Joinery Item is "active", saved as its own immutable per-item file)
-     -- that's a separate, much bigger piece of work with its own active-
-     item concept that doesn't exist anywhere in this app yet. This is a
-     deliberate stopgap so the app stays usable against a Projects-
-     created project in the meantime, agreed with Andrew directly rather
-     than assumed; expect this whole block to be superseded once that
-     real workflow ships. A flat Room still has no plan/canvas of its own
-     to open -- see openJoineryItemDialog's own comment (v44) for what a
-     marker actually opens now instead (the Joinery Item, not the Room, in
-     either project shape). */
+     Level's always has -- dimensions/lines/text/etc. drawn directly on
+     THIS shared plan (not inside any joinery item's own page) are saved
+     straight into this same file's `objects`. This is NOT yet the real
+     permanent-overlay workflow Andrew has described for the future
+     (several independent, immutable overlays layered on top of one
+     shared plan, one per active context) -- that's a separate, bigger
+     piece of work. What DOES now exist (v44.3, see the "Joinery item
+     pages" comment near readJoineryItemPage/writeJoineryItemPage) is the
+     mutable, interim version of the item-scoped half of that idea: each
+     joinery item gets its own real, separate, saveable page -- just not
+     yet an immutable overlay sharing the level's plan underneath it. This
+     whole block (the shared Level plan itself) is a deliberate stopgap so
+     the app stays usable against a Projects-created project in the
+     meantime, agreed with Andrew directly rather than assumed; expect it
+     to be superseded once the real overlay workflow ships. A flat Room
+     still has no plan/canvas of its own to open -- see
+     openJoineryItemDialog's own comment for what a marker actually opens
+     now instead (its own joinery item page, not the Room, in either
+     project shape). */
   function projectSavesDirName(){ return "Project Saves"; }
   function floorPlansDirName(){ return "Floor Plans"; }
   function getFloorPlansDir(projectHandle, create){
@@ -2888,6 +2918,70 @@
       return smH.getDirectoryHandle(sanitizeFileBase(levelName), { create: !!create });
     });
   }
+
+  /* ============================== Joinery item pages (v44.3, 2026-09-22) ==============================
+     A joinery item never has a real folder of its own in either project
+     shape (a legacy Room's folder can hold several joinery items; a flat
+     Room has no folder at all) -- exactly the situation a flat Level is
+     already in, so this reuses that same "one flat JSON file, no folder
+     handle" approach rather than inventing a second one: one file per
+     item, under "Project Saves/Site Measures/" -- the folder name/location
+     Andrew asked for back when this held loose per-item attachment files
+     (v44); same place, now holding a full page save instead, exactly like
+     a Room's own save file always has, just without a folder of its own to
+     sit in. PDF exports and backup snapshots share the SAME "PDF Files/
+     UTZLINE Site Measure/" / "Backups/UTZLINE Site Measure/<key>/" folders
+     a flat Level's own PDFs/backups already use (getFlatPdfsDir/
+     getFlatBackupsDirForLevel below) -- both are already generic over
+     whatever name/key they're handed, not actually Level-specific in
+     implementation, so nothing there needed to change at all; a Level's
+     own name and a joinery item's own key are just two different strings
+     passed into the exact same two functions. */
+  function siteMeasuresDirName(){ return "Site Measures"; }
+  function getSiteMeasuresDir(projectHandle, create){
+    return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
+      return psH.getDirectoryHandle(siteMeasuresDirName(), { create: !!create });
+    });
+  }
+  // A joinery item's identity is the full (Level, Room, code) path to it --
+  // a code alone can repeat across different rooms/levels, and a marker's
+  // own joineryCode can even be blank (placed before a code was typed in),
+  // so the room name is what keeps two blank-coded items in the same room
+  // from colliding with each other.
+  function joineryItemPageKey(levelName, roomName, joineryCode){
+    return sanitizeFileBase(levelName) + " - " + sanitizeFileBase(roomName) + (joineryCode ? " - " + sanitizeFileBase(joineryCode) : "");
+  }
+  function joineryItemPageDisplayName(levelName, roomName, joineryCode){
+    return [levelName, roomName, joineryCode].filter(Boolean).join(" — ");
+  }
+  function joineryItemPageFileName(key){ return key + ".json"; }
+  function readJoineryItemPage(projectHandle, key){
+    return getSiteMeasuresDir(projectHandle, false).then(function(dirH){
+      return dirH.getFileHandle(joineryItemPageFileName(key));
+    }).then(function(fh){
+      return fh.getFile();
+    }).then(function(file){
+      return file.text();
+    }).then(function(text){
+      try{
+        var parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== "object") return null;
+        return parsed;
+      }catch(e){ return null; }
+    }, function(){ return null; });
+  }
+  // Plain whole-file overwrite -- unlike saveFlatLevelFile, there's no
+  // `rooms`/`markers` field of some OTHER app's to preserve here: a
+  // joinery item's page file is entirely this app's own, nothing else
+  // (UTZLINE Projects included) ever reads or writes it.
+  function writeJoineryItemPage(projectHandle, key, data){
+    var payload = JSON.stringify(data);
+    return getSiteMeasuresDir(projectHandle, true).then(function(dirH){
+      return dirH.getFileHandle(joineryItemPageFileName(key), { create: true });
+    }).then(function(fh){
+      return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
+    });
+  }
   // Centralizes the "is a level/room genuinely open right now" check that
   // used to just be activeWorkSavesHandle() truthy -- a flat level has no
   // savesHandle of its own (its save path bypasses folder handles
@@ -2896,7 +2990,9 @@
   // save-before-leaving/autosave/save right now") needs this instead. The
   // one place that still needs the REAL handle (saveActiveLevelFile's own
   // legacy-folder branch) keeps calling activeWorkSavesHandle() directly.
-  function hasActiveWork(){ return !!(activeWorkSavesHandle() || (activeLevelIsFlat && !activeRoomName)); }
+  // A joinery item page has no savesHandle either (same reason a flat
+  // level doesn't), so it gets the same explicit OR-in treatment.
+  function hasActiveWork(){ return !!(activeJoineryItemPage || activeWorkSavesHandle() || (activeLevelIsFlat && !activeRoomName)); }
 
   // Lists the immediate subdirectories of a given directory handle -- used
   // both for "every subfolder directly under the Projects root is a
@@ -3070,6 +3166,7 @@
       // level's own Save/PDF/autosave into the wrong folder.
       activeRoomName = ""; activeRoomHandle = null;
       activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
+      activeJoineryItemPage = null;
       return isFlatProject(activeProjectHandle);
     }).then(function(flat){
       if (flat) return openFlatLevel(name);
@@ -3204,6 +3301,98 @@
     });
   }
 
+  // Opens a JOINERY ITEM's own dedicated page -- one narrower than a level
+  // or room, exactly like the old Room view used to be for a marker before
+  // joinery items existed as their own concept (v44.3, 2026-09-22; see the
+  // "Joinery item pages" comment above readJoineryItemPage/
+  // writeJoineryItemPage for the file-storage side of this). Deliberately
+  // identical for BOTH project shapes -- a joinery item has no real folder
+  // in either one, so unlike openLevel() there's no isFlatProject() branch
+  // here at all; the marker's own level being legacy or flat only matters
+  // for HOW that level's own plan opens, never for how an item's page
+  // does.
+  //
+  // Needs a known project handle (activeProjectHandle) to have anywhere to
+  // put "Project Saves/Site Measures/..." under -- always true for a flat
+  // level (isFlatProject already required one) and for any legacy level
+  // reached the normal way (through a project), but NOT guaranteed for a
+  // bare legacy level folder the Viewer opened directly with no known
+  // parent (see openLevelFromHandle's own comment) -- guarded here rather
+  // than left to fail confusingly partway through the folder chain.
+  //
+  // Scope note: persistLastActiveWorkPointer()/tryRestoreLastActiveWork()
+  // (boot-time resume after a reload) are untouched -- activeLevelName
+  // stays valid the whole time an item's page is open, so the pointer
+  // they save still resolves, just to this LEVEL's own plan rather than
+  // the exact item page a reload happened on. The data itself is never at
+  // risk either way (autosaveLevelPlanIfActive/the periodic backup timer
+  // already route through the same saveActiveLevelFile chokepoint this
+  // page uses), only the one-tap "exactly where I left off" convenience --
+  // a deliberately smaller gap than building full boot-restore support for
+  // item pages too, which Andrew hasn't asked for.
+  function openJoineryItemPage(obj){
+    if (!activeProjectHandle){
+      showToast("Can't open a joinery item's own page without a known project — open this level from its project instead.");
+      return Promise.resolve();
+    }
+    return saveActiveWorkBeforeLeaving().then(function(){
+      // Opening an item's page always means leaving any room behind too --
+      // a room and a joinery item page are mutually exclusive, same as a
+      // room and the level's own plan already are (see openLevel).
+      activeRoomName = ""; activeRoomHandle = null;
+      activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
+      var levelName = activeLevelName;
+      var roomName = obj.roomName || "";
+      var joineryCode = obj.joineryCode || "";
+      var key = joineryItemPageKey(levelName, roomName, joineryCode);
+      var displayName = joineryItemPageDisplayName(levelName, roomName, joineryCode);
+      var create = !VIEW_ONLY_MODE;
+      return Promise.all([
+        getFlatPdfsDir(activeProjectHandle, create).catch(function(){ return null; }),
+        getFlatBackupsDirForLevel(activeProjectHandle, key, create).catch(function(){ return null; }),
+        readJoineryItemPage(activeProjectHandle, key)
+      ]).then(function(results){
+        activeJoineryItemPage = {
+          levelName: levelName, roomName: roomName, joineryCode: joineryCode,
+          key: key, displayName: displayName,
+          pdfsHandle: results[0], backupsHandle: results[1]
+        };
+        var saved = results[2];
+        if (savedHasImage(saved)){
+          applyRestoredState(saved);
+        } else {
+          startBlankPlan(displayName);
+        }
+      });
+    }).then(function(){
+      // Set last, same reasoning openLevel/openRoom's own comments give --
+      // never clobbered by whatever applyRestoredState/startBlankPlan set
+      // fileBase to along the way.
+      state.fileBase = sanitizeFileBase((activeProjectName ? activeProjectName + "_" : "") + activeJoineryItemPage.key);
+      updateFileNameBtn();
+      refreshBrandSubtitle();
+      history = [deepClone(state.objects)]; historyIndex = 0;
+      fitToView();
+      renderAll();
+      updateUndoRedoButtons();
+      hideProjectGate();
+      // A joinery item page has no rooms of its own to browse to (same
+      // reasoning openFlatLevel already hides these for) -- and no further
+      // project/level switching makes sense mid-item either, since Back
+      // already covers "leave this item" in one tap.
+      if (switchProjectBtn) switchProjectBtn.style.display = "none";
+      if (roomsBtn) roomsBtn.style.display = "none";
+      if (roomJumpSelect) roomJumpSelect.style.display = "none";
+      updateBackBtnVisibility();
+      persistLastActiveWorkPointer();
+      showToast("Opened “" + activeJoineryItemPage.displayName + "”.");
+    }).catch(function(err){
+      if (err && err.code === "nav_cancelled") return; // declined the save-before-leaving confirm -- just stay put
+      console.error("Open joinery item page failed:", err);
+      showToast("Couldn't open that joinery item — try again.");
+    });
+  }
+
   // Rooms live one folder deeper than levels, directly under the current
   // level's own folder, alongside its "saves" and "pdfs" subfolders --
   // exclude those two by name so they never show up mislabeled as rooms.
@@ -3224,6 +3413,9 @@
     // or a different room of this same level -- see
     // saveActiveWorkBeforeLeaving's own comment.
     return saveActiveWorkBeforeLeaving().then(function(){
+      // A room and a joinery item page are mutually exclusive, same as a
+      // room and the level's own plan.
+      activeJoineryItemPage = null;
       return activeLevelHandle.getDirectoryHandle(name, { create: !VIEW_ONLY_MODE });
     }).then(function(dirH){
       activeRoomHandle = dirH;
@@ -3309,14 +3501,12 @@
   // the marker gets removed (with an explanatory toast) instead of
   // resurrecting it.
   //
-  // `afterOpen` (added v44.2): an optional callback fired once the room's
-  // canvas has actually finished loading and is on-screen -- used by the
-  // Joinery Item dialog's "Add photo / image" button to land the user on a
-  // freshly-opened room and immediately continue into the Insert Image
-  // flow, rather than just navigating there and stopping. Never fired on
-  // the stale-marker-cleanup branch above (nothing was opened) or if
-  // openRoom() itself fails.
-  function openLegacyRoomPlanFromJoineryItem(obj, afterOpen){
+  // (v44.2 briefly added an `afterOpen` callback param here, to land
+  // straight into Insert Image once the room opened; v44.3's own-page
+  // rebuild moved that whole flow to openJoineryItemPage instead, so this
+  // went back to being plain navigation -- open the room and stop, exactly
+  // like it always did before v44.2.)
+  function openLegacyRoomPlanFromJoineryItem(obj){
     closeJoineryItemDialog();
     listExistingRooms().then(function(existing){
       var existingLower = existing.map(function(n){ return n.toLowerCase(); });
@@ -3337,24 +3527,25 @@
         showToast("“" + obj.roomName + "” was deleted — removed " + (removedIds.length === 1 ? "this marker" : "its " + removedIds.length + " markers") + ".");
         return;
       }
-      openRoom(obj.roomName).then(function(){
-        if (afterOpen) afterOpen();
-      }).catch(function(err){
+      openRoom(obj.roomName).catch(function(err){
         console.error("Open room failed:", err);
         showToast("Couldn't open “" + obj.roomName + "” — try again.");
       });
     });
   }
 
-  /* ============================== Joinery Item dialog (v44; rebuilt v44.2) ==============================
+  /* ============================== Joinery Item dialog (v44; rebuilt v44.2, v44.3) ==============================
      Right-click/long-press a roomlink marker, or double-click it, and this
      opens now -- not "the Room". Andrew's own framing of what this should
      be (recorded in the overlay-architecture brief): "in the site measure
      app, it opens a page where we can insert site measures, add photos,
      images etc to measure off. this gets saved and is accessible by the
-     viewer app." The REAL, full version of that -- the plan-canvas itself
-     scoped to one active joinery item, per-item permanent overlay files --
-     is the still-unbuilt Phase 3 overlay architecture.
+     viewer app." The REAL, full version of that -- per-item permanent
+     overlay files, several independent overlays sharing one plan -- is
+     the still-unbuilt Phase 3 overlay architecture; this dialog's own
+     "Open joinery item" is the interim, mutable version of the same idea:
+     a real, separate, saveable page per item, just not yet an immutable
+     overlay layered on the level's plan.
 
      REBUILT (v44.2, 2026-09-22): v44 shipped "Add photo / image" as a
      separate attachment file, written into a new `Project Saves/Site
@@ -3367,33 +3558,37 @@
      The attachment-file design was the wrong shape entirely: a file with no
      viewer inside the app is not "accessible from the app" no matter where
      it's filed. Dropped completely -- no more attachment folder, no more
-     per-item file listing.
+     per-item file listing. v44.2 replaced it with "Add photo / image"
+     landing straight on the marker's Room/Level plan and immediately into
+     Insert Image.
 
-     "Add photo / image" now does what "Insert image" has always done, just
-     reached from here: it puts the user on the joinery item's own real
-     page -- a legacy Room's own canvas (opening it first, same stale-marker
-     guard openLegacyRoomPlanFromJoineryItem always had) or, for a flat
-     project, the shared Level plan the marker already lives on, which is
-     already the active view -- and immediately continues into the exact
-     same Take-photo/Choose-file picker (triggerInsertImageFlow, defined
-     with "Insert image" below) that flow already uses. The photo lands as
-     a normal on-canvas image object: visible immediately, part of that
-     page's own save file, exported with it -- nothing new to build, no
-     separate access path to be missing.
-     Read-only in the Viewer (VIEW_ONLY_MODE): the dialog still opens (it's
-     navigation, matching how the old "Open room" row was never gated
-     either), but the Add button is hidden since the Viewer never writes. */
+     REBUILT AGAIN (v44.3, 2026-09-22): v44.2's fix still wasn't right, per
+     Andrew: "that takes the photo... but adds them onto the floor plan,
+     not into thoir own joinery item page. ieach joinery item should have
+     its own page like the old room view did." The photo landing on a real,
+     viewable page wasn't the whole ask -- it needed to be THIS item's own
+     page, never shared with sibling items on the same room/level. "Open
+     joinery item" now opens exactly that (openJoineryItemPage, its own
+     comment covers the storage side), then leaves the user there to use
+     the ordinary toolbar -- Insert image included -- same as any other
+     page in the app, rather than auto-continuing into a picker itself; a
+     visit to add a second photo later, or just to look at what's already
+     there, works the same way "Open room" always has. Read-only in the
+     Viewer (VIEW_ONLY_MODE): the dialog and this button are both pure
+     navigation -- opening an item's own page to look at it works there
+     too, same as "Open room" always could -- only the toolbar actions
+     ONCE THERE (Insert image, drawing tools, Save) are gated, the same
+     app-wide way they already are on every other page. */
   var joineryItemBackdrop = document.getElementById("joineryItemBackdrop");
   var joineryItemTitleEl = document.getElementById("joineryItemTitle");
   var joineryItemSubtitleEl = document.getElementById("joineryItemSubtitle");
-  var joineryItemAddBtn = document.getElementById("joineryItemAddBtn");
+  var joineryItemOpenPageBtn = document.getElementById("joineryItemOpenPageBtn");
   var joineryItemOpenRoomBtn = document.getElementById("joineryItemOpenRoomBtn");
   var activeJoineryItemMarker = null;
   function openJoineryItemDialog(obj){
     activeJoineryItemMarker = obj;
     joineryItemTitleEl.textContent = "Joinery item" + (obj.joineryCode ? " — " + obj.joineryCode : "");
     joineryItemSubtitleEl.textContent = [activeLevelName, obj.roomName].filter(Boolean).join(" · ");
-    joineryItemAddBtn.style.display = VIEW_ONLY_MODE ? "none" : "";
     // A legacy Room still has a real plan of its own to open; a flat Room
     // (activeLevelIsFlat) doesn't, so this secondary action only makes
     // sense for legacy projects -- see openLegacyRoomPlanFromJoineryItem's
@@ -3410,23 +3605,11 @@
   joineryItemOpenRoomBtn.addEventListener("click", function(){
     if (activeJoineryItemMarker) openLegacyRoomPlanFromJoineryItem(activeJoineryItemMarker);
   });
-  joineryItemAddBtn.addEventListener("click", function(){
-    if (VIEW_ONLY_MODE || !activeJoineryItemMarker) return;
+  joineryItemOpenPageBtn.addEventListener("click", function(){
+    if (!activeJoineryItemMarker) return;
     var obj = activeJoineryItemMarker;
-    // triggerInsertImageFlow is a hoisted function declaration defined
-    // alongside "Insert image" further down -- calling it here (defined
-    // later in the file) is fine, same scope.
-    if (activeLevelIsFlat){
-      // The marker's own shared Level plan is already the active view for
-      // a flat project -- nothing to navigate to first.
-      closeJoineryItemDialog();
-      triggerInsertImageFlow();
-    } else {
-      // Legacy: open the Room's own canvas first (closes this dialog as
-      // part of that), then continue straight into Insert Image once it's
-      // actually loaded.
-      openLegacyRoomPlanFromJoineryItem(obj, function(){ triggerInsertImageFlow(); });
-    }
+    closeJoineryItemDialog();
+    openJoineryItemPage(obj);
   });
 
   // Placing a new joinery marker/item ("Add joinery item here", the
@@ -3453,6 +3636,9 @@
     // build can never overwrite a real project file, regardless of what
     // triggered the call.
     if (VIEW_ONLY_MODE) return Promise.reject({ code: "view_only" });
+    // A joinery item page takes priority over everything else here -- see
+    // its own global's comment for why the two can never both be true.
+    if (activeJoineryItemPage) return saveJoineryItemPageFile();
     // A flat level (see the flat-structure interop block) has no saves/
     // folder to write into at all -- Rooms never exist there either, so
     // this can only mean the level's own plan, never a room's.
@@ -3493,6 +3679,23 @@
         savedBy: deviceUserName || ""
       });
     }).then(function(){
+      unsavedSinceLastSave = false;
+    });
+  }
+  // The joinery-item-page counterpart to saveFlatLevelFile above -- see
+  // writeJoineryItemPage's own comment for why this is a plain whole-file
+  // overwrite with nothing of another app's to preserve. Stamps the
+  // item's own identity onto the payload (never read back by this app --
+  // applyRestoredState only ever looks at the fields it already knows
+  // about -- but worth having in the raw file itself for anyone opening it
+  // by hand, same spirit as savedBy).
+  function saveJoineryItemPageFile(){
+    if (!activeProjectHandle || !activeJoineryItemPage) return Promise.reject({ code: "no_level" });
+    var payload = projectPayload();
+    payload.levelName = activeJoineryItemPage.levelName;
+    payload.roomName = activeJoineryItemPage.roomName;
+    payload.joineryCode = activeJoineryItemPage.joineryCode;
+    return writeJoineryItemPage(activeProjectHandle, activeJoineryItemPage.key, payload).then(function(){
       unsavedSinceLastSave = false;
     });
   }
@@ -7795,6 +7998,7 @@
     activeLevelSavesHandle = null; activeLevelPdfsHandle = null; activeLevelBackupsHandle = null;
     activeRoomName = ""; activeRoomHandle = null;
     activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
+    activeJoineryItemPage = null;
     clearActiveWorkInMemory();
     refreshBrandSubtitle();
     if (switchProjectBtn) switchProjectBtn.style.display = "none";
@@ -7822,6 +8026,7 @@
       // open room behind too, same as leaving the level itself.
       activeRoomName = ""; activeRoomHandle = null;
       activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
+      activeJoineryItemPage = null;
       clearActiveWorkInMemory();
       refreshBrandSubtitle();
       // Purely cosmetic (the toolbar sits fully hidden behind the gate
@@ -7861,6 +8066,7 @@
     function goToGate(){
       activeRoomName = ""; activeRoomHandle = null;
       activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
+      activeJoineryItemPage = null;
       clearActiveWorkInMemory();
       state.fileBase = "plan";
       updateFileNameBtn();
@@ -7896,11 +8102,36 @@
       showToast("Couldn't save “" + activeWorkName() + "” before going back (" + describeError(err) + ") — try Save first, then try again.", 8000);
     });
   }
-  // The button itself just picks which of the two targets actually applies
-  // right now -- both are pre-existing, already-tested navigations reused
-  // as-is (backToLevelPlan() above, and switchProject() below).
+  // From a joinery item's own page, Back means "return to the level this
+  // item lives on" -- a roomlink marker can only ever exist on a level's
+  // own main plan, never inside a room's own canvas (see
+  // openRoomFromMarker's own comment), so that's always the right target
+  // in either project shape, and openLevel() itself is already the right
+  // function to reach it: it auto-saves whatever's active first, clears
+  // activeJoineryItemPage (see its own edit there), and branches on
+  // isFlatProject internally exactly the way reopening the level fresh
+  // needs to. No new function needed the way backToLevelPlan's
+  // openLevelFromHandle shortcut is for a room, since there's nothing
+  // analogous to "reopen from an already-known handle" here -- a flat
+  // level has no handle at all, and openLevel() already does the right
+  // thing for a legacy one too.
+  function backFromJoineryItemPage(){
+    var levelName = activeJoineryItemPage ? activeJoineryItemPage.levelName : activeLevelName;
+    openLevel(levelName).catch(function(err){
+      if (err && err.code === "nav_cancelled") return; // declined the confirm -- just stay put
+      console.error("Auto-save before going back failed:", err);
+      showToast("Couldn't save “" + activeWorkName() + "” before going back (" + describeError(err) + ") — try Save first, then try again.", 8000);
+    });
+  }
+  // The button itself just picks which of the three targets actually
+  // applies right now -- all three are pre-existing, already-tested
+  // navigations reused as-is. A joinery item page checked first: while one
+  // is open, activeLevelName/activeRoomName are left exactly as they were
+  // underneath it (see openJoineryItemPage's own comment), so the other
+  // two branches would otherwise misfire.
   function backBtnClicked(){
-    if (activeRoomName) backToLevelPlan();
+    if (activeJoineryItemPage) backFromJoineryItemPage();
+    else if (activeRoomName) backToLevelPlan();
     else if (activeLevelName) switchProject();
   }
   // Shown only once there's genuinely somewhere for it to go -- a room is
@@ -7910,9 +8141,14 @@
   // plan is only a valid back-target when a project is actually known,
   // exactly the same condition switchProjectBtn's own visibility already
   // uses, since switchProject() itself has nowhere useful to go otherwise.
+  // A joinery item page always has activeProjectHandle set too (guarded in
+  // openJoineryItemPage itself), so it's already covered by the existing
+  // condition -- listed explicitly anyway for the same reason
+  // backBtnClicked checks it explicitly, rather than relying on it falling
+  // out of the other two.
   function updateBackBtnVisibility(){
     if (!backBtn) return;
-    backBtn.style.display = (activeLevelName && (activeRoomName || activeProjectHandle)) ? "" : "none";
+    backBtn.style.display = (activeLevelName && (activeJoineryItemPage || activeRoomName || activeProjectHandle)) ? "" : "none";
   }
 
   var confirmBackdrop = document.getElementById("confirmBackdrop");

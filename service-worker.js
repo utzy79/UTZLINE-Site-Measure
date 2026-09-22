@@ -821,7 +821,31 @@
 // scenario it tested (two modal backdrops open at once) is now structurally
 // impossible, since the Joinery Item dialog always closes itself before the
 // picker can ever open.)
-var CACHE_NAME = "utzline-sitemeasure-cache-v44.2";
+//
+// (v44.3, 2026-09-22, same-day rebuild again: v44.2's fix still wasn't what
+// Andrew asked for. His follow-up: "that takes the photo, or grabs the
+// images, but adds them onto the floor plan, not into thoir own joinery
+// item page. ieach joinery item should have its own page like the old room
+// view did." Landing on a real, viewable page wasn't the whole ask -- it
+// had to be THIS item's own page, never shared with sibling items in the
+// same room/level. The dialog's button is renamed "Open joinery item" and
+// now opens a genuinely separate page per (Level, Room, joinery code) --
+// one flat JSON file under "Project Saves/Site Measures/", in EITHER
+// project shape (no folder of its own to sit in, exactly like a flat
+// Level's own file already works) -- sharing the same project-wide "PDF
+// Files/UTZLINE Site Measure/" and "Backups/UTZLINE Site Measure/<item
+// key>/" folders a flat Level's PDFs/backups already use. It's pure
+// navigation now (no auto-continuing into Insert Image itself): open the
+// item's page, then use the ordinary toolbar there, same as any other page
+// in the app -- which also means it now works, read-only, in the Viewer
+// too, rather than being hidden there. Rewritten run_joinery_item_dialog.js
+// drives the full real end-to-end flow: two joinery items in the SAME room
+// get separate blank pages; a photo added via Insert Image on one page
+// actually persists to that item's own file (verified on disk); Back
+// returns to the LEVEL's own plan; and, for a flat project, the shared
+// Level plan keeps its own pre-existing objects completely untouched by an
+// item page's edits -- the exact regression Andrew reported in v44.2.)
+var CACHE_NAME = "utzline-sitemeasure-cache-v44.3";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
