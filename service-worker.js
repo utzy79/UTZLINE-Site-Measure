@@ -781,7 +781,26 @@
 // work Andrew has described for later; this is the narrower, concrete slice
 // he asked for right now. Covered by the new regression test
 // run_joinery_item_dialog.js.)
-var CACHE_NAME = "utzline-sitemeasure-cache-v44";
+//
+// (v44.1, 2026-09-22, same-day hotfix: Andrew found this immediately after
+// installing v44 -- "the add photo image doesnt actually add it, just
+// closes the picker." Root cause: the new Joinery Item dialog's own
+// backdrop and the shared Take-photo/Choose-file picker's backdrop are both
+// plain .modal-backdrop elements at the same z-index, and the dialog never
+// hides itself while the picker is open on top of it -- CSS stacking then
+// fell back to DOM order, and the Joinery Item dialog (later in the
+// markup) painted OVER the picker, hiding its buttons entirely. Tapping
+// "Add photo/image" looked like nothing happened, and tapping the
+// now-invisible-but-still-there dialog's own backdrop closed the whole
+// thing -- exactly "just closes the picker". Fixed with one CSS rule
+// (#insertSourceBackdrop gets a z-index above the ordinary modal-backdrop
+// layer, same reasoning .camera-backdrop already used) so the picker always
+// renders on top of whatever modal invoked it. New regression test
+// run_joinery_add_photo_stacking.js reproduces this exactly using
+// Chromium's fake-camera flags plus a real filechooser-driven click (proven
+// to fail against the pre-fix source, and to pass end-to-end -- including
+// the attachment actually landing on disk -- against the fix).
+var CACHE_NAME = "utzline-sitemeasure-cache-v44.1";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

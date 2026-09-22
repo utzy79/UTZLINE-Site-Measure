@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v44">
+<link rel="manifest" href="./manifest.json?v=v44.1">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44.1">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44.1">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -534,6 +534,24 @@
     display:flex; align-items:center; justify-content:center; z-index:40;
   }
   .modal-backdrop[hidden]{display:none;}
+  /* BUG FIX (v44.1, 2026-09-22): the Take-photo/Choose-file choice
+     (#insertSourceBackdrop) is itself a plain .modal-backdrop, same z-index
+     as every other one -- fine when it's opened from an ordinary toolbar
+     button with nothing else open, but the new v44 Joinery Item dialog
+     opens it from ITS OWN still-open .modal-backdrop (#joineryItemBackdrop),
+     which comes later in the DOM and so painted on top at the same z-index,
+     completely hiding the Take photo/Choose file/Cancel buttons underneath
+     it. Andrew's report matched exactly: tapping "Add photo / image"
+     appeared to do nothing (the Joinery Item dialog was still all that was
+     visible, unchanged), and tapping anywhere off its own modal-box then
+     hit #joineryItemBackdrop's own backdrop-click-to-close handler,
+     silently closing the whole dialog instead of ever reaching the picker
+     underneath -- "just closes the picker". Fixed the same way
+     .camera-backdrop already handles this (it's always meant to stack
+     above any calling modal): give this one specific backdrop a z-index
+     above the ordinary modal-backdrop layer so it always renders on top
+     of whatever modal invoked it, present or not. */
+  #insertSourceBackdrop{ z-index:41; }
   .modal-box{
     background:var(--surface-1); border:1px solid var(--border-strong); border-radius:10px;
     box-shadow:var(--shadow); padding:18px 20px; max-width:320px; width:calc(100% - 40px);
@@ -1480,7 +1498,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v44";
+  var APP_VERSION = "v44.1";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
