@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v42">
+<link rel="manifest" href="./manifest.json?v=v43">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v42">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v42">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v43">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v43">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1443,7 +1443,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v42";
+  var APP_VERSION = "v43";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2188,7 +2188,13 @@
         return openProjectFromHandle(saved.projectHandle, saved.projectName).then(function(){
           return openLevel(saved.levelName);
         }).then(function(){
-          if (saved.roomName) return openRoom(saved.roomName);
+          // A room pointer saved before this project was migrated to the
+          // flat structure (see the interop block) no longer means
+          // anything -- activeLevelIsFlat is authoritative for whether
+          // openRoom() even has a folder to open; skip it rather than
+          // letting a stale pointer fail the whole restore and land back
+          // on the project list instead of the level that DID open fine.
+          if (saved.roomName && !activeLevelIsFlat) return openRoom(saved.roomName);
         });
       });
     }).catch(function(){
@@ -2390,7 +2396,7 @@
     // chosen generic backup folder. The level's own canonical save file is
     // kept fresh alongside it, same as before, so "resume where I left off"
     // and "a real history of snapshots to fall back to" both stay covered.
-    if (activeLevelSavesHandle){
+    if (activeLevelSavesHandle || activeLevelIsFlat){
       saveActiveLevelFile().then(function(){
         return writeLevelBackupSnapshot();
       }).then(function(){
@@ -2592,6 +2598,19 @@
   // display and for the "back to this project's levels" navigation.
   var activeLevelName = "";
   var activeLevelHandle = null;
+  // True when the currently-open level belongs to a project stored in the
+  // new flat "Project Saves/Floor Plans/" shape (2026-09-22, UTZLINE
+  // Projects v9+) rather than the original nested Level/Room folders --
+  // see isFlatProject() and the "flat-structure interop" block further
+  // down. activeLevelHandle stays null the whole time this is true: a
+  // flat level has no folder of its own at all, so every place that used
+  // to read/write through that handle (open, save, autosave, backup) has
+  // its own flat-aware branch instead. Always set fresh by whichever of
+  // openLevelFromHandle (legacy) or openFlatLevel (flat) actually opened
+  // the level currently active, so nothing needs to reset it defensively
+  // beyond the couple of places that already clear activeLevelHandle to
+  // step back out to a list.
+  var activeLevelIsFlat = false;
   var activeLevelSavesHandle = null;
   var activeLevelPdfsHandle = null;
   var activeLevelBackupsHandle = null;
@@ -2643,6 +2662,190 @@
       });
     });
   }
+
+  /* ============================== flat-structure interop (2026-09-22) ==============================
+     UTZLINE Projects v9+ stores a project's Levels/Rooms/floorplan a
+     completely different way from everything above: no per-Level folder
+     at all, just one plain file per Level under the project's own
+     "Project Saves/Floor Plans/" folder -- "<Project> - <Level>.json",
+     holding that Level's one shared floorplan photo (never per-Room),
+     its Rooms (name only -- pure navigation, no folder/plan of their
+     own), and its roomlink markers. This app still owns actually
+     drawing/measuring on a Level's plan, so this file gains one more
+     field the Projects app itself never touches: `objects`, this app's
+     own annotations for that Level (plus `savedBy`, the shared device
+     identity, same field projectPayload() already stamps everywhere
+     else). See next-version-notes.md's "Shipped in Projects v9" and
+     "Site Measure/Viewer flat-structure interop" entries for the full
+     story on both sides of this.
+
+     A project created before this cutover keeps its real Level/Room
+     folders exactly as they've always worked (openLevelFromHandle,
+     ensureWorkFolders, everything above this block) -- this app never
+     migrates one into the other; UTZLINE Projects already does that
+     itself, additively, the first time it opens an old project. Once a
+     project HAS a "Project Saves/Floor Plans/" folder (isFlatProject
+     below), that's the only place this app looks for that project's
+     Levels from then on, in preference over any old folders that may
+     still happen to sit alongside it.
+
+     Interim scope, disclosed rather than silently assumed: a flat
+     Level's plan stays fully editable here exactly like a legacy
+     Level's always has -- dimensions/lines/text/etc. drawn on it are
+     saved straight into this same file's `objects`. This is NOT yet the
+     real joinery-item-scoped permanent-overlay workflow Andrew has
+     described for the future (a measurement belongs to whichever
+     Joinery Item is "active", saved as its own immutable per-item file)
+     -- that's a separate, much bigger piece of work with its own active-
+     item concept that doesn't exist anywhere in this app yet. This is a
+     deliberate stopgap so the app stays usable against a Projects-
+     created project in the meantime, agreed with Andrew directly rather
+     than assumed; expect this whole block to be superseded once that
+     real workflow ships. Rooms have no plan/canvas of their own to open
+     in the flat shape (see openRoomFromMarker's own guard below) --
+     "Open room" on a roomlink marker doesn't try to open or create
+     anything, since there's nothing for it to open yet. */
+  function projectSavesDirName(){ return "Project Saves"; }
+  function floorPlansDirName(){ return "Floor Plans"; }
+  function getFloorPlansDir(projectHandle, create){
+    return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
+      return psH.getDirectoryHandle(floorPlansDirName(), { create: !!create });
+    });
+  }
+  // Same naming convention Projects itself uses for this file -- MUST stay
+  // byte-identical to that app's own levelFileName(), since this app has to
+  // open the exact files Projects creates (and vice versa).
+  function flatLevelFileName(projectName, levelName){
+    return sanitizeFileBase(projectName) + " - " + sanitizeFileBase(levelName) + ".json";
+  }
+  // True once a project has been touched by UTZLINE Projects v9+ (or was
+  // born there) -- checked by trying to open "Project Saves/Floor Plans/"
+  // read-only; never creates anything itself, so opening a legacy project
+  // for the first time under this app never accidentally starts it down
+  // the flat path. A project with BOTH a Floor Plans folder and old,
+  // never-cleaned-up Level folders (already migrated by Projects at some
+  // point) always resolves "flat" -- Projects itself never looks at the
+  // old folders again once this exists, and neither does this app.
+  function isFlatProject(projectHandle){
+    if (!projectHandle) return Promise.resolve(false);
+    return getFloorPlansDir(projectHandle, false).then(function(){ return true; }, function(){ return false; });
+  }
+  function readFlatLevelFileByName(projectHandle, fname){
+    return getFloorPlansDir(projectHandle, false).then(function(dirH){
+      return dirH.getFileHandle(fname);
+    }).then(function(fh){
+      return fh.getFile();
+    }).then(function(file){
+      return file.text();
+    }).then(function(text){
+      try{
+        var parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== "object" || !parsed.name) return null;
+        return {
+          name: parsed.name,
+          imageDataURL: parsed.imageDataURL || null,
+          imageTiles: parsed.imageTiles || null,
+          imageW: parsed.imageW || 0,
+          imageH: parsed.imageH || 0,
+          rooms: Array.isArray(parsed.rooms) ? parsed.rooms : [],
+          markers: Array.isArray(parsed.markers) ? parsed.markers : [],
+          objects: Array.isArray(parsed.objects) ? parsed.objects : [],
+          savedBy: typeof parsed.savedBy === "string" ? parsed.savedBy : ""
+        };
+      }catch(e){ return null; }
+    }, function(){ return null; });
+  }
+  function readFlatLevelFile(projectHandle, projectName, levelName){
+    return readFlatLevelFileByName(projectHandle, flatLevelFileName(projectName, levelName));
+  }
+  // Whole-file overwrite, same read-modify-write contract as Projects' own
+  // writeLevelFile -- every caller here already read the current file (see
+  // saveFlatLevelFile below) so `rooms` (never this app's to manage) rides
+  // along unchanged. Uses verifiedHandleWrite for the same write-then-
+  // read-back safety net every other folder write in this app gets.
+  function writeFlatLevelFile(projectHandle, projectName, levelName, data){
+    return getFloorPlansDir(projectHandle, true).then(function(dirH){
+      var payload = JSON.stringify({
+        name: levelName,
+        imageDataURL: data.imageTiles ? null : (data.imageDataURL || null),
+        imageTiles: data.imageTiles || null,
+        imageW: data.imageW || 0,
+        imageH: data.imageH || 0,
+        rooms: data.rooms || [],
+        markers: data.markers || [],
+        objects: data.objects || [],
+        savedBy: data.savedBy || ""
+      });
+      return dirH.getFileHandle(flatLevelFileName(projectName, levelName), { create: true }).then(function(fh){
+        return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
+      });
+    });
+  }
+  // Every Level in a flat project is one of these files -- listing Levels
+  // means reading "Floor Plans" and pulling each file's own `name` field
+  // (never parsed back out of the filename), same as Projects' own
+  // listLevelFiles.
+  function listFlatLevelNames(projectHandle){
+    return getFloorPlansDir(projectHandle, false).then(function(dirH){
+      var fnames = [];
+      var iter = dirH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return fnames;
+          if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) fnames.push(res.value.name);
+          return step();
+        });
+      }
+      return step();
+    }, function(){ return []; }).then(function(fnames){
+      return fnames.reduce(function(chain, fname){
+        return chain.then(function(acc){
+          return readFlatLevelFileByName(projectHandle, fname).then(function(level){
+            if (level && level.name) acc.push(level.name);
+            return acc;
+          });
+        });
+      }, Promise.resolve([]));
+    }).then(function(names){
+      return names.sort(function(a, b){ return a.localeCompare(b, undefined, { sensitivity: "base" }); });
+    });
+  }
+  // Where this app's own PDF exports / backup snapshots land for a flat
+  // project, matching the top two levels of Andrew's own approved Release 3
+  // folder diagram ("PDF Files"/"Backups", each split by app) -- without
+  // yet trying to build the Room/Joinery-Item-scoped filenames that
+  // diagram shows, since that context doesn't exist in this app until the
+  // real overlay workflow lands. PDFs from every Level in a project share
+  // one flat folder (their own filenames, via suggestFilename/fileBase,
+  // are already unique per Level -- no collision risk). Backups get their
+  // OWN per-Level subfolder underneath, not a single shared flat folder --
+  // pruneLevelBackups caps snapshot COUNT per folder it's pointed at, so a
+  // shared folder across every Level in a project would mean one busy
+  // Level's snapshots could evict another Level's entirely; a subfolder
+  // per Level keeps the existing "10 most recent snapshots of THIS plan"
+  // guarantee intact.
+  function siteMeasureBranchName(){ return "UTZLINE Site Measure"; }
+  function getFlatPdfsDir(projectHandle, create){
+    return projectHandle.getDirectoryHandle("PDF Files", { create: !!create }).then(function(pfH){
+      return pfH.getDirectoryHandle(siteMeasureBranchName(), { create: !!create });
+    });
+  }
+  function getFlatBackupsDirForLevel(projectHandle, levelName, create){
+    return projectHandle.getDirectoryHandle("Backups", { create: !!create }).then(function(bH){
+      return bH.getDirectoryHandle(siteMeasureBranchName(), { create: !!create });
+    }).then(function(smH){
+      return smH.getDirectoryHandle(sanitizeFileBase(levelName), { create: !!create });
+    });
+  }
+  // Centralizes the "is a level/room genuinely open right now" check that
+  // used to just be activeWorkSavesHandle() truthy -- a flat level has no
+  // savesHandle of its own (its save path bypasses folder handles
+  // entirely, see saveActiveLevelFile), so every caller that used to ask
+  // activeWorkSavesHandle() purely as a yes/no ("is there anything to
+  // save-before-leaving/autosave/save right now") needs this instead. The
+  // one place that still needs the REAL handle (saveActiveLevelFile's own
+  // legacy-folder branch) keeps calling activeWorkSavesHandle() directly.
+  function hasActiveWork(){ return !!(activeWorkSavesHandle() || (activeLevelIsFlat && !activeRoomName)); }
 
   // Lists the immediate subdirectories of a given directory handle -- used
   // both for "every subfolder directly under the Projects root is a
@@ -2717,21 +2920,30 @@
   // same thing picking a genuinely-empty root folder for the first time
   // has always done.
   function detectFolderShape(dirHandle){
-    return listSubdirNames(dirHandle).then(function(names){
-      if (hasReservedWorkSubfolders(names)) return "level";
-      if (!names.length) return "empty";
-      return anySubfolderMatches(dirHandle, names, isLevelShaped).then(function(hasLevelChild){
-        if (hasLevelChild) return "project";
-        // Neither this folder nor any direct child is level-shaped -- check
-        // one layer deeper (grandchildren) for a PROJECT-shaped child,
-        // which would make this folder the ROOT.
-        return anySubfolderMatches(dirHandle, names, function(childHandle){
-          return listSubdirNames(childHandle).then(function(grandNames){
-            if (!grandNames.length) return false;
-            return anySubfolderMatches(childHandle, grandNames, isLevelShaped);
+    // A flat-structure project (Project Saves/Floor Plans/ present -- see
+    // isFlatProject) has NO level-shaped child folders at all, ever, so
+    // the folder-shape heuristic below would misread one as "unknown"
+    // (falling back to being treated as a ROOT, showing "Project Saves"/
+    // "PDF Files"/"Backups" as if they were projects of their own) -- 2026-
+    // 09-22, checked first, ahead of every folder-shape guess below.
+    return isFlatProject(dirHandle).then(function(flat){
+      if (flat) return "project";
+      return listSubdirNames(dirHandle).then(function(names){
+        if (hasReservedWorkSubfolders(names)) return "level";
+        if (!names.length) return "empty";
+        return anySubfolderMatches(dirHandle, names, isLevelShaped).then(function(hasLevelChild){
+          if (hasLevelChild) return "project";
+          // Neither this folder nor any direct child is level-shaped -- check
+          // one layer deeper (grandchildren) for a PROJECT-shaped child,
+          // which would make this folder the ROOT.
+          return anySubfolderMatches(dirHandle, names, function(childHandle){
+            return listSubdirNames(childHandle).then(function(grandNames){
+              if (!grandNames.length) return false;
+              return anySubfolderMatches(childHandle, grandNames, isLevelShaped);
+            });
+          }).then(function(hasProjectChild){
+            return hasProjectChild ? "root" : "unknown";
           });
-        }).then(function(hasProjectChild){
-          return hasProjectChild ? "root" : "unknown";
         });
       });
     });
@@ -2747,8 +2959,11 @@
   // listExistingRooms excludes saves/pdfs/backup, so neither ever shows up
   // mislabeled as a level someone could open and start drawing into.
   function listExistingLevels(){
-    return listSubdirNames(activeProjectHandle).then(function(names){
-      return names.filter(function(n){ return n !== "itp" && n !== "itp-manufacture"; });
+    return isFlatProject(activeProjectHandle).then(function(flat){
+      if (flat) return listFlatLevelNames(activeProjectHandle);
+      return listSubdirNames(activeProjectHandle).then(function(names){
+        return names.filter(function(n){ return n !== "itp" && n !== "itp-manufacture"; });
+      });
     });
   }
 
@@ -2804,9 +3019,73 @@
       // level's own Save/PDF/autosave into the wrong folder.
       activeRoomName = ""; activeRoomHandle = null;
       activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
-      return activeProjectHandle.getDirectoryHandle(name, { create: !VIEW_ONLY_MODE });
-    }).then(function(dirH){
-      return openLevelFromHandle(dirH, name);
+      return isFlatProject(activeProjectHandle);
+    }).then(function(flat){
+      if (flat) return openFlatLevel(name);
+      return activeProjectHandle.getDirectoryHandle(name, { create: !VIEW_ONLY_MODE }).then(function(dirH){
+        return openLevelFromHandle(dirH, name);
+      });
+    });
+  }
+  // The flat-structure counterpart to openLevelFromHandle -- no folder
+  // handle at all (see the flat-structure interop block's own comment for
+  // why), just a read of "Project Saves/Floor Plans/<Project> - <Level>.json"
+  // and, for this app's own PDF/backup writes, the shared per-project
+  // "PDF Files"/"Backups" folders (getFlatPdfsDir/getFlatBackupsDirForLevel).
+  // Only ever reached through openLevel() above (isFlatProject already
+  // established there's a known project handle), never directly the way
+  // openLevelFromHandle can be -- a flat level has no folder to hand a
+  // caller like the viewer's own shape-detection picker in the first
+  // place.
+  function openFlatLevel(name){
+    activeLevelIsFlat = true;
+    activeLevelHandle = null;
+    activeLevelSavesHandle = null; // flat saves bypass this entirely -- see saveActiveLevelFile
+    var create = !VIEW_ONLY_MODE;
+    return Promise.all([
+      getFlatPdfsDir(activeProjectHandle, create).catch(function(){ return null; }),
+      getFlatBackupsDirForLevel(activeProjectHandle, name, create).catch(function(){ return null; }),
+      readFlatLevelFile(activeProjectHandle, activeProjectName, name)
+    ]).then(function(results){
+      activeLevelPdfsHandle = results[0];
+      activeLevelBackupsHandle = results[1];
+      var level = results[2];
+      activeLevelName = name;
+      var hasImage = level && (level.imageDataURL || (level.imageTiles && level.imageTiles.length));
+      if (hasImage){
+        applyRestoredState({
+          utzlineProject: 1,
+          imageDataURL: level.imageDataURL, imageTiles: level.imageTiles,
+          imageW: level.imageW, imageH: level.imageH,
+          fileBase: activeProjectName + "_" + name,
+          // The markers UTZLINE Projects placed render inline alongside
+          // whatever this app has drawn -- saveFlatLevelFile splits them
+          // back apart again by type when writing (see its own comment).
+          objects: (level.objects || []).concat(level.markers || []),
+          savedBy: deviceUserName || ""
+        });
+      } else {
+        startBlankPlan(name);
+      }
+    }).then(function(){
+      state.fileBase = sanitizeFileBase(activeProjectName + "_" + name);
+      updateFileNameBtn();
+      refreshBrandSubtitle();
+      history = [deepClone(state.objects)]; historyIndex = 0;
+      fitToView();
+      renderAll();
+      updateUndoRedoButtons();
+      hideProjectGate();
+      if (switchProjectBtn) switchProjectBtn.style.display = activeProjectHandle ? "" : "none";
+      // Rooms have no plan/canvas of their own to browse to in the flat
+      // shape (they're pure navigation now, see the interop block's own
+      // comment) -- "Rooms" and the level>room jump menu both stay hidden
+      // rather than opening onto a screen with nothing real to show.
+      if (roomsBtn) roomsBtn.style.display = "none";
+      if (roomJumpSelect) roomJumpSelect.style.display = "none";
+      updateBackBtnVisibility();
+      persistLastActiveWorkPointer();
+      showToast("Opened “" + activeProjectName + " — " + name + "”.");
     });
   }
   // The part of openLevel() that doesn't need to look the handle up by name
@@ -2821,6 +3100,7 @@
   // "Opened ..." toast all fall back to the level's own bare name instead
   // of a stale or missing project name.
   function openLevelFromHandle(dirH, name){
+    activeLevelIsFlat = false;
     activeLevelHandle = dirH;
     return ensureWorkFolders(dirH).then(function(subs){
       activeLevelName = name;
@@ -2960,6 +3240,18 @@
   // toast) instead of resurrecting it.
   function openRoomFromMarker(obj){
     if (!activeLevelName || activeRoomName) return;
+    // A flat-structure Room (see the interop block's own comment) has no
+    // folder or plan of its own to open at all -- it's pure navigation
+    // data inside the Level's own file. Rather than trying to open/create
+    // a folder that was never going to exist, just say so; this is an
+    // interim message, not the real destination -- Andrew's own described
+    // "opens a page where we can insert site measures... this gets saved
+    // and is accessible by the viewer app" workflow is the joinery-item-
+    // scoped overlay work, not yet built (see next-version-notes.md).
+    if (activeLevelIsFlat){
+      showToast("“" + obj.roomName + (obj.joineryCode ? " · " + obj.joineryCode : "") + "” — open UTZLINE Projects to see this joinery item's details.");
+      return;
+    }
     listExistingRooms().then(function(existing){
       var existingLower = existing.map(function(n){ return n.toLowerCase(); });
       if (existingLower.indexOf(obj.roomName.toLowerCase()) === -1){
@@ -3010,6 +3302,10 @@
     // build can never overwrite a real project file, regardless of what
     // triggered the call.
     if (VIEW_ONLY_MODE) return Promise.reject({ code: "view_only" });
+    // A flat level (see the flat-structure interop block) has no saves/
+    // folder to write into at all -- Rooms never exist there either, so
+    // this can only mean the level's own plan, never a room's.
+    if (activeLevelIsFlat && !activeRoomName) return saveFlatLevelFile();
     var savesHandle = activeWorkSavesHandle();
     if (!savesHandle) return Promise.reject({ code: "no_level" });
     var blob;
@@ -3017,6 +3313,34 @@
     catch(e){ return Promise.reject(e); }
     return savesHandle.getFileHandle(projectSaveFilename(activeWorkName()), { create: true }).then(function(fh){
       return verifiedHandleWrite(fh, blob);
+    }).then(function(){
+      unsavedSinceLastSave = false;
+    });
+  }
+  // The flat-structure counterpart to the write above -- a read-modify-
+  // write of the SAME "Project Saves/Floor Plans/<Project> - <Level>.json"
+  // file UTZLINE Projects itself reads/writes, so it must never blindly
+  // overwrite the whole thing: `rooms` is never this app's to manage (read
+  // fresh here and carried straight through), and roomlink markers (placed
+  // by Projects, rendered inline in state.objects alongside whatever this
+  // app has drawn -- see openFlatLevel) get split back out of state.objects
+  // into their own `markers` field rather than being written as this app's
+  // own `objects`, so Projects' own marker-placement/room-creation code
+  // keeps seeing exactly the shape it expects.
+  function saveFlatLevelFile(){
+    if (!activeProjectHandle || !activeLevelName) return Promise.reject({ code: "no_level" });
+    return readFlatLevelFile(activeProjectHandle, activeProjectName, activeLevelName).then(function(existing){
+      var markers = state.objects.filter(function(o){ return o && o.type === "roomlink"; });
+      var objects = state.objects.filter(function(o){ return !(o && o.type === "roomlink"); });
+      return writeFlatLevelFile(activeProjectHandle, activeProjectName, activeLevelName, {
+        imageDataURL: state.imageDataURL,
+        imageTiles: state.imageTiles || null,
+        imageW: state.imageW, imageH: state.imageH,
+        rooms: existing ? existing.rooms : [],
+        markers: markers,
+        objects: objects,
+        savedBy: deviceUserName || ""
+      });
     }).then(function(){
       unsavedSinceLastSave = false;
     });
@@ -3090,7 +3414,7 @@
   // being written, so there'd be nothing for the lock to apply to.
   function saveActiveWorkBeforeLeaving(){
     if (VIEW_ONLY_MODE) return Promise.resolve(); // nothing can be dirty; Save is unreachable anyway
-    if (!activeWorkSavesHandle() || !state.objects.length) return Promise.resolve();
+    if (!hasActiveWork() || !state.objects.length) return Promise.resolve();
     if (!unsavedSinceLastSave) return Promise.resolve(); // already exactly what's on disk -- nothing to confirm
     var leavingName = activeWorkName();
     return showLeaveConfirm("Save changes to “" + leavingName + "” before leaving? Saving writes them straight into “" + leavingName + "”’s own folder. Choose Cancel to stay here instead, if you want to check something first, or Leave without saving to discard them.").then(function(choice){
@@ -3165,7 +3489,7 @@
   // now cost you is the one photo that was mid-capture, never any earlier
   // annotation work on the same plan.
   function autosaveLevelPlanIfActive(){
-    if (!(activeWorkSavesHandle() && state.imageW)) return;
+    if (!(hasActiveWork() && state.imageW)) return;
     saveActiveLevelFile().catch(function(err){
       console.error("Autosave after import failed:", err);
       showToast("Brought that in, but couldn't auto-save it to “" + activeWorkName() + "” yet (" + describeError(err) + ") — hit Save as soon as you can.", 8000);
@@ -3395,7 +3719,7 @@
     // no-op single-file saveAll() fallback and its own file-picker/download
     // prompts, which viewer mode should never show at all.
     if (VIEW_ONLY_MODE) return;
-    if (!(activeWorkSavesHandle() && activeWorkPdfsHandle())){ saveAll(); return; }
+    if (!(hasActiveWork() && activeWorkPdfsHandle())){ saveAll(); return; }
     if (!state.imageW){ showToast("Open a plan or photo first."); return; }
     var workName = activeWorkName();
     var jsonOK = false, pdfOK = false, pdfFilename = "", jsonErr = null, pdfErr = null;
@@ -7316,7 +7640,7 @@
   // here (openRoomsPicker() already cleared/confirmed on the way in,
   // exactly the same reasoning backToProjectsBtn above already relies on).
   backToLevelsFromRoomsBtn.addEventListener("click", function(){
-    activeLevelName = ""; activeLevelHandle = null;
+    activeLevelName = ""; activeLevelHandle = null; activeLevelIsFlat = false;
     activeLevelSavesHandle = null; activeLevelPdfsHandle = null; activeLevelBackupsHandle = null;
     activeRoomName = ""; activeRoomHandle = null;
     activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
@@ -7341,7 +7665,7 @@
   // every level switch through two screens.
   function switchProject(){
     function goToGate(){
-      activeLevelName = ""; activeLevelHandle = null;
+      activeLevelName = ""; activeLevelHandle = null; activeLevelIsFlat = false;
       activeLevelSavesHandle = null; activeLevelPdfsHandle = null; activeLevelBackupsHandle = null;
       // Stepping all the way out to the project's level list leaves any
       // open room behind too, same as leaving the level itself.

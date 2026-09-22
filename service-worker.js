@@ -730,7 +730,35 @@
 // Implementation Brief (2026-09-22) -- see
 // utzline-overlay-architecture-brief-investigation.md for the full plan
 // and remaining phases. No other functional change in this release.)
-var CACHE_NAME = "utzline-sitemeasure-cache-v42";
+//
+// (v43, 2026-09-22: flat-structure interop -- this app can now open a
+// project stored the way UTZLINE Projects v9+ creates it (Project Saves/
+// Floor Plans/<Project> - <Level>.json per Level, no Level/Room folders
+// at all) as well as the original nested Level/Room folder shape, side by
+// side. isFlatProject() detects which shape a project uses; a flat
+// Level's shared photo, its Projects-placed roomlink markers, and this
+// app's own drawn annotations for it all live in that one file together
+// (this app's own `objects`/`savedBy` additions to the file, round-
+// tripped safely by a matching Projects v11 change so neither app
+// clobbers the other's part of it). A flat Level stays fully editable
+// here exactly like a legacy one -- a deliberate interim stopgap, agreed
+// with Andrew directly, ahead of the real joinery-item-scoped permanent-
+// overlay workflow (not built yet, its own separate piece of work). PDF
+// exports and auto-backup snapshots for a flat Level land in new project-
+// wide "PDF Files/UTZLINE Site Measure/" and "Backups/UTZLINE Site
+// Measure/<Level>/" folders, matching Andrew's own approved Release 3
+// folder diagram, since there's no per-Level folder left to hold them.
+// Rooms have no folder/plan of their own in the flat shape (pure
+// navigation now) -- "Rooms"/the level-room jump menu stay hidden for a
+// flat Level, and tapping a roomlink marker shows a toast pointing at
+// UTZLINE Projects instead of trying to open something that was never
+// going to exist. Legacy nested-folder projects are completely
+// unaffected -- this is pure addition, no folder-shape detection or
+// save/load behavior changed for them. See next-version-notes.md's
+// "Site Measure/Viewer flat-structure interop" entry for the full
+// picture, including the deliberate scope boundary against the bigger
+// overlay-architecture work still to come.)
+var CACHE_NAME = "utzline-sitemeasure-cache-v43";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
