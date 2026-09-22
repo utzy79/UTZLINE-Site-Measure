@@ -845,7 +845,36 @@
 // returns to the LEVEL's own plan; and, for a flat project, the shared
 // Level plan keeps its own pre-existing objects completely untouched by an
 // item page's edits -- the exact regression Andrew reported in v44.2.)
-var CACHE_NAME = "utzline-sitemeasure-cache-v44.3";
+//
+// v44.4 (2026-09-22, same day): two real bugs found right after v44.3,
+// both fixed here.
+// (1) "the selector dot gets confused if there are 2 items with the same
+// room code" -- two DIFFERENT joinery-item markers sharing the exact same
+// (Level, Room, code) used to resolve to the exact same page key, so
+// opening either dot showed (and, once a photo was inserted, silently
+// shared) identical content. Fixed by resolveJoineryItemPageKey: when a
+// real collision is detected among the roomlink markers actually on the
+// level's own plan, every marker but the first (sorted by position,
+// reproducibly) gets a numbered suffix appended to its key -- a level with
+// no collisions at all (the common case) is completely unaffected.
+// (2) "when you save teh pdf. it comes out bad" -- a joinery item's own
+// page always starts on a blank canvas (see v44.3 above), which triggers
+// the PDF export's own "boost a too-small blank-canvas page up to a normal
+// document size" logic (present since well before v44). That boost scales
+// the base canvas and every vector annotation/border, but a pasted-in
+// reference photo's own raster embed had separate ox/oy/ow/oh math that
+// never got multiplied by the same boost factor -- so the photo landed at
+// its old, un-boosted position/size while its own border (real vector,
+// correctly boosted) visibly drifted away from it. Rare before v44.3 (a
+// Room could in principle start blank too, just uncommon in practice);
+// guaranteed on every photo added to a joinery item's own page, since
+// those always start blank. Fixed by multiplying that photo's own
+// placement math through by the same pageBoost factor everything else
+// already uses. New regression tests run_joinery_item_pdf_export.js
+// (reproduces (2) against a real exported PDF, inspected with poppler) and
+// run_joinery_item_duplicate_code.js (proves (1) both at the key-resolution
+// level and end-to-end through two real, separately-persisted pages).
+var CACHE_NAME = "utzline-sitemeasure-cache-v44.4";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

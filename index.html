@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v44.3">
+<link rel="manifest" href="./manifest.json?v=v44.4">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44.3">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44.3">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44.4">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44.4">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1499,7 +1499,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v44.3";
+  var APP_VERSION = "v44.4";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2955,6 +2955,56 @@
     return [levelName, roomName, joineryCode].filter(Boolean).join(" — ");
   }
   function joineryItemPageFileName(key){ return key + ".json"; }
+  // Two joinery items can genuinely end up with the exact same (Level,
+  // Room, code) -- typed by hand, a duplicate code is an easy real mistake
+  // (a placeholder re-used by habit, a copy-pasted value, two items nobody
+  // has gotten around to giving distinct codes yet), and joineryItemPageKey
+  // above has no way to tell them apart on its own: both markers would
+  // silently resolve to the SAME page file, so opening either one shows
+  // (and, once a photo's inserted, silently shares) the exact same content
+  // -- a real report from Andrew right after v44.3 ("the selector dot gets
+  // confused if there are 2 items with the same room code").
+  //
+  // Fixed by disambiguating, but ONLY when a real collision exists on this
+  // level's own plan right now: every OTHER roomlink marker sharing this
+  // exact base key (the only place a sibling could ever be -- a roomlink
+  // only ever lives on its level's own plan) is sorted into a stable,
+  // fully-reproducible order (top-to-bottom, then left-to-right, then by
+  // its own object id as a last-resort tiebreaker -- all fields already on
+  // the marker, nothing new to store or keep in sync), and every marker
+  // past the first in that order gets a numbered suffix appended to its
+  // key. The first-sorted marker keeps the plain, un-suffixed key, so a
+  // level with no collisions at all (by far the common case) is completely
+  // unaffected, and whichever colliding marker sorts first keeps whatever
+  // was already saved under the old shared key -- the other(s) start a
+  // fresh, separate, blank page of their own from here on, which is
+  // exactly the "each item gets its own page" guarantee v44.3 was for.
+  //
+  // Known limitation, worth being upfront about: if the SET of colliding
+  // markers ever changes (one's deleted, or dragged far enough to change
+  // this sort order), which key a given marker resolves to can shift --
+  // rare, and far better than the guaranteed collision this replaces, but
+  // not perfectly stable the way a real, permanent per-item ID would be.
+  // That's the bigger fix still on the roadmap (see the Unified
+  // Implementation Brief's own note on stable IDs); this is the safe,
+  // fully self-contained interim fix that needs no change anywhere else.
+  function resolveJoineryItemPageKey(levelName, obj){
+    var roomName = obj.roomName || "";
+    var joineryCode = obj.joineryCode || "";
+    var baseKey = joineryItemPageKey(levelName, roomName, joineryCode);
+    var siblings = state.objects.filter(function(o){
+      return o && o.type === "roomlink" && (o.roomName || "") === roomName && (o.joineryCode || "") === joineryCode;
+    });
+    if (siblings.length <= 1) return baseKey;
+    siblings.sort(function(a, b){
+      if (a.y !== b.y) return a.y - b.y;
+      if (a.x !== b.x) return a.x - b.x;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    var index = siblings.indexOf(obj);
+    if (index <= 0) return baseKey;
+    return baseKey + "-" + (index + 1);
+  }
   function readJoineryItemPage(projectHandle, key){
     return getSiteMeasuresDir(projectHandle, false).then(function(dirH){
       return dirH.getFileHandle(joineryItemPageFileName(key));
@@ -3344,7 +3394,10 @@
       var levelName = activeLevelName;
       var roomName = obj.roomName || "";
       var joineryCode = obj.joineryCode || "";
-      var key = joineryItemPageKey(levelName, roomName, joineryCode);
+      // resolveJoineryItemPageKey (not the plain joineryItemPageKey) --
+      // see its own comment: this is what keeps two items that happen to
+      // share the same room+code from silently landing on the same page.
+      var key = resolveJoineryItemPageKey(levelName, obj);
       var displayName = joineryItemPageDisplayName(levelName, roomName, joineryCode);
       var create = !VIEW_ONLY_MODE;
       return Promise.all([
@@ -10327,11 +10380,30 @@
       // vector annotations both use pageW/pageH below, so nothing shifts
       // relative to anything else) to a normal document size costs nothing
       // and fixes exactly this.
+      // Tracks whatever factor the blank-canvas boost below ends up
+      // applying to pageW/pageH (1 when it never triggers) -- every OTHER
+      // raster embedded into this PDF (the composited base-plan canvas,
+      // and the vector vector annotation overlay) is drawn to fill pageW×
+      // pageH directly, so it automatically picks up this boost for free.
+      // A pasted-in reference photo does NOT -- see the imageObjs loop
+      // below, which has its own separate ox/oy/ow/oh math against PX_TO_PT
+      // alone -- so it has to be multiplied through explicitly there too,
+      // or a boosted (blank-canvas) page leaves every pasted photo
+      // stranded at its old, un-boosted position/size while its own
+      // border/frame (real vector, drawn via the SVG path) gets boosted
+      // correctly right along with everything else: a real report from
+      // Andrew right after v44.3 ("when you save the pdf it comes out
+      // bad") traced to exactly this, since a joinery item's own page (see
+      // openJoineryItemPage) always starts on a blank canvas -- so this
+      // mismatch, previously a rare edge case (a Room could always in
+      // principle start blank too, just uncommon in practice), became the
+      // ordinary case for every photo added to an item's own page.
+      var pageBoost = 1;
       if (isBlankCanvasState()){
         var longEdgePt = Math.max(pageW, pageH);
         var MIN_BLANK_PAGE_LONG_EDGE_PT = 792; // US Letter's long edge -- a familiar "normal document" size
         if (longEdgePt > 0 && longEdgePt < MIN_BLANK_PAGE_LONG_EDGE_PT){
-          var pageBoost = MIN_BLANK_PAGE_LONG_EDGE_PT / longEdgePt;
+          pageBoost = MIN_BLANK_PAGE_LONG_EDGE_PT / longEdgePt;
           pageW *= pageBoost; pageH *= pageBoost;
         }
       }
@@ -10375,8 +10447,14 @@
         pc.width = outW; pc.height = outH;
         pc.getContext("2d").drawImage(img, 0, 0, outW, outH);
         var srcDataUrl = pc.toDataURL("image/jpeg", PDF_EXPORT_JPEG_QUALITY);
-        var ox = (Math.min(o.x, o.x + o.w) - cb.x0) * PX_TO_PT, oy = (Math.min(o.y, o.y + o.h) - cb.y0) * PX_TO_PT;
-        var ow = Math.abs(o.w) * PX_TO_PT, oh = Math.abs(o.h) * PX_TO_PT;
+        // * pageBoost here too (see its own comment above) -- without it,
+        // this photo lands at its pre-boost position/size while its own
+        // border (drawn separately, as real vector, further down) gets
+        // boosted along with the rest of the page, so the two visibly drift
+        // apart on a blank-canvas export (always the case for a joinery
+        // item's own page, occasionally the case for a Room started blank).
+        var ox = (Math.min(o.x, o.x + o.w) - cb.x0) * PX_TO_PT * pageBoost, oy = (Math.min(o.y, o.y + o.h) - cb.y0) * PX_TO_PT * pageBoost;
+        var ow = Math.abs(o.w) * PX_TO_PT * pageBoost, oh = Math.abs(o.h) * PX_TO_PT * pageBoost;
         doc.addImage(srcDataUrl, "JPEG", ox, oy, ow, oh, undefined, undefined, undefined);
       });
 
