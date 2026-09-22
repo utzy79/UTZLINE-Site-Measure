@@ -682,7 +682,14 @@
 // the same origin) can read the same name back with no knowledge of this
 // app's own schema. Purely additive to the save file shape -- an empty
 // "savedBy" reads exactly like a save from before this field existed.)
-var CACHE_NAME = "utzline-sitemeasure-cache-v39";
+//
+// (v40: the level list now also excludes a project-wide folder literally
+// named "itp-manufacture" -- the new UTZLINE Manufacture ITP app's own
+// data folder, a sibling of the existing "itp" folder used by UTZLINE ITP
+// (now the install-stage app). No visible change unless a project happens
+// to contain that folder; before this fix it would have shown up
+// mislabeled as an empty level.)
+var CACHE_NAME = "utzline-sitemeasure-cache-v40";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

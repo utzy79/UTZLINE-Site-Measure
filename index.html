@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v39">
+<link rel="manifest" href="./manifest.json?v=v40">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v39">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v39">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v40">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v40">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1476,7 +1476,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v39";
+  var APP_VERSION = "v40";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2770,15 +2770,17 @@
     });
   }
   function listExistingProjects(){ return listSubdirNames(projectsRootHandle); }
-  // "itp" is a reserved project-wide folder (see writeProjectMeta's own
-  // comment on project-meta.json) written by the separate UTZLINE ITP app
-  // directly under a project's own folder, alongside its level folders --
-  // excluded here the same way listExistingRooms excludes saves/pdfs/backup,
-  // so it never shows up mislabeled as a level someone could open and start
-  // drawing into.
+  // "itp" and "itp-manufacture" are reserved project-wide folders (see
+  // writeProjectMeta's own comment on project-meta.json) written by the two
+  // separate ITP apps -- UTZLINE ITP (now specifically the install-stage
+  // app) and its sibling UTZLINE Manufacture ITP (the factory/pre-delivery
+  // stage app, forked from it) -- directly under a project's own folder,
+  // alongside its level folders -- excluded here the same way
+  // listExistingRooms excludes saves/pdfs/backup, so neither ever shows up
+  // mislabeled as a level someone could open and start drawing into.
   function listExistingLevels(){
     return listSubdirNames(activeProjectHandle).then(function(names){
-      return names.filter(function(n){ return n !== "itp"; });
+      return names.filter(function(n){ return n !== "itp" && n !== "itp-manufacture"; });
     });
   }
 
