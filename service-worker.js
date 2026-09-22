@@ -710,7 +710,27 @@
 // measuring/drawing workflow, Save/PDF export, auto-backup, device
 // identity. See next-version-notes.md's 2026-09-22 entry and
 // utzline-projects-v1-plan.md for the full picture.)
-var CACHE_NAME = "utzline-sitemeasure-cache-v41";
+//
+// (v42: Pan/Zoom colour-picker bug fix -- Andrew reported (2026-09-22) that
+// "selecting Pan or Zoom causes the colour picker/property colour panel to
+// open." This is a different, real bug from the 2026-09-18 Viewer-only
+// #viewerRecolorInput report (that one was structurally impossible to
+// trigger from Pan/Zoom and was never reproduced). Root cause: with
+// nothing selected, renderPanel() decides whether to show "what colour
+// will the next drawn object be" using `var showForTool = state.tool !==
+// "select"` -- a denylist meant to exclude only Select that actually swept
+// in every other tool, including Pan and Zoom-to-rectangle, neither of
+// which draws anything. Fixed by replacing the denylist with an explicit
+// allowlist of the tools that actually create a coloured object
+// (dimension/line/angle/rect/text/callout), so Pan/Zoom show no panel at
+// all with nothing selected, and any future navigation-only tool is
+// excluded by default instead of needing to be remembered. Covered by the
+// new regression test run_tool_panel_visibility.js. This is release 1 of
+// Andrew's confirmed sequenced rollout of the UTZLINE Unified
+// Implementation Brief (2026-09-22) -- see
+// utzline-overlay-architecture-brief-investigation.md for the full plan
+// and remaining phases. No other functional change in this release.)
+var CACHE_NAME = "utzline-sitemeasure-cache-v42";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

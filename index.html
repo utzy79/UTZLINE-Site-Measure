@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v41">
+<link rel="manifest" href="./manifest.json?v=v42">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v41">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v41">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v42">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v42">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1443,7 +1443,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v41";
+  var APP_VERSION = "v42";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2783,7 +2783,7 @@
     activeProjectName = name;
     activeProjectHandle = dirH;
     return populateLevelList().then(function(){
-      gateLevelsLabel.textContent = "“" + activeProjectName + "” — choose a level, or start a new one.";
+      gateLevelsLabel.textContent = "“" + activeProjectName + "” — choose a level.";
       if (backToProjectsBtn) backToProjectsBtn.style.display = projectsRootHandle ? "" : "none";
       showGateState("levels");
     });
@@ -5912,9 +5912,25 @@
     if (state.tool === "select" && state.selectedId) return findObj(state.selectedId);
     return null;
   }
+  // BUG FIXED (2026-09-22, reported by Andrew: "selecting Pan or Zoom
+  // causes the colour picker/property colour panel to open"). This is a
+  // different bug from the 2026-09-18 Viewer-recolour-swatch report (that
+  // one was structurally impossible to trigger from Pan/Zoom and was
+  // never reproduced) -- this one is real and lives right here. With
+  // nothing selected, renderPanel() is meant to show "what the next
+  // object I draw will look like" for whichever DRAWING tool is active --
+  // but it used to decide that with `state.tool !== "select"`, a
+  // denylist that only meant to exclude Select yet actually swept in
+  // every other tool, drawing or not. Pan and Zoom-to-rectangle never
+  // draw anything, so they have no business showing a "default colour
+  // for the next shape" panel at all. Fixed with an explicit allowlist
+  // of the tools that actually create a coloured object, so any future
+  // navigation-only tool (like Pan/Zoom) is excluded by default instead
+  // of needing to be remembered and added to a denylist.
+  var DRAWING_TOOLS = { dimension: true, line: true, angle: true, rect: true, text: true, callout: true };
   function renderPanel(){
     var obj = activeStyleTarget();
-    var showForTool = state.tool !== "select";
+    var showForTool = !!DRAWING_TOOLS[state.tool];
     if (!obj && !showForTool){ panel.style.display = "none"; return; }
     panel.style.display = "flex";
     panel.innerHTML = "";
@@ -6943,10 +6959,11 @@
   }
   function populateProjectList(){
     return listExistingProjects().then(function(names){
-      // "start your first one below" would reference a "+ New Project"
-      // button that doesn't exist in the Viewer (see the body.viewer-mode
-      // CSS hiding it) -- a plain "nothing here" reads correctly either way.
-      var emptyMessage = VIEW_ONLY_MODE ? "No projects here." : "No projects yet — start your first one below.";
+      // Neither build can create a project from here any more (moved to
+      // UTZLINE Projects at the 2026-09-22 cutover) -- "start your first one
+      // below" would point at a button that no longer exists in either the
+      // editor or the Viewer, so both now point at Projects instead.
+      var emptyMessage = VIEW_ONLY_MODE ? "No projects here." : "No projects here yet — create one in UTZLINE Projects.";
       return renderPickerList(projectListItems, "project", names, emptyMessage, openProjectLevels, populateProjectList);
     });
   }
@@ -6954,7 +6971,7 @@
   // inside whichever project is currently open (activeProjectHandle).
   function populateLevelList(){
     return listExistingLevels().then(function(names){
-      var emptyMessage = VIEW_ONLY_MODE ? "No levels here." : "No levels yet — start your first one below.";
+      var emptyMessage = VIEW_ONLY_MODE ? "No levels here." : "No levels here yet — create one in UTZLINE Projects.";
       return renderPickerList(levelListItems, "level", names, emptyMessage, openLevel, populateLevelList);
     });
   }
@@ -6964,7 +6981,7 @@
     return listExistingRooms().then(function(names){
       var emptyMessage = VIEW_ONLY_MODE
         ? "This level has no separate rooms — just its own main floor plan."
-        : "No rooms yet — only add one if this level needs a separate annotated photo or drawing beyond its main floor plan.";
+        : "No separate rooms here yet — create one in UTZLINE Projects if this level needs a separate annotated photo or drawing beyond its main floor plan.";
       return renderPickerList(roomListItems, "room", names, emptyMessage, openRoom, populateRoomList);
     });
   }
@@ -7310,7 +7327,7 @@
     if (roomJumpSelect) roomJumpSelect.style.display = "none";
     updateBackBtnVisibility();
     populateLevelList().then(function(){
-      gateLevelsLabel.textContent = "“" + activeProjectName + "” — choose a level, or start a new one.";
+      gateLevelsLabel.textContent = "“" + activeProjectName + "” — choose a level.";
       showGateState("levels");
     });
   });
@@ -7344,7 +7361,7 @@
       if (roomJumpSelect) roomJumpSelect.style.display = "none";
       updateBackBtnVisibility();
       populateLevelList().then(function(){
-        gateLevelsLabel.textContent = "“" + activeProjectName + "” — choose a level, or start a new one.";
+        gateLevelsLabel.textContent = "“" + activeProjectName + "” — choose a level.";
         if (backToProjectsBtn) backToProjectsBtn.style.display = projectsRootHandle ? "" : "none";
         showGateState("levels");
       });
