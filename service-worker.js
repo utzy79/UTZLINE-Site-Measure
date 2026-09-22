@@ -758,7 +758,30 @@
 // "Site Measure/Viewer flat-structure interop" entry for the full
 // picture, including the deliberate scope boundary against the bigger
 // overlay-architecture work still to come.)
-var CACHE_NAME = "utzline-sitemeasure-cache-v43";
+//
+// (v44, 2026-09-22: right-click/long-press (or double-click) a roomlink
+// marker and it now opens a "Joinery item" dialog, not "the Room" -- Andrew's
+// own correction after v43 shipped: "ability to open joinery item (NOT
+// ROOM) on right click, then add image and/or photo here." The dialog lets
+// you attach a photo/image straight from Site Measure, using the exact same
+// Take-photo/Choose-file picker "Insert image" already uses, saved into a
+// new project-root "Project Saves/Site Measures/" folder (Andrew's own
+// naming), filenamed "<Level> - <Room> - <JoineryCode> - <timestamp>.<ext>"
+// so it sorts and self-identifies by name alone -- shared across every
+// level/room/item in the project, and readable by any other app in the
+// family later, not just this one. Works identically for a legacy or a flat
+// project, since a marker's room name + joinery code already exist as
+// marker data in both shapes. For a legacy project specifically, the Room
+// still has a real plan of its own to open -- that's kept as a secondary
+// "Open this room's own plan" action inside the dialog rather than removed,
+// since Andrew never asked for that capability to go away, only for the
+// marker's PRIMARY destination to stop being "the Room". This is still not
+// the real joinery-item-scoped permanent-overlay workflow (the plan canvas
+// itself scoped to one active item) -- that's a bigger, separate piece of
+// work Andrew has described for later; this is the narrower, concrete slice
+// he asked for right now. Covered by the new regression test
+// run_joinery_item_dialog.js.)
+var CACHE_NAME = "utzline-sitemeasure-cache-v44";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
