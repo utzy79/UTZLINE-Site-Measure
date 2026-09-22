@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v44.1">
+<link rel="manifest" href="./manifest.json?v=v44.2">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44.1">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44.1">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v44.2">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v44.2">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -691,8 +691,6 @@
   .joinery-item-box{max-width:380px;}
   .modal-box .joinery-item-title{font-weight:700; margin-bottom:2px;}
   .modal-box .joinery-item-subtitle{font-size:12px; color:var(--text-secondary); margin-bottom:14px;}
-  .joinery-attach-list{max-height:180px; overflow-y:auto; margin-bottom:14px; font-size:12.5px; color:var(--text-secondary);}
-  .joinery-attach-row{padding:6px 8px; border-radius:6px; background:var(--surface-0); margin-bottom:6px; word-break:break-word;}
 
   /* ---------- in-page camera capture ----------
      Added in v37 (2026-09-19) so taking a photo to insert never leaves the
@@ -1465,17 +1463,16 @@
       </div>
     </div>
 
-    <!-- Joinery Item dialog (v44) -- see the CSS comment above for why this
-         replaces the marker popover's old "Open room"/dead-end-toast
-         behaviour. Reuses the exact same Take-photo/Choose-file picker
-         (openInsertSourceChoice/openCameraCapture, further down) that
-         "Insert image" already uses -- same mechanism, different
-         destination (an attachment file, not an on-canvas object). -->
+    <!-- Joinery Item dialog (v44; add-photo behaviour rebuilt in v44.2) --
+         see the JS comment at openJoineryItemDialog for why this replaces
+         the marker popover's old "Open room"/dead-end-toast behaviour, and
+         why "Add photo / image" now drops straight into the item's own
+         real page + the ordinary Insert Image flow rather than a separate
+         attachment file store. -->
     <div class="modal-backdrop" id="joineryItemBackdrop" hidden>
       <div class="modal-box joinery-item-box" role="dialog" aria-modal="true" aria-labelledby="joineryItemTitle">
         <p id="joineryItemTitle" class="joinery-item-title">Joinery Item</p>
         <p id="joineryItemSubtitle" class="joinery-item-subtitle"></p>
-        <div id="joineryItemAttachList" class="joinery-attach-list"></div>
         <div class="modal-actions">
           <button class="mbtn" id="joineryItemOpenRoomBtn" style="display:none;">Open this room's own plan</button>
           <button class="mbtn" id="joineryItemCloseBtn">Close</button>
@@ -1483,7 +1480,6 @@
         </div>
       </div>
     </div>
-    <input type="file" id="joineryAttachInput" accept="image/*,application/pdf" style="display:none">
   </div>
 </div>
 
@@ -1498,7 +1494,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v44.1";
+  var APP_VERSION = "v44.2";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3312,7 +3308,15 @@
   // Checking listExistingRooms() first catches that: if the room's gone,
   // the marker gets removed (with an explanatory toast) instead of
   // resurrecting it.
-  function openLegacyRoomPlanFromJoineryItem(obj){
+  //
+  // `afterOpen` (added v44.2): an optional callback fired once the room's
+  // canvas has actually finished loading and is on-screen -- used by the
+  // Joinery Item dialog's "Add photo / image" button to land the user on a
+  // freshly-opened room and immediately continue into the Insert Image
+  // flow, rather than just navigating there and stopping. Never fired on
+  // the stale-marker-cleanup branch above (nothing was opened) or if
+  // openRoom() itself fails.
+  function openLegacyRoomPlanFromJoineryItem(obj, afterOpen){
     closeJoineryItemDialog();
     listExistingRooms().then(function(existing){
       var existingLower = existing.map(function(n){ return n.toLowerCase(); });
@@ -3333,14 +3337,16 @@
         showToast("“" + obj.roomName + "” was deleted — removed " + (removedIds.length === 1 ? "this marker" : "its " + removedIds.length + " markers") + ".");
         return;
       }
-      openRoom(obj.roomName).catch(function(err){
+      openRoom(obj.roomName).then(function(){
+        if (afterOpen) afterOpen();
+      }).catch(function(err){
         console.error("Open room failed:", err);
         showToast("Couldn't open “" + obj.roomName + "” — try again.");
       });
     });
   }
 
-  /* ============================== Joinery Item dialog (v44) ==============================
+  /* ============================== Joinery Item dialog (v44; rebuilt v44.2) ==============================
      Right-click/long-press a roomlink marker, or double-click it, and this
      opens now -- not "the Room". Andrew's own framing of what this should
      be (recorded in the overlay-architecture brief): "in the site measure
@@ -3348,96 +3354,41 @@
      images etc to measure off. this gets saved and is accessible by the
      viewer app." The REAL, full version of that -- the plan-canvas itself
      scoped to one active joinery item, per-item permanent overlay files --
-     is the still-unbuilt Phase 3 overlay architecture. This dialog is the
-     concrete, narrower slice Andrew actually asked for right now: attach a
-     photo/image to this joinery item directly from Site Measure, using the
-     exact same Take-photo/Choose-file picker "Insert image" already uses
-     (openInsertSourceChoice/openCameraCapture, further down) -- just saving
-     the result as an attachment file instead of placing it on the canvas.
+     is the still-unbuilt Phase 3 overlay architecture.
 
-     Storage: a new project-root folder, `Project Saves/Site Measures/`
-     (Andrew's own exact naming), flat and shared across every level/room/
-     item in the project -- filenamed `<Level> - <Room> - <JoineryCode> -
-     <timestamp>.<ext>` so every attachment sorts and identifies itself by
-     name alone, and so UTZLINE Projects' own future Joinery Item page can
-     find everything belonging to one item with a simple prefix match, the
-     same convention the rest of this project's flat structure already
-     uses. Deliberately at the PROJECT root, not nested under the level/room
-     -- this works identically whether the level/project itself is flat or
-     legacy-shaped, since a marker's room name + joinery code already exist
-     as marker data in both shapes.
+     REBUILT (v44.2, 2026-09-22): v44 shipped "Add photo / image" as a
+     separate attachment file, written into a new `Project Saves/Site
+     Measures/` folder and listed in this dialog as plain, unopenable
+     filename text. Andrew, after the v44.1 stacking hotfix: "you have
+     completely fucked it... it adds the photo to a folder, but you can not
+     access it from the app. it used to import it onto a new page exactly
+     like this" (with a screenshot of a real, viewable, exportable page --
+     the multi-panel shop-drawing layout you get from Insert Image today).
+     The attachment-file design was the wrong shape entirely: a file with no
+     viewer inside the app is not "accessible from the app" no matter where
+     it's filed. Dropped completely -- no more attachment folder, no more
+     per-item file listing.
+
+     "Add photo / image" now does what "Insert image" has always done, just
+     reached from here: it puts the user on the joinery item's own real
+     page -- a legacy Room's own canvas (opening it first, same stale-marker
+     guard openLegacyRoomPlanFromJoineryItem always had) or, for a flat
+     project, the shared Level plan the marker already lives on, which is
+     already the active view -- and immediately continues into the exact
+     same Take-photo/Choose-file picker (triggerInsertImageFlow, defined
+     with "Insert image" below) that flow already uses. The photo lands as
+     a normal on-canvas image object: visible immediately, part of that
+     page's own save file, exported with it -- nothing new to build, no
+     separate access path to be missing.
      Read-only in the Viewer (VIEW_ONLY_MODE): the dialog still opens (it's
      navigation, matching how the old "Open room" row was never gated
      either), but the Add button is hidden since the Viewer never writes. */
-  function siteMeasuresBranchName(){ return "Site Measures"; }
-  function getSiteMeasuresDir(projectHandle, create){
-    return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
-      return psH.getDirectoryHandle(siteMeasuresBranchName(), { create: !!create });
-    });
-  }
-  function joineryAttachmentPrefix(levelName, roomName, joineryCode){
-    return [levelName, roomName, joineryCode].filter(Boolean).map(sanitizeFileBase).join(" - ");
-  }
-  // Same date/time formatting convention as autoBackupFilename/
-  // suggestFilename elsewhere in this file -- hyphens, not colons, since a
-  // colon is one of the characters getFileHandle() rejects outright on a
-  // real folder handle (see suggestFilename's own comment on this).
-  function joineryAttachmentTimestamp(){
-    var d = new Date();
-    var pad = function(n){ return String(n).padStart(2, "0"); };
-    return d.getFullYear() + "_" + pad(d.getMonth() + 1) + "_" + pad(d.getDate()) + " " + pad(d.getHours()) + "-" + pad(d.getMinutes()) + "-" + pad(d.getSeconds());
-  }
-  function joineryAttachmentExt(file){
-    var m = /\.[a-zA-Z0-9]+$/.exec((file && file.name) || "");
-    if (m) return m[0].toLowerCase();
-    return (file && file.type === "application/pdf") ? ".pdf" : ".jpg";
-  }
-  function listJoineryAttachments(obj){
-    if (!activeProjectHandle || !activeLevelName) return Promise.resolve([]);
-    var prefix = joineryAttachmentPrefix(activeLevelName, obj.roomName, obj.joineryCode) + " - ";
-    return getSiteMeasuresDir(activeProjectHandle, false).then(function(dirH){
-      return listFileNames(dirH).then(function(names){
-        return names.filter(function(n){ return n.indexOf(prefix) === 0; }).sort();
-      });
-    }, function(){ return []; }); // Site Measures/ doesn't exist yet -- no attachments, not an error
-  }
-  function writeJoineryAttachment(obj, file){
-    if (!activeProjectHandle || !activeLevelName) return Promise.reject({ code: "no_project" });
-    var fname = joineryAttachmentPrefix(activeLevelName, obj.roomName, obj.joineryCode) + " - " + joineryAttachmentTimestamp() + joineryAttachmentExt(file);
-    return getSiteMeasuresDir(activeProjectHandle, true).then(function(dirH){
-      return dirH.getFileHandle(fname, { create: true }).then(function(fh){
-        return verifiedHandleWrite(fh, file);
-      });
-    });
-  }
   var joineryItemBackdrop = document.getElementById("joineryItemBackdrop");
   var joineryItemTitleEl = document.getElementById("joineryItemTitle");
   var joineryItemSubtitleEl = document.getElementById("joineryItemSubtitle");
-  var joineryItemAttachListEl = document.getElementById("joineryItemAttachList");
   var joineryItemAddBtn = document.getElementById("joineryItemAddBtn");
   var joineryItemOpenRoomBtn = document.getElementById("joineryItemOpenRoomBtn");
-  var joineryAttachInput = document.getElementById("joineryAttachInput");
   var activeJoineryItemMarker = null;
-  function renderJoineryItemAttachList(names){
-    joineryItemAttachListEl.innerHTML = "";
-    if (!names.length){
-      var empty = document.createElement("p");
-      empty.textContent = "No photos or images attached yet.";
-      empty.style.margin = "0";
-      joineryItemAttachListEl.appendChild(empty);
-      return;
-    }
-    names.forEach(function(n){
-      var row = document.createElement("div");
-      row.className = "joinery-attach-row";
-      row.textContent = n;
-      joineryItemAttachListEl.appendChild(row);
-    });
-  }
-  function refreshJoineryItemAttachList(){
-    if (!activeJoineryItemMarker) return;
-    listJoineryAttachments(activeJoineryItemMarker).then(renderJoineryItemAttachList);
-  }
   function openJoineryItemDialog(obj){
     activeJoineryItemMarker = obj;
     joineryItemTitleEl.textContent = "Joinery item" + (obj.joineryCode ? " — " + obj.joineryCode : "");
@@ -3449,7 +3400,6 @@
     // own comment.
     joineryItemOpenRoomBtn.style.display = activeLevelIsFlat ? "none" : "";
     joineryItemBackdrop.hidden = false;
-    refreshJoineryItemAttachList();
   }
   function closeJoineryItemDialog(){
     joineryItemBackdrop.hidden = true;
@@ -3460,36 +3410,23 @@
   joineryItemOpenRoomBtn.addEventListener("click", function(){
     if (activeJoineryItemMarker) openLegacyRoomPlanFromJoineryItem(activeJoineryItemMarker);
   });
-  function saveJoineryAttachmentFile(file){
-    var obj = activeJoineryItemMarker;
-    if (!obj) return;
-    showToast("Saving…");
-    writeJoineryAttachment(obj, file).then(function(){
-      showToast("Attached to “" + (obj.joineryCode || obj.roomName) + "”.");
-      refreshJoineryItemAttachList();
-    }).catch(function(err){
-      console.error("Joinery attachment save failed:", err);
-      showToast("Couldn't save that attachment — try again.");
-    });
-  }
   joineryItemAddBtn.addEventListener("click", function(){
     if (VIEW_ONLY_MODE || !activeJoineryItemMarker) return;
-    // Exactly the same choice/camera flow "Insert image" uses below
-    // (openInsertSourceChoice/openCameraCapture) -- same picker, different
-    // destination once a file/photo comes back.
-    if (!CAMERA_CAPTURE_SUPPORTED){
-      joineryAttachInput.click();
-      return;
+    var obj = activeJoineryItemMarker;
+    // triggerInsertImageFlow is a hoisted function declaration defined
+    // alongside "Insert image" further down -- calling it here (defined
+    // later in the file) is fine, same scope.
+    if (activeLevelIsFlat){
+      // The marker's own shared Level plan is already the active view for
+      // a flat project -- nothing to navigate to first.
+      closeJoineryItemDialog();
+      triggerInsertImageFlow();
+    } else {
+      // Legacy: open the Room's own canvas first (closes this dialog as
+      // part of that), then continue straight into Insert Image once it's
+      // actually loaded.
+      openLegacyRoomPlanFromJoineryItem(obj, function(){ triggerInsertImageFlow(); });
     }
-    openInsertSourceChoice().then(function(mode){
-      if (mode === "file") joineryAttachInput.click();
-      else if (mode === "camera") openCameraCapture().then(function(blob){ if (blob) saveJoineryAttachmentFile(blob); });
-    });
-  });
-  joineryAttachInput.addEventListener("change", function(){
-    var f = joineryAttachInput.files && joineryAttachInput.files[0];
-    if (f) saveJoineryAttachmentFile(f);
-    joineryAttachInput.value = "";
   });
 
   // Placing a new joinery marker/item ("Add joinery item here", the
@@ -9271,7 +9208,11 @@
   // original, be stretched non-uniformly, and get its own measurements, all
   // as part of the same drawing that exports/saves as one flattened file.
   var insertImageInput = document.getElementById("insertImageInput");
-  document.getElementById("insertImageBtn").addEventListener("click", function(){
+  // Extracted to a named function (v44.2) so the Joinery Item dialog's "Add
+  // photo / image" button can reuse this exact flow once it's landed the
+  // user on that item's own real page -- see the Joinery Item dialog
+  // comment above for why. Behaviour unchanged from before the extraction.
+  function triggerInsertImageFlow(){
     if (!state.imageW){ showToast("Open a plan or photo first."); return; }
     if (!CAMERA_CAPTURE_SUPPORTED){
       // No camera capability to offer at all (desktop without a webcam
@@ -9294,7 +9235,8 @@
         openCameraCapture().then(function(blob){ if (blob) insertImageFile(blob); });
       }
     });
-  });
+  }
+  document.getElementById("insertImageBtn").addEventListener("click", triggerInsertImageFlow);
   insertImageInput.addEventListener("change", function(){
     var f = insertImageInput.files && insertImageInput.files[0];
     if (f) insertImageFile(f);

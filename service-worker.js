@@ -795,12 +795,33 @@
 // thing -- exactly "just closes the picker". Fixed with one CSS rule
 // (#insertSourceBackdrop gets a z-index above the ordinary modal-backdrop
 // layer, same reasoning .camera-backdrop already used) so the picker always
-// renders on top of whatever modal invoked it. New regression test
-// run_joinery_add_photo_stacking.js reproduces this exactly using
-// Chromium's fake-camera flags plus a real filechooser-driven click (proven
-// to fail against the pre-fix source, and to pass end-to-end -- including
-// the attachment actually landing on disk -- against the fix).
-var CACHE_NAME = "utzline-sitemeasure-cache-v44.1";
+// renders on top of whatever modal invoked it.)
+//
+// (v44.2, 2026-09-22, same-day rebuild: v44's "Add photo / image" design was
+// wrong, not just the v44.1 stacking bug on top of it. Andrew, right after
+// v44.1 shipped: "you have completely fucked it... it adds the photo to a
+// folder, but you can not access it from the app. it used to import it onto
+// a new page exactly like this" -- with a screenshot of a real, viewable,
+// exportable page (exactly what Insert Image already produces). Writing the
+// photo into a new "Project Saves/Site Measures/" attachment folder and
+// listing its bare filename in the dialog was never going to satisfy
+// "accessible from the app" -- a file with no viewer is not accessible no
+// matter where it's filed. That whole attachment-file mechanism (the
+// folder, the naming convention, the per-item file listing) is gone. "Add
+// photo / image" now lands the user on the joinery item's own real page --
+// a legacy Room's own canvas (opening it first) or, for a flat project, the
+// shared Level plan the marker already lives on (already the active view)
+// -- and continues straight into the exact same Insert Image flow used
+// everywhere else, so the photo becomes a normal on-canvas image object:
+// viewable immediately, saved as part of that page's own file, exported
+// with it. Rewritten regression test run_joinery_item_dialog.js drives the
+// real end-to-end flow (click Add -> open room if needed -> real OS file
+// picker -> crop dialog -> landed image object) for both project shapes;
+// the old run_joinery_add_photo_stacking.js is retired -- the exact
+// scenario it tested (two modal backdrops open at once) is now structurally
+// impossible, since the Joinery Item dialog always closes itself before the
+// picker can ever open.)
+var CACHE_NAME = "utzline-sitemeasure-cache-v44.2";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
