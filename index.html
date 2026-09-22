@@ -4,13 +4,13 @@
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="./manifest.json?v=v41">
-<meta name="theme-color" content="#1b2224">
+<meta name="theme-color" content="#16283a">
 <link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v41">
 <link rel="apple-touch-icon" href="./icons/icon-192.png?v=v41">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="UTZLINE Site Measure">
+<meta name="apple-mobile-web-app-title" content="UTZLINE Viewer">
 <style>
 @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;src:url('./mono.woff2') format('woff2');}
 @font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:500;src:url('./sans.woff2') format('woff2');}
@@ -1459,7 +1459,7 @@
   // and no-ops; navigation (open project/level/room, pan/zoom/fit, room-
   // marker double-click, Share/current-view export for printing) is left
   // completely untouched.
-  var VIEW_ONLY_MODE = /[?&]viewer=1(&|$)/.test(location.search);
+  var VIEW_ONLY_MODE = true;
   var SVG_NS = "http://www.w3.org/2000/svg";
   // Embedded copies (base64 woff2, weight 500 -- the only weight the app
   // ever measures or draws text with) of the two custom Google Fonts used
@@ -10274,7 +10274,7 @@
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("./service-worker.js").catch(function (err) {
-      console.warn("UTZLINE Site Measure: service worker registration failed", err);
+      console.warn("UTZLINE Viewer: service worker registration failed", err);
     });
   });
 }

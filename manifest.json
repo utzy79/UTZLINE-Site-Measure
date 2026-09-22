@@ -1,13 +1,13 @@
 {
-  "name": "UTZLINE Site Measure",
-  "short_name": "UTZLINE",
-  "description": "Annotate plans and site photos with per-project folders: dimensions, callouts, notes, and markups, each job saved and exported into its own named folder.",
-  "start_url": "./index.html",
+  "name": "UTZLINE Viewer",
+  "short_name": "UTZLINE Viewer",
+  "description": "Read-only viewer for UTZLINE Site Measure plans: open a project's folder to pan, zoom, and browse markups, dimensions, and room links exactly as measured, and print or share a view -- without any risk of accidentally moving, deleting, or editing anything.",
+  "start_url": "./index.html?viewer=1",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#13181a",
-  "theme_color": "#1b2224",
+  "background_color": "#11171c",
+  "theme_color": "#16283a",
   "icons": [
     {
       "src": "icons/icon-192.png?v=v41",
