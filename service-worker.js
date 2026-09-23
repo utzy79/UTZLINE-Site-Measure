@@ -1014,7 +1014,35 @@
 // dropped PDF landing on disk and advancing the status). Full regression
 // suite re-run clean afterward (same 4 pre-existing environment-flake
 // failures as v45.0/v45.1, none new).
-var CACHE_NAME = "utzline-sitemeasure-cache-v45.4";
+//
+// v45.5, 2026-09-23 (same day): two changes, both from the same Andrew
+// message about the Joinery Register in UTZLINE Projects. (1) The shared
+// joinery-status.json pipeline gains two more stages -- "in_manufacture"
+// (Manufacture ITP checklist opened, not yet signed) and "delivered" (a
+// placeholder reserved for a future Delivery ITP app, unreachable from any
+// app yet); every forward transition now also appends a {status, at, by}
+// entry to the record's own new `history` array (one-time backfill for a
+// record saved before this field existed), feeding a new hover/tap
+// status-history popup on the Register in UTZLINE Projects. Existing
+// "measured"/"manufactured"/"installed" behavior here is unchanged -- this
+// app still only ever writes "measured" itself. (2) A separate same-day
+// Andrew request, "only show view job note button in site measure app if
+// there is one uploaded": "View job note" (both the right-click popover row
+// and the joinery item page's own toolbar button, added in v45.3) now only
+// appears once a job note actually exists on that item -- previously it
+// always showed, opening to an empty list. New regression coverage:
+// run_joinery_status_and_job_notes.js updated for the new gating (a Viewer
+// popover on an item with no note yet now correctly expects "View job
+// note" hidden); run_view_job_note_item_page_button.js gained a new section
+// confirming the item-page button also stays hidden on a fresh item with no
+// note. Full regression suite re-run clean afterward (same 4 pre-existing
+// environment-flake failures as v45.0/v45.1/v45.4, none new; two other
+// pre-existing failures surfaced and were fixed as part of this round: a
+// race between Manufacture ITP's new "in_manufacture" write and its
+// existing sign-off write on open, and stale test expectations predating
+// the "View job note" gating above -- see redline-manufacture-itp-pwa's own
+// service-worker.js v5 note and the test files themselves).
+var CACHE_NAME = "utzline-sitemeasure-cache-v45.5";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

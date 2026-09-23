@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.4">
+<link rel="manifest" href="./manifest.json?v=v45.5">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.4">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.4">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.5">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.5">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1687,7 +1687,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.4";
+  var APP_VERSION = "v45.5";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -5923,26 +5923,62 @@
      render -- renderObject/renderAll run synchronously and far too often
      (every drag frame) to await a file read from there; refreshJoineryStatusCache
      re-reads it and re-renders once, on level open and after this app's own
-     writes to it. */
+     writes to it.
+     EXPANDED 2026-09-23 (Andrew, on the Joinery Register): the pipeline now
+     has two more stages between "manufactured" and "installed" --
+     "in_manufacture" (Manufacture ITP checklist opened but not yet signed)
+     and "delivered" (a placeholder -- Andrew: "we will add a delivery ITP
+     after that works the same way as all the other itps, but the icon then
+     changes to a truck" -- reserved here, on-disk, so the forward-only rank
+     table already has the right slot for it, but nothing anywhere writes it
+     yet). The internal string "manufactured" is UNCHANGED (still written by
+     Manufacture ITP's own sign-off, exactly as before) -- only its own
+     on-plan icon and, in UTZLINE Projects' Joinery Register, its display
+     LABEL ("Ready to dispatch") changed; Andrew confirmed this stage is
+     "already there and comes from the manufacture itp being completed."
+     Every record also now grows a `history` array (2026-09-23) -- one
+     {status, at, by} entry per forward transition ever written, oldest
+     first -- so UTZLINE Projects' Joinery Register can show "a list of all
+     the status changes for that joinery item, dates and who changed it" on
+     hover. See setJoineryStatusForward below for how it's appended
+     (including a one-time backfill for a record that already existed
+     before this field did). */
   var joineryStatusCache = null; // null until the first read resolves; [] once loaded with no records
   function joineryStatusRank(status){
-    return status === "installed" ? 3 : status === "manufactured" ? 2 : status === "measured" ? 1 : 0;
+    switch (status){
+      case "installed": return 5;
+      case "delivered": return 4;
+      case "manufactured": return 3;
+      case "in_manufacture": return 2;
+      case "measured": return 1;
+      default: return 0;
+    }
   }
   function joineryStatusIcon(status){
-    return status === "installed" ? "🏆" : status === "manufactured" ? "📦" : status === "measured" ? "📏" : "";
+    switch (status){
+      case "installed": return "🏆";
+      case "delivered": return "🚚";
+      case "manufactured": return "📦";
+      case "in_manufacture": return "🏭";
+      case "measured": return "📏";
+      default: return "";
+    }
   }
   // Combines the forward-only status pipeline with the independent job-note
   // flag into the ONE icon a marker actually shows (Andrew, 2026-09-23:
   // icons now overlay the dot itself, same size as the dot -- there's only
   // room to show one at a time). Priority, most-advanced-information-first:
-  // installed/manufactured (real downstream sign-off) beat a job note,
-  // which in turn beats a bare "measured" (a job note is itself a real
-  // attached document, more specific than a plain click) -- a disclosed
-  // design call, not something Andrew specified explicitly.
+  // installed/delivered/ready-to-dispatch/in-manufacture (real downstream
+  // sign-off) beat a job note, which in turn beats a bare "measured" (a job
+  // note is itself a real attached document, more specific than a plain
+  // click) -- a disclosed design call, not something Andrew specified
+  // explicitly.
   function joineryDisplayIcon(rec){
     if (!rec) return "";
     if (rec.status === "installed") return "🏆";
+    if (rec.status === "delivered") return "🚚";
     if (rec.status === "manufactured") return "📦";
+    if (rec.status === "in_manufacture") return "🏭";
     if (rec.jobNote) return "🛠️";
     if (rec.status === "measured") return "📏";
     return "";
@@ -5980,10 +6016,25 @@
       var newRank = joineryStatusRank(newStatus);
       if (newRank <= curRank){ joineryStatusCache = list; return rec ? rec.status : null; }
       var stamp = new Date().toISOString();
+      var histEntry = { status: newStatus, at: stamp, by: updatedBy || "" };
       if (rec){
+        // Backfill (2026-09-23): a record written before the `history` field
+        // existed only ever kept its single most recent transition's
+        // updatedAt/updatedBy -- seed history with that one known entry
+        // (rather than starting completely empty) so a record already past
+        // "measured" before this shipped still shows one real row instead of
+        // nothing at all. Every OTHER app writing this same file (Install
+        // ITP, Manufacture ITP) does the identical backfill, so whichever
+        // one happens to write next is the one that seeds it -- harmless if
+        // it never comes up (a record already carrying `history` is left
+        // exactly as-is).
+        if (!Array.isArray(rec.history)){
+          rec.history = (rec.status && rec.updatedAt) ? [{ status: rec.status, at: rec.updatedAt, by: rec.updatedBy || "" }] : [];
+        }
         rec.status = newStatus; rec.updatedAt = stamp; rec.updatedBy = updatedBy || "";
+        rec.history.push(histEntry);
       } else {
-        list.push({ level: level, room: room || "", joineryId: joineryId || "", status: newStatus, updatedAt: stamp, updatedBy: updatedBy || "" });
+        list.push({ level: level, room: room || "", joineryId: joineryId || "", status: newStatus, updatedAt: stamp, updatedBy: updatedBy || "", history: [histEntry] });
       }
       var payload = JSON.stringify(list);
       return projectHandle.getFileHandle("joinery-status.json", { create: true }).then(function(fh){
@@ -5999,10 +6050,17 @@
   // once (with whatever joineryStatusCache happened to hold, often null ->
   // no icons yet) by the time this resolves.
   function refreshJoineryStatusCache(){
-    if (!activeProjectHandle){ joineryStatusCache = []; return Promise.resolve(); }
+    if (!activeProjectHandle){ joineryStatusCache = []; updateBackBtnVisibility(); return Promise.resolve(); }
     return readJoineryStatuses(activeProjectHandle).then(function(list){
       joineryStatusCache = list;
       renderAll();
+      // Also re-checks the "View job note" toolbar button's own visibility
+      // (2026-09-23, gated on the cache's own jobNote flag) -- this always
+      // resolves AFTER updateBackBtnVisibility()'s own synchronous call from
+      // openLevel/openJoineryItemPage (which runs before this read lands),
+      // so without this the button would stay hidden until some OTHER
+      // screen transition happened to re-check it.
+      updateBackBtnVisibility();
     });
   }
   function joineryStatusIconFor(obj){
@@ -7875,12 +7933,21 @@
     }
     // "View job note" -- pure read, kept in BOTH apps (Site Measure can
     // still see a note someone added from the Viewer, it just can't add one
-    // of its own any more).
+    // of its own any more). Andrew, 2026-09-23: "only show view job note
+    // button in site measure app if there is one uploaded" -- gated on the
+    // shared joinery-status.json record's own jobNote flag (the exact same
+    // signal that already drives the 🛠️ badge), so the row no longer
+    // offers a dialog that would just say "No job notes yet." Applied to
+    // BOTH apps (they share this exact popover code) rather than only Site
+    // Measure specifically, for consistency.
     if (isRealObject && obj.type === "roomlink"){
-      popoverRow(wrap, JOBNOTE_ICON + "<span>View job note</span>", function(){
-        hideLockPopover();
-        openViewJobNoteDialog(obj);
-      });
+      var rlJobNoteRec = joineryStatusCache ? findJoineryStatus(joineryStatusCache, activeLevelName, obj.roomName, obj.joineryCode || "") : null;
+      if (rlJobNoteRec && rlJobNoteRec.jobNote){
+        popoverRow(wrap, JOBNOTE_ICON + "<span>View job note</span>", function(){
+          hideLockPopover();
+          openViewJobNoteDialog(obj);
+        });
+      }
     }
 
     // "Add shop drawing" / "View shop drawing" (2026-09-23, Andrew) -- a
@@ -9706,8 +9773,15 @@
     // note" row for that). This function is already called at every screen
     // transition that could change activeJoineryItemPage, so it's the
     // right place to also toggle this rather than needing per-call-site
-    // bookkeeping.
-    if (viewJobNoteItemPageBtn) viewJobNoteItemPageBtn.style.display = activeJoineryItemPage ? "" : "none";
+    // bookkeeping. Also gated (2026-09-23, same-day follow-up) on the
+    // item's own jobNote flag, same as the popover row above -- "only show
+    // view job note button in site measure app if there is one uploaded".
+    if (viewJobNoteItemPageBtn){
+      var vjnRec = (activeJoineryItemPage && joineryStatusCache)
+        ? findJoineryStatus(joineryStatusCache, activeJoineryItemPage.levelName, activeJoineryItemPage.roomName, activeJoineryItemPage.joineryCode || "")
+        : null;
+      viewJobNoteItemPageBtn.style.display = (activeJoineryItemPage && vjnRec && vjnRec.jobNote) ? "" : "none";
+    }
   }
 
   var confirmBackdrop = document.getElementById("confirmBackdrop");
