@@ -1,6 +1,120 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v39** (bump this line, and the "Shipped in vNN" heading it points at, every time a new build ships — see `next-version-notes.md` in the project for the full per-version changelog.)
+**Current version: v45.7** (bump this line, and add a dated changelog
+entry below, every time a new build ships — see `next-version-notes.md`
+in the project for the full per-version changelog; v40 through v45.6
+shipped without this README's own version line being kept in sync, so
+that file is the authoritative record for that stretch.)
+
+**v45.7 (2026-09-23):** three requests from Andrew, sent together with two
+screenshots (verbatim): (1) "site measure app needs the correct user
+selector in the startup menu, same way that [UTZLINE Delivery ITP] has,
+also needs to be removed from the top menubar in the floor plan as well as
+the rename button (see photos)"; (2) "Utzline viewer no longer needs the my
+projects option as everything runs through the projects folder ecosystem";
+(3) "implement the username as per the delivery itp throughout the entire
+system, but instead of it opening a popup, the button is the selector, when
+you pick a name it opens a numberpad to input the pin (4 digit pin)."
+
+- **Shared name+PIN identity, ported verbatim from UTZLINE Delivery ITP.**
+  The old toolbar "Set your name" button (`userIdentityBtn`, a freeform
+  text prompt, no PIN) is gone. In its place, a native `<select>`
+  (`#identitySelector`) IS the button — its own dropdown lists every name
+  already known in a shared `utzline-users.csv` registry (kept at the
+  Projects-root level, a sibling of every project folder, columns
+  `Name,PIN,ShowInApps`, PIN in plain text by design — a reference-only
+  attribution registry Andrew can hand-edit in a spreadsheet, not real
+  access control) plus a final "+ Add a new name…" option. Picking an
+  existing name opens a real on-screen numberpad (4-dot progress, digit
+  grid, backspace) to enter that person's 4-digit PIN — a wrong PIN shakes
+  the dialog and clears for another attempt; a correct one signs in.
+  Picking "+ Add a new name…" still asks for the name as plain text (this
+  app's own existing "type one thing" dialog, reused via its new
+  `okLabel` parameter — see `showRenameDialog()`), then a numberpad to
+  choose a PIN, a second to confirm it, then a small "show me in"
+  app-tickbox modal (which app(s) this name is meant to appear in —
+  purely a reference field for Andrew, never gates anything). This does
+  **not** replace the existing per-device `utzline-identity` IndexedDB
+  pointer every sibling ITP app already reads (unchanged) — only what
+  triggers writing it.
+- **Moved to the startup screen, and no longer editor-only.** The new
+  identity row (`#identityGateRow`) now lives on the project-gate box —
+  above every gate state (Setup/Reconnect/List/Levels/Rooms), in the same
+  visual slot the old "My projects" section used to occupy — instead of
+  the floor-plan toolbar. **Judgment call:** it is shown, and fully
+  functional, in **both** Site Measure and the Viewer. The old toolbar
+  button was Viewer-hidden (`VIEW_ONLY_MODE`) since only the editor
+  "saved" anything; Andrew's own instruction to roll this out "throughout
+  the entire system" (paired with every sibling ITP app already showing
+  identity regardless of whether it saves) reads as no longer wanting an
+  editor-only carve-out, so `loadDeviceUserName()` now runs unconditionally
+  at boot instead of only `if (!VIEW_ONLY_MODE)`.
+- **Removed from the floor-plan toolbar entirely:** `#userIdentityBtn`
+  (superseded by the above) and `#fileNameBtn` (the pencil "plan"/rename
+  button). **Judgment call on the rename button:** only the toolbar
+  button and its own click listener were removed — the underlying
+  `state.fileBase` rename mechanism (`showRenameDialog()`, used by Save/
+  Save PDF/Share/auto-backup for naming) is completely unchanged. The only
+  *other* call site for `showRenameDialog()` was the now-removed "My
+  projects" → "+ Add a project…" flow's own labeling prompt, so after both
+  removals `showRenameDialog()`/`#renameBackdrop` had no remaining caller
+  — until the new identity flow above was written to deliberately *reuse*
+  it as its own "type a name" prompt (see `beginAddNewIdentityFlow()` and
+  `ensureDeviceUserNameForSave()`), so it ended up very much alive, not
+  dead code after all.
+- **`ensureDeviceUserNameForSave()` (Site Measure's "every explicit Save
+  needs a name" rule) adapted to the new registry.** The old freeform
+  popup this used to force a name is gone, so this now reuses
+  `showRenameDialog()` for the name, checks it against
+  `utzline-users.csv`, and routes to the numberpad to verify an existing
+  person's PIN or create a brand-new one — inline, without navigating away
+  from whatever's open. **Judgment call:** this is not something Andrew
+  asked for directly (Delivery ITP has no equivalent forced-name-at-save
+  rule), but leaving the old freeform prompt in place here would have left
+  two divergent, inconsistent identity paths in one app.
+- **Viewer: "My projects" removed entirely** (see the Viewer's own README
+  changelog for Andrew's verbatim request — this app shares one source
+  file with the Viewer, so the removal lives here too even though it was
+  never reachable from the editor build).
+- New regression test `run_identity_pin.js` (in `pdftest-projects/`)
+  covers the full new flow end to end — add-a-new-name via two numberpad
+  rounds + the app-checks modal writing a correct CSV row, picking an
+  existing name and verifying its PIN, a wrong PIN being rejected and
+  retryable, cancelling reverting the selector, picking a name before any
+  Projects folder is chosen being guarded rather than throwing, confirms
+  `#userIdentityBtn`/`#fileNameBtn` no longer exist anywhere in the DOM,
+  and — against the real built `redline-viewer-pwa/index.html` bundle —
+  confirms `#gateMyProjects` and every "My projects" control are gone
+  while the new identity row works there too. `run_site_measure_overlay_layers.js`
+  and `run_filebase_naming.js` were updated for the new UI (the former's
+  "Save with no name set" case now drives the full name+PIN flow instead
+  of the old one-step dialog; the latter no longer reads the removed
+  `#fileNameBtnLabel`). `run_my_projects_list.js`/
+  `run_my_projects_root_folder.js` (testing the now-removed feature) were
+  deleted. Full regression suite re-run clean afterward: 82/86 passing,
+  the same 4 pre-existing environment-flake failures already documented
+  in earlier versions' notes (an intermittent "svg rasterize failed" in
+  this sandbox's headless Chromium, affecting PNG-snapshot rendering for
+  backups/exports — reproduced identically via a direct call to the
+  underlying rasterizer, confirmed unrelated to any identity/CSV code
+  touched here), none new.
+
+**v40–v45.6 (2026-09-22 to 2026-09-23):** a large run of releases not
+individually logged in this README when they shipped — full detail for
+every one of them lives in `next-version-notes.md` in the project.
+Headline changes across that stretch: UTZLINE Projects became the
+family's real project/level/room/joinery-item creation tool and Site
+Measure's own creation UI was cut over to it (v41); a permanent,
+multi-user, multi-layer Site Measure overlay architecture shipped, with
+per-person draft-vs-saved-layer separation and a toggleable layer picker
+(v45.0); flat-project (Projects-created) interop (v43); a shared
+`joinery-status.json` pipeline (📏/📦/🚚/🏆) with on-plan status badges,
+job notes, and shop drawings (v44–v45.3); "No" answers blocking ITP
+sign-off, photo attachments, and REV-numbered shop drawing revisions
+(v45.4); UTZLINE Projects' Joinery Register wired to real status/history
+(v45.5); and, in this session specifically, the level-list exclusion
+list gaining the new `itp-delivery` folder alongside the family's other
+ITP-app exclusions (v45.6) — the only change in v45.6 itself.
 
 This folder is the self-contained, installable version of the app. It
 was originally built as a separate "UTZLINE Projects" fork of the
@@ -9,17 +123,13 @@ UTZLINE Site Measure going forward, and the old single-plan version is
 retired. Everything in the app itself (page title, toolbar brand,
 opening screen, installed-app name) says "UTZLINE Site Measure" now.
 
-**The repo/hosting cleanup this was waiting on is now underway
-(2026-09-16):** the old retired single-plan repo (`Utzline-Site-Measure`)
-is being deleted, and the live repo hosting THIS app (previously named
-`UTZLINE-Projects`) is being renamed to match — `UTZLINE-Site-Measure`
-— once that old name is free. Everything below already reflects that
-target end state (repo name, hosted URL, and the new `viewer/`
-subfolder for the standalone read-only Viewer app). If you're reading
-this before finishing that rename, the live URL is still the old
-`utzy79.github.io/UTZLINE-Projects/` one for now — GitHub's automatic
-redirect for a renamed repo should carry old links/installs over once
-it's done.
+**Each app in the UTZLINE family lives in its own separate GitHub
+repository** — this app, the Viewer, and every ITP/Projects/Scheduler
+sibling app each have their own repo and their own GitHub Pages URL;
+none of them are subfolders of a shared repo. (An earlier version of
+this README described a single shared `UTZLINE-Site-Measure` repo with
+per-app subfolders — that's no longer how these are hosted; the
+sections below describe the current, per-app-repo setup.)
 
 It shares the same underlying markup/photo-annotation and PDF-export
 code as the old version, but adds an opening project picker. A project is a folder of
@@ -43,58 +153,46 @@ Measure — easy to mix them up:
    so the actual per-project-folders feature only ever works once this
    app is hosted on its own domain or installed. Not what your installed
    copies run.
-2. **This bundle, hosted on GitHub Pages** — the
-   [`UTZLINE-Site-Measure`](https://github.com/utzy79/UTZLINE-Site-Measure) repo,
-   live at
-   [`https://utzy79.github.io/UTZLINE-Site-Measure/`](https://utzy79.github.io/UTZLINE-Site-Measure/) —
-   separate from [`utzy79.github.io`](https://github.com/utzy79/utzy79.github.io)
-   (the old `Utzline-Site-Measure` repo this name was freed from is retired
-   and deleted). The standalone read-only **Viewer** app lives right
-   alongside this, in the same repo's `viewer/` subfolder — see
-   `../redline-viewer-pwa/README.md` for that one specifically.
-   This is the real thing: fully offline-capable, and the only place the
-   folder picker actually works from a browser tab.
+2. **This bundle, hosted on GitHub Pages** — this app's own repo, live
+   at that repo's own GitHub Pages URL. The standalone read-only
+   **Viewer** app lives in its own separate repo, not a subfolder of
+   this one — see `../redline-viewer-pwa/README.md` for that one
+   specifically. This is the real thing: fully offline-capable, and the
+   only place the folder picker actually works from a browser tab.
 3. **A desktop install** — Chrome/Edge's "Install this site as an app"
    pointed at that hosted URL. Just a shortcut to the same site.
 4. **The Android app (the APK)** — also a thin wrapper (a Trusted Web
    Activity) around that same hosted URL, built via
    [PWABuilder](https://www.pwabuilder.com/), with its own package ID and
    its own signing key. **The APK does not contain the app's code.** It
-   loads whatever is live at
-   [`utzy79.github.io/UTZLINE-Site-Measure`](https://utzy79.github.io/UTZLINE-Site-Measure/)
-   right now, so updating the app is a matter of updating the *files* in
-   the repo, never rebuilding the APK — except when the app's identity
-   changes (name, icon, package ID). If the APK was built pointing at the
-   old `UTZLINE-Projects` URL, GitHub's redirect for the renamed repo
-   should keep it working; rebuilding it to point at the new URL directly
-   is worth doing eventually so it's not relying on that redirect forever,
-   but isn't urgent.
+   loads whatever is live at this app's own repo's Pages URL right now,
+   so updating the app is a matter of updating the *files* in the repo,
+   never rebuilding the APK — except when the app's identity changes
+   (name, icon, package ID).
 5. **Optionally, chrome-less full-screen mode** (no browser address bar)
    for the Android app — this needs a `.well-known/assetlinks.json` on
    the domain the app claims to represent, verifying the APK's signing
-   fingerprint. Since
-   [`utzy79.github.io`](https://github.com/utzy79/utzy79.github.io)
-   already hosts that file for UTZLINE Site Measure, the same file can
-   likely just get a second entry added for this app's package
-   name/fingerprint — not set up yet, ask if you want to do this once the
-   APK exists.
+   fingerprint — not set up yet, ask if you want to do this once the APK
+   exists.
 
 ## Updating the app (this is the main thing you'll do)
 
 Whenever new files show up in chat as a zip:
 
 1. Unzip it.
-2. Go to the
-   [`UTZLINE-Site-Measure`](https://github.com/utzy79/UTZLINE-Site-Measure) repo
-   on GitHub (not `utzy79.github.io` — and note this app's files go at the
-   repo **root**, not inside `viewer/`, which is the separate Viewer app).
+2. Go to this app's own repo on GitHub — files go at the repo **root**,
+   not inside a subfolder (the Viewer, and every other sibling app, each
+   have their own separate repo, not a subfolder of this one).
 3. Upload the files from the zip, overwriting the existing ones (drag
    them onto the repo page, or use **Add file → Upload files**), keeping
    the `icons` folder structure intact. Commit.
 4. Wait about a minute for GitHub Pages to redeploy, then check it took:
-   open
-   [`https://utzy79.github.io/UTZLINE-Site-Measure/`](https://utzy79.github.io/UTZLINE-Site-Measure/)
-   directly in a normal browser tab and confirm the change is there.
+   open this app's own Pages URL directly in a normal browser tab and
+   confirm the change is there. **Bump the "Current version" line at the
+   top of this README (with a dated changelog entry) and
+   `service-worker.js`'s `CACHE_NAME` every single time a change ships**
+   — both need to move together, or this README stops being a reliable
+   record of what's actually live.
 5. Get each installed copy to pick it up:
    - **Desktop install**: close and reopen it; a refresh is usually
      enough.
@@ -158,17 +256,14 @@ not for ordinary fixes or features.
 You already have this running, so you shouldn't need this — but for
 reference, in case it's ever needed again from scratch:
 
-1. Create a **public** GitHub repo (this one is
-   [`UTZLINE-Site-Measure`](https://github.com/utzy79/UTZLINE-Site-Measure) —
-   a different name from `utzy79.github.io`, which is already taken by
-   its Digital Asset Links file). Upload every file from this bundle,
-   keeping the `icons` folder structure, at the repo **root**. Add the
-   Viewer app's own files (see `../redline-viewer-pwa/`) into a `viewer/`
-   subfolder of this same repo alongside it.
+1. Create a **public** GitHub repo for this app specifically (its own
+   repo, not shared with any sibling app). Upload every file from this
+   bundle, keeping the `icons` folder structure, at the repo **root**.
+   The Viewer app (see `../redline-viewer-pwa/`) gets its own separate
+   repo, not a subfolder of this one — likewise for every other sibling
+   app in the family.
 2. Repo **Settings → Pages** → Source: **Deploy from a branch**, branch
-   **main**, folder **/(root)** → Save. Wait ~1 minute for the live URL —
-   [`https://utzy79.github.io/UTZLINE-Site-Measure/`](https://utzy79.github.io/UTZLINE-Site-Measure/)
-   (the Viewer app then lives at that same URL's `viewer/` path).
+   **main**, folder **/(root)** → Save. Wait ~1 minute for the live URL.
 3. Open that URL once while online (to cache it for offline use), then
    install it: on Windows/Mac, the browser's install icon in the address
    bar; on Android, Chrome's **⋮ → Add to Home screen** (or build a

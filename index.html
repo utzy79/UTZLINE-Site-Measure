@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.6">
+<link rel="manifest" href="./manifest.json?v=v45.7">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.6">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.6">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.7">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.7">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -251,7 +251,6 @@
     max-width:190px;
   }
   .tselect:hover{background:var(--surface-2);}
-  #fileNameBtnLabel{max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .autobk-group{ padding-right:2px; }
   .autobk{
     display:flex; align-items:center; gap:6px;
@@ -609,6 +608,15 @@
   .mbtn:hover{ background:var(--surface-0); }
   .mbtn-accent{ background:var(--accent); border-color:var(--accent-ink); color:#fff; }
   .mbtn-accent:hover{ background:var(--accent-ink); }
+  /* ---- shared name+PIN identity (2026-09-23) -- see #identityGateRow's
+     own HTML comment for the full "why". identitySelector IS the button
+     (a native <select> styled like every other .mbtn here); numberpadShake
+     is the same "wrong PIN" shake used for both PIN entry and PIN
+     confirmation, ported verbatim from redline-delivery-itp-pwa's own
+     reference implementation. ---- */
+  .identity-select{ max-width:190px; }
+  @keyframes numberpadShake{ 10%,90%{transform:translateX(-1px);} 20%,80%{transform:translateX(2px);} 30%,50%,70%{transform:translateX(-5px);} 40%,60%{transform:translateX(5px);} }
+  .numberpad-shake{ animation:numberpadShake .4s; }
 
   /* ---------- project gate (opening menu) ---------- */
   .project-gate{
@@ -667,15 +675,21 @@
     text-decoration:underline; text-underline-offset:2px;
   }
   .project-gate-back:hover, .project-gate-back:focus-visible{ color:var(--text-primary); }
-  /* "My projects" (Viewer only) -- a personal, per-device list of
-     individually-added project/level folders, layered above the existing
-     single-Projects-folder flow rather than replacing it (see #gateMyProjects'
-     own HTML comment for the full "why"). Styled as its own clearly-separate
-     section -- a heading plus a divider below it -- so it doesn't read as
-     just more rows in whichever single-root list happens to be showing
-     underneath. */
-  #gateMyProjects{ margin-bottom:22px; padding-bottom:18px; border-bottom:1px solid var(--border); }
-  .project-gate-section-title{ font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-secondary); margin:0 0 10px; }
+  /* "My projects" (Viewer only, added v27) REMOVED (2026-09-23) -- Andrew,
+     verbatim: "Utzline viewer no longer needs the my projects option as
+     everything runs through the projects folder ecosystem." See
+     #identityGateRow's own comment for what now occupies this same visual
+     slot at the top of the project-gate box. */
+  /* ---- shared name+PIN identity row on the startup screen (2026-09-23) --
+     a plain divider-separated row, same shape "My projects" used to have
+     here, so it reads as its own clearly-separate section rather than more
+     rows in whichever gate state happens to be showing underneath. */
+  .identity-gate-row{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    justify-content:space-between; margin-bottom:22px; padding-bottom:18px;
+    border-bottom:1px solid var(--border);
+  }
+  .identity-gate-text{ font-size:12.5px; color:var(--text-secondary); flex:1 1 180px; }
 
   /* ---------- share-as choice ---------- */
   .share-choice-box{max-width:340px;}
@@ -893,7 +907,6 @@
     .autobk-lock{width:32px; height:32px;}
     .autobk-lock svg{width:16px; height:16px;}
     .autobk-stepper button{width:24px; height:24px;}
-    #fileNameBtnLabel{max-width:90px;}
   }
 
   /* Genuinely huge monitors only: both rows' realistic worst case (every
@@ -925,7 +938,7 @@
      see that flag's own comment for why. */
   body.viewer-mode #newBtn, body.viewer-mode #openBtn,
   body.viewer-mode #openProjectBtn, body.viewer-mode #insertImageBtn,
-  body.viewer-mode #fileNameBtn, body.viewer-mode #userIdentityBtn, body.viewer-mode #saveBtn,
+  body.viewer-mode #saveBtn,
   body.viewer-mode #autoBackupGroup, body.viewer-mode #lockAllBtn,
   body.viewer-mode #snapGridBtn, body.viewer-mode #snapHVBtn,
   body.viewer-mode #undoBtn, body.viewer-mode #redoBtn,
@@ -1044,23 +1057,18 @@
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="2.5" y="3.5" width="15" height="13" rx="1.3"/><circle cx="7" cy="8" r="1.4"/><path d="M3 14.5l4-4 3 3 3.5-3.5L17.5 14" stroke-linecap="round"/></svg>
       Insert image
     </button>
-    <button class="tbtn" id="fileNameBtn" title="Rename this plan — Save, Save PDF, Share and auto-backup all use this name">
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.4 3.6l4 4-9 9-4.6.9.9-4.6z"/></svg>
-      <span id="fileNameBtnLabel">plan</span>
-    </button>
-    <!-- Shared device identity (UTZLINE Data Standard v1, §6, added v39):
-         one name per device/browser profile, stored in a small IndexedDB
-         database ("utzline-identity") that Site Measure, Viewer and the
-         ITP app all read from the same origin -- so a name set once here
-         also shows up in ITP without retyping it. Stamped into every save
-         (see projectPayload()'s "savedBy" field) so a permanent overlay
-         layer can eventually be attributed to a real person instead of
-         whoever happened to be typing. Hidden in Viewer builds (see the
-         body.viewer-mode rule above) since the Viewer never saves. -->
-    <button class="tbtn" id="userIdentityBtn" title="Your name — attributed on every save. Click to set or change it for this device.">
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="6.6" r="3.1"/><path d="M3.5 17c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>
-      <span id="userIdentityBtnLabel">Set your name</span>
-    </button>
+    <!-- fileNameBtn (the pencil "plan" rename button) and userIdentityBtn
+         (the person-icon "Set your name" button) both REMOVED from this
+         toolbar (2026-09-23) per Andrew, verbatim: "site measure app needs
+         the correct user selector in the startup menu, same way that
+         [UTZLINE Delivery ITP] has, also needs to be removed from the top
+         menubar in the floor plan as well as the rename button." The
+         underlying state.fileBase rename mechanism (showRenameDialog) is
+         UNCHANGED -- only this toolbar button/click-listener is gone (see
+         showRenameDialog's own comment). The device-identity mechanism is
+         fully replaced -- see the new identitySelector on the startup
+         screen's project-gate (#identityGateRow), which now covers BOTH
+         Site Measure and the Viewer, not just the editor. -->
     <button class="tbtn" id="switchProjectBtn" title="Switch to a different level in this project, start a new level, or go back to all projects" style="display:none;">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="6.4" height="6.4" rx="1"/><rect x="11.1" y="4" width="6.4" height="6.4" rx="1"/><rect x="2.5" y="12.4" width="6.4" height="6.4" rx="1"/><rect x="11.1" y="12.4" width="6.4" height="6.4" rx="1"/></svg>
       Switch project / level
@@ -1320,40 +1328,44 @@
       <div class="project-gate-box">
         <div class="project-gate-brand"><img id="projectGateIcon" src="" alt="" aria-hidden="true"><h1 id="projectGateTitle">UTZ<b>LINE</b> Site Measure</h1></div>
 
-        <!-- "My projects" (Viewer only), added 2026-09-17 at Andrew's request
-             ("the open files on the viewer needs the ability to look in
-             different locations, think of it like a import function") --
-             this is the "personal My projects list" feature that had been
-             sitting in the pending notes since v20: the drafting office works
-             across different project managers, whose projects live in
-             different source locations, so the single-remembered-root model
-             below (still exactly as it was, untouched) doesn't fit them --
-             they need to pull in individual project (or bare level) folders
-             from wherever each one actually lives, one at a time, like an
-             import. Kept as an ADDITIONAL section layered above gateSetup/
-             gateList (see showGateState/populateMyProjectList) rather than a
-             replacement, so anyone already happy with a single Projects
-             folder sees no change in that flow at all -- this is purely
-             additive. Each entry is just a remembered folder handle + a
-             typed label (the folder itself can't reveal its own parent
-             path/job name, per detectFolderShape's own comment, hence asking
-             for one when it's added) plus which shape it turned out to be
-             ("project" = a folder of levels, "level" = a bare level/room
-             folder opened directly) -- stored per-device in IndexedDB
-             (viewerMyProjects), never synced or shared. Removing an entry
-             (press-and-hold, same gesture as everywhere else in this gate)
-             only forgets it from this list -- the real folder on disk is
-             never touched, and it can always be added back later from
-             wherever it lives. Hidden entirely in the editor build (see
-             showGateState) since this whole model is specific to browsing
-             projects that live scattered across locations you don't
-             otherwise have a "root" for. -->
-        <div id="gateMyProjects" hidden>
-          <p class="project-gate-section-title">My projects</p>
-          <div class="project-list" id="myProjectListItems"></div>
-          <div class="project-gate-actions">
-            <button class="mbtn" id="addMyProjectBtn">+ Add a project…</button>
-          </div>
+        <!-- Shared name+PIN identity (2026-09-23) -- Andrew, verbatim: "site
+             measure app needs the correct user selector in the startup
+             menu, same way that [UTZLINE Delivery ITP] has, also needs to
+             be removed from the top menubar in the floor plan" + "implement
+             the username as per the delivery itp throughout the entire
+             system, but instead of it opening a popup, the button is the
+             selector, when you pick a name it opens a numberpad to input
+             the pin (4 digit pin)." Ported verbatim from
+             redline-delivery-itp-pwa/index.html's own reference
+             implementation (see its own top-of-file comment for the full
+             design/rationale) -- a native <select> IS the button (its own
+             dropdown lists every name in the shared utzline-users.csv
+             registry, at the Projects-root level, plus "+ Add a new
+             name..."); picking one opens ONLY a numberpad (a real on-screen
+             0-9 keypad, never a text field) to verify its 4-digit PIN; and
+             adding a new one still asks for the name as plain text (see
+             beginAddNewIdentityFlow, reusing this app's own showRenameDialog
+             as its "type one thing" prompt) with the PIN itself chosen and
+             confirmed via two numberpad rounds, then a small "show me in"
+             app-tickbox modal.
+             Placed here -- above every gate state (Setup/Reconnect/List/
+             Levels/Rooms), in the same slot the old "My projects" section
+             used to occupy -- so it's always visible on the startup screen
+             regardless of where you are in the folder-picking flow. Shown
+             in BOTH Site Measure and the Viewer (see boot()'s own
+             loadDeviceUserName() call): this used to be a toolbar button
+             hidden in Viewer builds via VIEW_ONLY_MODE since only the
+             editor "saved" anything, but Andrew's own instruction to roll
+             this out "throughout the entire system" -- plus every sibling
+             ITP app already showing identity regardless of whether it saves
+             -- means there's no reason to keep it editor-only now. Does NOT
+             replace the existing "utzline-identity" IndexedDB pointer other
+             apps on this origin already read (see IDENTITY_DB_NAME above)
+             -- only what triggers writing it. See populateIdentitySelector()
+             further down. -->
+        <div class="identity-gate-row" id="identityGateRow">
+          <div class="identity-gate-text" id="deviceUserNameText">Your name &amp; PIN: not set — attributed on every save on this device.</div>
+          <select class="mbtn identity-select" id="identitySelector" aria-label="Your name"></select>
         </div>
 
         <div id="gateSetup">
@@ -1476,17 +1488,37 @@
       </div>
     </div>
 
-    <!-- Shared device identity dialog (added v39, see userIdentityBtn's own
-         comment above) -- deliberately the same rename-input modal shape as
-         renameBackdrop, so it feels like the same family of small "type one
-         thing and confirm" dialogs already throughout this app. -->
-    <div class="modal-backdrop" id="userIdentityBackdrop" hidden>
-      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="userIdentityLabel">
-        <p id="userIdentityLabel">Your name — attributed on every save on this device:</p>
-        <input type="text" class="rename-input" id="userIdentityInput" maxlength="60" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="e.g. Andrew">
+    <!-- Shared name+PIN identity: numberpad + "show me in" modals (2026-09-23,
+         see #identityGateRow's own comment above for the full design). The
+         old freeform "Set your name" text-prompt dialog is gone -- the
+         identitySelector <select> up on the startup screen IS the button,
+         and choosing a name opens ONLY this numberpad (a proper on-screen
+         0-9 keypad, not a text field) to enter/verify the 4-digit PIN.
+         Adding a brand new name still needs its name typed as text (reusing
+         this app's own showRenameDialog, see beginAddNewIdentityFlow) and
+         its "show me in" app list ticked (the small dedicated modal below)
+         -- only the PIN itself is numberpad-only. Ported verbatim from
+         redline-delivery-itp-pwa/index.html. -->
+    <div class="modal-backdrop" id="numberpadBackdrop" hidden>
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="numberpadTitle" style="max-width:300px; text-align:center;">
+        <p id="numberpadTitle" style="font-weight:700; margin-bottom:2px;">Enter PIN</p>
+        <p id="numberpadSubtitle" style="margin:0 0 14px; font-size:12px; color:var(--text-secondary);"></p>
+        <div id="numberpadDots" style="display:flex; justify-content:center; gap:14px; margin-bottom:18px;"></div>
+        <div id="numberpadGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:9px; margin-bottom:16px;"></div>
         <div class="modal-actions">
-          <button class="mbtn" id="userIdentityCancel">Cancel</button>
-          <button class="mbtn mbtn-accent" id="userIdentityOk">Save</button>
+          <button class="mbtn" id="numberpadCancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="identityAppChecksBackdrop" hidden>
+      <div class="modal-box" role="dialog" aria-modal="true" style="max-width:320px;">
+        <p style="font-weight:700; margin-bottom:4px;">Show me in</p>
+        <p style="margin:0 0 12px; font-size:12px; color:var(--text-secondary);">Reference only, for Andrew's own admin use — doesn't restrict which app this name can actually sign in on.</p>
+        <div id="identityAppChecksList" style="display:flex; flex-direction:column; gap:7px; margin-bottom:14px; font-size:13px;"></div>
+        <div class="modal-actions">
+          <button class="mbtn" id="identityAppChecksCancel">Cancel</button>
+          <button class="mbtn mbtn-accent" id="identityAppChecksSave">Save</button>
         </div>
       </div>
     </div>
@@ -1687,7 +1719,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.6";
+  var APP_VERSION = "v45.7";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2346,23 +2378,35 @@
     });
   }
   // Loads the saved name into the in-memory cache and refreshes the
-  // toolbar button's label -- called once at boot, and again right after
-  // the dialog below saves a change. Never rejects the caller's chain:
-  // a device with no name set yet (or a browser with IndexedDB blocked)
-  // just falls back to the "Set your name" label, same as before this
-  // feature existed, rather than breaking boot.
+  // startup screen's identity row -- called once at boot (now for BOTH
+  // Site Measure and the Viewer, see boot()'s own comment), and again right
+  // after the identitySelector flow below saves a change. Never rejects the
+  // caller's chain: a device with no name set yet (or a browser with
+  // IndexedDB blocked) just falls back to "not set", same as before this
+  // feature existed, rather than breaking boot. Also refreshes
+  // identitySelector itself -- this and the Projects-root folder load in
+  // parallel at boot with no guaranteed order, so whichever finishes second
+  // needs to redraw the selector using the other's now-available result.
   function loadDeviceUserName(){
     return getDeviceUserName().then(function(name){
       deviceUserName = name || "";
       updateUserIdentityBtn();
+      populateIdentitySelector();
     }).catch(function(){
       deviceUserName = "";
       updateUserIdentityBtn();
     });
   }
+  // Despite the name (kept to avoid touching every existing call site),
+  // this now refreshes the startup screen's #deviceUserNameText row rather
+  // than a toolbar button label -- the toolbar's own userIdentityBtn was
+  // removed 2026-09-23 (see #identityGateRow's own HTML comment).
   function updateUserIdentityBtn(){
-    var label = document.getElementById("userIdentityBtnLabel");
-    if (label) label.textContent = deviceUserName || "Set your name";
+    var el = document.getElementById("deviceUserNameText");
+    if (!el) return;
+    el.textContent = deviceUserName
+      ? "Your name & PIN: " + deviceUserName + " — attributed on every save on this device."
+      : "Your name & PIN: not set — attributed on every save on this device.";
   }
   // ---- "resume where I was" pointer ----
   // Added (v32, 2026-09-18) after Andrew reported that taking a photo
@@ -3624,16 +3668,52 @@
   // above) deliberately has no such requirement -- it's never shown to
   // anyone but its own owner, so there's nothing for a name to
   // disambiguate yet.
+  // Adapted 2026-09-23 for the new CSV+PIN identity registry (see
+  // #identityGateRow's own comment): the old freeform showUserIdentityDialog()
+  // text-prompt is gone, so this now reuses showRenameDialog() (the same
+  // "type one thing" prompt the identitySelector's own "+ Add a new name..."
+  // flow uses) for the name, then checks it against utzline-users.csv --
+  // an existing name goes through the numberpad to verify its PIN
+  // (beginPinVerifyFlow's own verify logic, inlined here since this needs
+  // to reject rather than silently revert a <select>), a new one goes
+  // through createNewIdentity() (numberpad x2 + "show me in"), exactly the
+  // same registry write either way. Judgment call: this keeps Site
+  // Measure's own "every explicit Save needs a name" rule working inline
+  // (without navigating away from whatever's open) rather than just
+  // pointing the person at the startup screen's own selector and rejecting
+  // outright -- see the README changelog for why.
   function ensureDeviceUserNameForSave(){
     if (deviceUserName) return Promise.resolve(deviceUserName);
     showToast("Every Site Measure save needs a name first, so others can tell whose layer is whose.");
-    return showUserIdentityDialog().then(function(value){
-      var clean = value === null ? "" : sanitizeUserName(value);
+    return showRenameDialog("", "Your name — checked against utzline-users.csv (or set any time from the Projects screen's own name selector):", "Continue").then(function(rawName){
+      if (rawName === null) return Promise.reject({ code: "name_required" });
+      var clean = sanitizeUserName(rawName);
       if (!clean) return Promise.reject({ code: "name_required" });
-      return setDeviceUserName(clean).then(function(saved){
-        deviceUserName = saved;
-        updateUserIdentityBtn();
-        return saved;
+      return readUsersCsv().then(function(rows){
+        var row = findUserRowCI(rows, clean);
+        if (row){
+          return openNumberpad({
+            title: "Enter PIN",
+            subtitle: "for “" + clean + "”",
+            verify: function(pin){
+              return readUsersCsv().then(function(freshRows){
+                var r = findUserRowCI(freshRows, clean);
+                return !!(r && r.pin === pin);
+              });
+            }
+          }).then(function(pin){
+            if (pin === null) return Promise.reject({ code: "name_required" });
+            return setDeviceUserName(clean).then(function(saved){
+              deviceUserName = saved;
+              updateUserIdentityBtn();
+              return populateIdentitySelector().then(function(){ return saved; });
+            });
+          });
+        }
+        return createNewIdentity(clean, null).then(function(saved){
+          if (!saved) return Promise.reject({ code: "name_required" });
+          return saved;
+        });
       });
     });
   }
@@ -8704,13 +8784,15 @@
   var gateListFolderLabel = document.getElementById("gateListFolderLabel");
   var projectListItems = document.getElementById("projectListItems");
   var switchProjectsRootBtn = document.getElementById("switchProjectsRootBtn");
-  // "My projects" (Viewer only) -- see the HTML comment above #gateMyProjects
-  // for the full "why". These elements simply don't exist in a build whose
-  // HTML never got this block, so every reference below is null-guarded the
-  // same way switchProjectBtn/roomsBtn etc. already are.
-  var gateMyProjects = document.getElementById("gateMyProjects");
-  var myProjectListItems = document.getElementById("myProjectListItems");
-  var addMyProjectBtn = document.getElementById("addMyProjectBtn");
+  // "My projects" (Viewer only, added v27) REMOVED IN FULL 2026-09-23 --
+  // Andrew, verbatim: "Utzline viewer no longer needs the my projects
+  // option as everything runs through the projects folder ecosystem."
+  // (was: gateMyProjects/myProjectListItems/addMyProjectBtn element refs,
+  // the showGateState() gating below, and loadMyProjects/saveMyProjects/
+  // populateMyProjectList/openMyProjectEntry further down -- all deleted,
+  // not merely hidden). detectFolderShape() itself is UNCHANGED and still
+  // used by pickProjectsRootFolder() below for the single-Projects-root
+  // flow's own "root"/"project"/"level" shape detection.
   var gateLevels = document.getElementById("gateLevels");
   var gateLevelsLabel = document.getElementById("gateLevelsLabel");
   var levelListItems = document.getElementById("levelListItems");
@@ -8831,14 +8913,13 @@
     gateList.hidden = which !== "list";
     gateLevels.hidden = which !== "levels";
     gateRooms.hidden = which !== "rooms";
-    // "My projects" only ever makes sense at the top level -- browsing a
-    // specific project's levels/rooms, or reconnecting a lapsed root, isn't
-    // where you'd want to be adding a DIFFERENT project from. VIEW_ONLY_MODE
-    // gates it out of the editor build entirely, same as every other
-    // viewer-only affordance.
-    var showMyProjects = VIEW_ONLY_MODE && (which === "setup" || which === "list");
-    if (gateMyProjects) gateMyProjects.hidden = !showMyProjects;
-    if (showMyProjects) populateMyProjectList();
+    // Best-effort: refreshes the startup screen's identity row/selector
+    // every time the gate is (re)shown -- covers every entry point that
+    // lands here (boot, choosing/reconnecting/switching a Projects folder,
+    // "All projects", etc.) without needing a call at each one individually.
+    // A no-op with an empty selector when no Projects folder is chosen yet
+    // (see populateIdentitySelector's own "CSV not readable yet" catch).
+    populateIdentitySelector();
     projectGate.hidden = false;
   }
   // Shows "Project — Level" (or, with a room open, "Project — Level — Room")
@@ -9281,169 +9362,13 @@
       return renderPickerList(roomListItems, "room", names, emptyMessage, openRoom, populateRoomList);
     });
   }
-  // ---- "My projects" (Viewer only) -- see the HTML comment above
-  // #gateMyProjects for the full "why". Each entry is
-  // { label, kind: "project"|"level"|"root", handle }, stored per-device via
-  // the same idbGet/idbSet the single Projects-root handle already uses --
-  // kept as an in-memory write-through cache (myProjectsList), same
-  // pattern as viewerHiddenEntries above, so an add/remove is reflected
-  // immediately regardless of whether its idbSet has resolved yet (or, in
-  // a test harness whose fake handles aren't structured-cloneable, even if
-  // it silently fails to persist at all -- see fake-fs.js's own comment).
-  //
-  // BUG FIXED (v29, 2026-09-17, reported by Andrew: "personal 'my projects'
-  // in the viewer does not work. does it need a certain folder structure"):
-  // a "root" shape (a folder that itself contains several project folders --
-  // exactly what "different project managers, different locations" means in
-  // practice, since each manager's own folder is usually a small Projects
-  // root of its own, not a single job) was being silently folded into
-  // "project" here, same as the fallback for "empty"/"unknown". Opening it
-  // then listed each of that root's real PROJECT folders as if they were
-  // LEVELS of one project -- clicking one failed with a generic "Couldn't
-  // open" toast, since a project folder has no saves/pdfs/backup of its own
-  // for ensureWorkFolders to find. "root" now gets its own real kind (see
-  // detectFolderShape's own comment for what distinguishes it) and opens
-  // into an actual project list, one layer up from a plain "project" entry,
-  // exactly like the existing single-Projects-root flow already does for a
-  // freshly-picked root folder.
-  var myProjectsList = null;
-  function loadMyProjects(){
-    if (myProjectsList) return Promise.resolve(myProjectsList);
-    return idbGet("viewerMyProjects").then(function(arr){
-      myProjectsList = arr || [];
-      return myProjectsList;
-    }).catch(function(){
-      myProjectsList = [];
-      return myProjectsList;
-    });
-  }
-  function saveMyProjects(){
-    return idbSet("viewerMyProjects", myProjectsList || []).catch(function(){});
-  }
-  function populateMyProjectList(){
-    if (!VIEW_ONLY_MODE || !myProjectListItems) return Promise.resolve();
-    return loadMyProjects().then(function(list){
-      myProjectListItems.innerHTML = "";
-      if (!list.length){
-        var empty = document.createElement("div");
-        empty.className = "project-gate-empty";
-        empty.textContent = "Nothing added yet — use “+ Add a project” below to bring one in from anywhere on this device.";
-        myProjectListItems.appendChild(empty);
-        return;
-      }
-      list.forEach(function(entry, idx){
-        var row = document.createElement("button");
-        row.type = "button";
-        row.className = "project-row";
-        row.title = "Tap to open — press and hold to remove from your list (this never touches the real folder)";
-        var label = document.createElement("span");
-        label.textContent = entry.label;
-        var arrow = document.createElement("span");
-        arrow.className = "project-row-arrow";
-        arrow.textContent = "Open →";
-        row.appendChild(label);
-        row.appendChild(arrow);
-        row.addEventListener("click", function(){
-          openMyProjectEntry(entry).catch(function(err){
-            if (err && err.code === "nav_cancelled") return; // declined the save-before-leaving confirm -- moot in the viewer, kept for symmetry
-            console.error("Open my-project entry failed:", err);
-            var msg = (err && err.code === "permission_denied")
-              ? "Couldn't get permission to open “" + entry.label + "” — try again, or remove and re-add it if that keeps happening."
-              : "Couldn't open “" + entry.label + "” — try again. If the folder was moved, remove it and add it again from its new location.";
-            showToast(msg, 7000);
-          });
-        });
-        wireLongPress(row, function(){
-          showConfirm("Remove “" + entry.label + "” from your list? This only changes what YOU see on this device — it won't delete or change anything on disk, and it'll still be there for everyone else. You can always add it back later from wherever it lives.").then(function(ok){
-            if (!ok){ showToast("Cancelled."); return; }
-            var pos = myProjectsList ? myProjectsList.indexOf(entry) : -1;
-            if (pos !== -1) myProjectsList.splice(pos, 1);
-            return saveMyProjects().then(function(){
-              showToast("Removed “" + entry.label + "” from your list.");
-              populateMyProjectList();
-            });
-          });
-        });
-        myProjectListItems.appendChild(row);
-      });
-    });
-  }
-  // Opens a personally-added entry directly from its stored handle -- no
-  // known projectsRootHandle/activeProjectHandle parent, same situation
-  // pickProjectsRootFolder's own shape-detection branches are already in
-  // (a viewer pick with "no known parent", see openLevelFromHandle/
-  // openProjectFromHandle's own comments) -- so this reuses those same
-  // functions (plus populateProjectList for a "root" entry) rather than
-  // duplicating the open logic. Uses the entry's own typed LABEL as the name
-  // shown/used for file naming, not the folder's own raw name -- real
-  // project folders in the field are routinely all named identically
-  // ("UTZLINE", see detectFolderShape's own comment), so the label the
-  // person actually typed in is the only thing that meaningfully
-  // distinguishes one job's exported PDFs from another's.
-  // Permission on a stored handle can lapse (browser restart, OS-level
-  // revocation) exactly like the single Projects-root handle's own
-  // "reconnect" flow handles -- re-requested here instead, since this is
-  // reached directly from a click (a genuine user gesture, which
-  // requestPermission needs to be allowed to prompt at all).
-  function openMyProjectEntry(entry){
-    return entry.handle.requestPermission({ mode: "read" }).then(function(perm){
-      if (perm !== "granted"){
-        var err = new Error("Permission not granted for “" + entry.label + "”");
-        err.code = "permission_denied";
-        throw err;
-      }
-      projectsRootHandle = null; activeProjectName = ""; activeProjectHandle = null;
-      if (entry.kind === "level") return openLevelFromHandle(entry.handle, entry.label);
-      if (entry.kind === "root"){
-        // A whole projects folder (e.g. one project manager's own root,
-        // holding several jobs) -- land on an actual project list, same as
-        // pickProjectsRootFolder's own "root" branch, using the entry's own
-        // typed label rather than the real folder name (same reasoning as
-        // every other My-projects entry). This is only ever an in-memory,
-        // temporary use of projectsRootHandle/projectsRootName for this
-        // browsing session -- it's never persisted over the real single
-        // Projects root (no idbSet here), so choosing a different My-
-        // projects entry, or the real Projects root, later is unaffected.
-        projectsRootHandle = entry.handle;
-        projectsRootPermissionOK = true;
-        projectsRootName = entry.label;
-        return populateProjectList().then(function(){
-          gateListFolderLabel.textContent = "Projects folder: “" + projectsRootName + "”";
-          showGateState("list");
-        });
-      }
-      return openProjectFromHandle(entry.handle, entry.label);
-    });
-  }
-  if (addMyProjectBtn){
-    addMyProjectBtn.addEventListener("click", function(){
-      window.showDirectoryPicker({ id: "utzline-my-project", mode: "read" }).then(function(handle){
-        return detectFolderShape(handle).then(function(shape){
-          // "root" (a folder OF projects, e.g. one project manager's own
-          // Projects folder) gets its own kind -- see openMyProjectEntry's
-          // own comment for why this can't just be folded into "project"
-          // like "empty"/"unknown" harmlessly can (those still land on an
-          // empty-but-valid project's level list either way).
-          var kind = shape === "level" ? "level" : (shape === "root" ? "root" : "project");
-          return showRenameDialog(handle.name, "Label this for your list (e.g. the job name/number, or the project manager's name if this is a whole folder of their jobs) — the actual folder name isn't shown to you here, so pick whatever you'll recognize it by later:").then(function(value){
-            if (value === null) return; // cancelled
-            var clean = value.trim() || handle.name;
-            return loadMyProjects().then(function(list){
-              list.push({ label: clean, kind: kind, handle: handle });
-              return saveMyProjects();
-            }).then(function(){
-              showToast("Added “" + clean + "” to your list.");
-              return populateMyProjectList();
-            });
-          });
-        });
-      }).catch(function(err){
-        if (err && err.name === "AbortError") return; // cancelled the picker -- stay put
-        console.error("Add project failed:", err);
-        showToast(folderPickerErrorMessage(err));
-      });
-    });
-  }
+  // "My projects" (Viewer only, added v27) REMOVED IN FULL 2026-09-23 --
+  // Andrew, verbatim: "Utzline viewer no longer needs the my projects
+  // option as everything runs through the projects folder ecosystem." (was:
+  // myProjectsList/loadMyProjects/saveMyProjects/populateMyProjectList/
+  // openMyProjectEntry and the addMyProjectBtn click handler -- all
+  // deleted, not merely hidden; see the var-declaration comment above,
+  // near gateLevels, for what else went with it.)
   // Viewer mode asks for "read" permission, never "readwrite" -- on top of
   // every mutating function already refusing to run (see VIEW_ONLY_MODE),
   // this means the browser itself would refuse any write attempt that
@@ -9858,17 +9783,29 @@
   var renameInput = document.getElementById("renameInput");
   var renameOk = document.getElementById("renameOk");
   var renameCancel = document.getElementById("renameCancel");
+  // fileNameBtn/fileNameBtnLabel (the toolbar's own pencil "plan" rename
+  // button) REMOVED 2026-09-23 (see the toolbar HTML's own comment) -- these
+  // two now permanently resolve to null. updateFileNameBtn() below is
+  // null-guarded so every one of its many existing call sites (Save,
+  // opening a project/level/room, importing a joinery item page, etc.)
+  // keeps working unchanged; it's simply a no-op now that there's no label
+  // left to refresh.
   var fileNameBtn = document.getElementById("fileNameBtn");
   var fileNameBtnLabel = document.getElementById("fileNameBtnLabel");
   var renameResolve = null;
   var renameLabelEl = document.getElementById("renameLabel");
   var RENAME_LABEL_DEFAULT = renameLabelEl ? renameLabelEl.textContent : "";
+  var RENAME_OK_LABEL_DEFAULT = renameOk.textContent;
   // labelText lets a caller repurpose this same in-page text-input dialog
   // for something other than renaming the current plan (e.g. naming a new
-  // project below) without needing a second, near-identical dialog --
-  // omit it to get the original rename wording back, unchanged.
-  function showRenameDialog(currentName, labelText){
+  // project below, or -- added 2026-09-23 -- as the shared name+PIN
+  // identity flow's own plain-text "type a name" prompt, see
+  // beginAddNewIdentityFlow) without needing a second, near-identical
+  // dialog -- omit labelText/okLabel to get the original rename wording
+  // back, unchanged.
+  function showRenameDialog(currentName, labelText, okLabel){
     if (renameLabelEl) renameLabelEl.textContent = labelText || RENAME_LABEL_DEFAULT;
+    renameOk.textContent = okLabel || RENAME_OK_LABEL_DEFAULT;
     renameInput.value = currentName || "";
     renameBackdrop.hidden = false;
     // Pre-select the whole name (not just focus) so typing a new one
@@ -9895,19 +9832,21 @@
     return cleaned.slice(0, 120) || "plan";
   }
   function updateFileNameBtn(){
-    fileNameBtnLabel.textContent = state.fileBase || "plan";
+    if (fileNameBtnLabel) fileNameBtnLabel.textContent = state.fileBase || "plan";
   }
-  fileNameBtn.addEventListener("click", function(){
-    showRenameDialog(state.fileBase).then(function(value){
-      if (value === null) return; // cancelled
-      var clean = sanitizeFileBase(value);
-      if (clean === state.fileBase) return;
-      state.fileBase = clean;
-      updateFileNameBtn();
-      backupDirty = true; // next auto-backup should pick up the new name promptly
-      showToast("Renamed to “" + clean + "”.");
+  if (fileNameBtn){
+    fileNameBtn.addEventListener("click", function(){
+      showRenameDialog(state.fileBase).then(function(value){
+        if (value === null) return; // cancelled
+        var clean = sanitizeFileBase(value);
+        if (clean === state.fileBase) return;
+        state.fileBase = clean;
+        updateFileNameBtn();
+        backupDirty = true; // next auto-backup should pick up the new name promptly
+        showToast("Renamed to “" + clean + "”.");
+      });
     });
-  });
+  }
   renameOk.addEventListener("click", function(){ closeRename(renameInput.value); });
   renameCancel.addEventListener("click", function(){ closeRename(null); });
   renameBackdrop.addEventListener("click", function(e){ if (e.target === renameBackdrop) closeRename(null); });
@@ -9916,22 +9855,109 @@
     else if (e.key === "Escape"){ e.preventDefault(); closeRename(null); }
   });
 
-  /* ---- Shared device identity dialog (added v39) ----
-     Same small-modal shape/wiring as the rename dialog just above, kept as
-     its own separate backdrop/input rather than reusing showRenameDialog()
-     since this one persists to the identity IndexedDB (see
-     setDeviceUserName() above) instead of state.fileBase, and needs its
-     own sanitisation rules (a person's name, not a filename fragment --
-     still strips the same filesystem-hostile characters up front, per
-     UTZLINE Data Standard v1 §5's filename-sanitisation decision, since
-     this name will eventually be embedded directly into every saved
-     overlay's filename). */
-  var userIdentityBackdrop = document.getElementById("userIdentityBackdrop");
-  var userIdentityInput = document.getElementById("userIdentityInput");
-  var userIdentityOk = document.getElementById("userIdentityOk");
-  var userIdentityCancel = document.getElementById("userIdentityCancel");
-  var userIdentityBtn = document.getElementById("userIdentityBtn");
-  var userIdentityResolve = null;
+  /* ---- Shared name+PIN identity registry (utzline-users.csv) (2026-09-23) ----
+     Ported verbatim from redline-delivery-itp-pwa/index.html's own
+     reference implementation -- see #identityGateRow's own HTML comment for
+     the full "why". Sits at the PROJECTS-ROOT level (projectsRootHandle, a
+     sibling of every individual Project folder) rather than per-project,
+     since one registry covers the whole company regardless of which job
+     someone's in. Deliberately a plain, spreadsheet-openable,
+     file-manager-editable CSV with the PIN in plain text -- reference-only
+     identity for attribution, not a real access-control system -- so
+     Andrew can inspect or hand-edit it directly (reset/clear a PIN, delete
+     a row to free a name for reuse) with nothing else in the Projects
+     folder touched. Does NOT change the underlying per-device
+     "utzline-identity" IndexedDB mechanism every sibling app already
+     reads/writes (getDeviceUserName/setDeviceUserName above are untouched)
+     -- only what triggers the write on this screen. No in-app "forgot PIN"
+     flow, by design -- recovery is file-manager-only. */
+  var USERS_CSV_NAME = "utzline-users.csv";
+  var USERS_CSV_HEADER = ["Name", "PIN", "ShowInApps"];
+  // Fixed set Andrew specified, in this exact order for the checkbox list.
+  var APP_CODES = [
+    ["SiteMeasure", "Site Measure"],
+    ["Viewer", "Viewer"],
+    ["InstallITP", "Install ITP"],
+    ["ManufactureITP", "Manufacture ITP"],
+    ["DeliveryITP", "Delivery ITP"],
+    ["Projects", "Projects"],
+    ["Scheduler", "Scheduler"]
+  ];
+  // Small, defensive CSV parse/stringify pair (RFC 4180 minimal subset) --
+  // values here are short and simple (a name, a few digits, a short code
+  // list) but this still handles a quote/comma/newline inside a field
+  // rather than assuming it'll never happen.
+  function csvEscapeField(v){
+    v = String(v == null ? "" : v);
+    return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }
+  function csvStringifyRows(rows){
+    return rows.map(function(r){ return r.map(csvEscapeField).join(","); }).join("\r\n") + "\r\n";
+  }
+  function csvParseText(text){
+    var rows = [], row = [], field = "", inQuotes = false;
+    var i = 0, len = text.length;
+    while (i < len){
+      var c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i + 1] === '"'){ field += '"'; i += 2; continue; }
+          inQuotes = false; i++; continue;
+        }
+        field += c; i++; continue;
+      }
+      if (c === '"'){ inQuotes = true; i++; continue; }
+      if (c === ','){ row.push(field); field = ""; i++; continue; }
+      if (c === '\r'){ i++; continue; }
+      if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+      field += c; i++;
+    }
+    if (field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+    return rows;
+  }
+  // Always re-reads the live file -- never trusts a stale in-memory copy,
+  // since another device or another app could have changed it since this
+  // page loaded. Resolves to [] both when the file doesn't exist yet and
+  // when it's empty/unparseable, so callers never need a separate
+  // "not found" branch. Also resolves to [] (rather than rejecting) when no
+  // Projects folder is chosen yet -- see the identitySelector's own
+  // change-listener guard for the user-facing side of that.
+  function readUsersCsv(){
+    if (!projectsRootHandle) return Promise.resolve([]);
+    return projectsRootHandle.getFileHandle(USERS_CSV_NAME, { create: false }).then(function(fh){
+      return fh.getFile();
+    }).then(function(file){ return file.text(); }).then(function(text){
+      var rows = csvParseText(text);
+      if (!rows.length) return [];
+      var start = (rows[0] && String(rows[0][0] || "").trim().toLowerCase() === "name") ? 1 : 0;
+      var out = [];
+      for (var i = start; i < rows.length; i++){
+        var r = rows[i];
+        if (!r || !r.length || (r.length === 1 && r[0] === "")) continue; // trailing blank line
+        out.push({ name: r[0] || "", pin: r[1] || "", showInApps: r[2] || "" });
+      }
+      return out;
+    }, function(){ return []; }); // no file yet -- not an error
+  }
+  function writeUsersCsv(rows){
+    var lines = [USERS_CSV_HEADER];
+    rows.forEach(function(r){ lines.push([r.name, r.pin, r.showInApps]); });
+    var text = csvStringifyRows(lines);
+    return projectsRootHandle.getFileHandle(USERS_CSV_NAME, { create: true }).then(function(fh){
+      return fh.createWritable();
+    }).then(function(w){ return w.write(text).then(function(){ return w.close(); }); });
+  }
+  function findUserRowCI(rows, name){
+    var n = String(name || "").trim().toLowerCase();
+    for (var i = 0; i < rows.length; i++){
+      if (String(rows[i].name || "").trim().toLowerCase() === n) return rows[i];
+    }
+    return null;
+  }
+  // A person's name, not a filename fragment -- but still stripped of the
+  // same filesystem-hostile characters sanitizeFileBase() strips up front
+  // (per UTZLINE Data Standard v1 §5), since this name gets embedded
+  // directly into every saved overlay's filename (see overlayUserSlug).
   function sanitizeUserName(name){
     var cleaned = String(name || "")
       .replace(/[<>:"/\\|?*\x00-\x1f]/g, "")
@@ -9939,38 +9965,298 @@
       .replace(/\s+/g, " ");
     return cleaned.slice(0, 60);
   }
-  function showUserIdentityDialog(){
-    userIdentityInput.value = deviceUserName || "";
-    userIdentityBackdrop.hidden = false;
-    userIdentityInput.focus();
-    userIdentityInput.select();
-    return new Promise(function(resolve){ userIdentityResolve = resolve; });
+
+  /* ---- numberpad (4-digit PIN entry) ----
+     A small, self-contained on-screen keypad modal. openNumberpad(opts)
+     returns a Promise that resolves with the 4-digit string once entered
+     (and, if opts.verify is given, only once verify(pin) resolves truthy --
+     a wrong PIN shakes the dialog and clears it for another attempt rather
+     than closing), or resolves null if the user cancels. Used for every PIN
+     step: verifying an existing name's PIN, and choosing/confirming a new
+     one -- entering a NAME (text) still goes through showRenameDialog
+     (this app's own "type one thing" prompt), only the PIN itself is
+     numberpad-only, per Andrew's own explicit split. */
+  var numberpadBackdrop = document.getElementById("numberpadBackdrop");
+  var numberpadTitleEl = document.getElementById("numberpadTitle");
+  var numberpadSubtitleEl = document.getElementById("numberpadSubtitle");
+  var numberpadDotsEl = document.getElementById("numberpadDots");
+  var numberpadGridEl = document.getElementById("numberpadGrid");
+  var numberpadCancelBtn = document.getElementById("numberpadCancel");
+  var NUMBERPAD_LENGTH = 4;
+  var numberpadState = null; // { entered:"", verify:fn|null, resolve:fn, busy:bool }
+
+  function renderNumberpadDots(){
+    numberpadDotsEl.innerHTML = "";
+    for (var i = 0; i < NUMBERPAD_LENGTH; i++){
+      var dot = document.createElement("div");
+      var filled = numberpadState && i < numberpadState.entered.length;
+      dot.style.cssText = "width:14px; height:14px; border-radius:50%; border:2px solid var(--border-strong); background:" + (filled ? "var(--accent)" : "transparent") + "; transition:background .1s;";
+      numberpadDotsEl.appendChild(dot);
+    }
   }
-  function closeUserIdentity(value){
-    userIdentityBackdrop.hidden = true;
-    var resolve = userIdentityResolve; userIdentityResolve = null;
-    if (resolve) resolve(value);
+  function numberpadShakeAndClear(){
+    var box = numberpadBackdrop.querySelector(".modal-box");
+    box.classList.remove("numberpad-shake");
+    void box.offsetWidth; // restart the CSS animation
+    box.classList.add("numberpad-shake");
+    showToast("Incorrect PIN — try again.");
+    setTimeout(function(){
+      if (numberpadState){ numberpadState.entered = ""; numberpadState.busy = false; renderNumberpadDots(); }
+    }, 260);
   }
-  userIdentityBtn.addEventListener("click", function(){
-    showUserIdentityDialog().then(function(value){
-      if (value === null) return; // cancelled
-      var clean = sanitizeUserName(value);
-      setDeviceUserName(clean).then(function(saved){
+  function finishNumberpad(pin){
+    numberpadBackdrop.hidden = true;
+    var st = numberpadState; numberpadState = null;
+    if (st && st.resolve) st.resolve(pin);
+  }
+  function cancelNumberpad(){
+    if (!numberpadState) return;
+    numberpadBackdrop.hidden = true;
+    var st = numberpadState; numberpadState = null;
+    if (st && st.resolve) st.resolve(null);
+  }
+  function numberpadPressDigit(d){
+    if (!numberpadState || numberpadState.busy || numberpadState.entered.length >= NUMBERPAD_LENGTH) return;
+    numberpadState.entered += d;
+    renderNumberpadDots();
+    if (numberpadState.entered.length === NUMBERPAD_LENGTH){
+      var pin = numberpadState.entered;
+      var verify = numberpadState.verify;
+      if (!verify){ finishNumberpad(pin); return; }
+      numberpadState.busy = true;
+      Promise.resolve(verify(pin)).then(function(ok){
+        if (!numberpadState) return; // cancelled while verifying
+        if (ok) finishNumberpad(pin);
+        else numberpadShakeAndClear();
+      }, function(){
+        if (numberpadState) numberpadShakeAndClear();
+      });
+    }
+  }
+  function numberpadBackspace(){
+    if (!numberpadState || numberpadState.busy || !numberpadState.entered.length) return;
+    numberpadState.entered = numberpadState.entered.slice(0, -1);
+    renderNumberpadDots();
+  }
+  numberpadCancelBtn.addEventListener("click", cancelNumberpad);
+  numberpadBackdrop.addEventListener("click", function(e){ if (e.target === numberpadBackdrop) cancelNumberpad(); });
+  document.addEventListener("keydown", function(e){
+    if (!numberpadState || numberpadBackdrop.hidden) return;
+    if (e.key >= "0" && e.key <= "9"){ e.preventDefault(); numberpadPressDigit(e.key); }
+    else if (e.key === "Backspace"){ e.preventDefault(); numberpadBackspace(); }
+    else if (e.key === "Escape"){ e.preventDefault(); cancelNumberpad(); }
+  });
+  (function buildNumberpadGrid(){
+    var layout = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
+    layout.forEach(function(key){
+      var cell = document.createElement("button");
+      cell.type = "button";
+      cell.style.cssText = "font-size:18px; padding:12px 0;";
+      if (key === ""){
+        cell.style.visibility = "hidden"; cell.disabled = true;
+      } else if (key === "back"){
+        cell.className = "mbtn"; cell.textContent = "⌫"; cell.setAttribute("aria-label", "Backspace");
+        cell.addEventListener("click", numberpadBackspace);
+      } else {
+        cell.className = "mbtn"; cell.textContent = key;
+        cell.addEventListener("click", function(){ numberpadPressDigit(key); });
+      }
+      numberpadGridEl.appendChild(cell);
+    });
+  })();
+  function openNumberpad(opts){
+    opts = opts || {};
+    numberpadTitleEl.textContent = opts.title || "Enter PIN";
+    numberpadSubtitleEl.textContent = opts.subtitle || "";
+    numberpadSubtitleEl.style.display = opts.subtitle ? "" : "none";
+    numberpadState = { entered: "", verify: opts.verify || null, busy: false };
+    renderNumberpadDots();
+    numberpadBackdrop.hidden = false;
+    return new Promise(function(resolve){ numberpadState.resolve = resolve; });
+  }
+
+  /* ---- "show me in" app-list modal (checkboxes only) ---- */
+  var identityAppChecksBackdrop = document.getElementById("identityAppChecksBackdrop");
+  var identityAppChecksList = document.getElementById("identityAppChecksList");
+  var identityAppChecksSaveBtn = document.getElementById("identityAppChecksSave");
+  var identityAppChecksCancelBtn = document.getElementById("identityAppChecksCancel");
+  var identityAppChecksResolve = null;
+  function openAppChecksModal(){
+    identityAppChecksList.innerHTML = "";
+    // Pre-check whichever app this actually is -- Site Measure or the
+    // Viewer, both built from this one source file (see VIEW_ONLY_MODE).
+    var thisAppCode = VIEW_ONLY_MODE ? "Viewer" : "SiteMeasure";
+    APP_CODES.forEach(function(pair){
+      var code = pair[0], label = pair[1];
+      var row = document.createElement("label");
+      row.style.cssText = "display:flex; align-items:center; gap:7px;";
+      var cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = code;
+      if (code === thisAppCode) cb.checked = true;
+      row.appendChild(cb);
+      row.appendChild(document.createTextNode(label));
+      identityAppChecksList.appendChild(row);
+    });
+    identityAppChecksBackdrop.hidden = false;
+    return new Promise(function(resolve){ identityAppChecksResolve = resolve; });
+  }
+  function closeAppChecksModal(value){
+    identityAppChecksBackdrop.hidden = true;
+    var r = identityAppChecksResolve; identityAppChecksResolve = null;
+    if (r) r(value);
+  }
+  identityAppChecksSaveBtn.addEventListener("click", function(){
+    var checked = Array.prototype.slice.call(identityAppChecksList.querySelectorAll("input[type=checkbox]:checked")).map(function(cb){ return cb.value; });
+    closeAppChecksModal(checked);
+  });
+  identityAppChecksCancelBtn.addEventListener("click", function(){ closeAppChecksModal(null); });
+  identityAppChecksBackdrop.addEventListener("click", function(e){ if (e.target === identityAppChecksBackdrop) closeAppChecksModal(null); });
+
+  /* ---- the identity selector itself: the <select> IS the button ----
+     Andrew, verbatim (2026-09-23): "implement the username as per the
+     delivery itp throughout the entire system, but instead of it opening a
+     popup, the button is the selector, when you pick a name it opens a
+     numberpad to input the pin (4 digit pin)." No more "Set your name"
+     button + separate popup -- picking a name from this dropdown directly
+     triggers the numberpad; picking "+ Add a new name..." starts the
+     new-name flow (name via showRenameDialog, PIN chosen+confirmed via two
+     numberpad rounds, then the "show me in" list above). */
+  var identitySelector = document.getElementById("identitySelector");
+  var IDENTITY_NEW_VALUE = "__new__";
+  var IDENTITY_PLACEHOLDER_VALUE = "__none__";
+
+  function populateIdentitySelector(){
+    if (!identitySelector) return Promise.resolve();
+    return readUsersCsv().then(function(rows){
+      var names = rows.map(function(r){ return r.name; }).filter(Boolean);
+      names.sort(function(a, b){ return a.toLowerCase().localeCompare(b.toLowerCase()); });
+      identitySelector.innerHTML = "";
+      if (!deviceUserName || names.indexOf(deviceUserName) === -1){
+        var placeholder = document.createElement("option");
+        placeholder.value = IDENTITY_PLACEHOLDER_VALUE;
+        placeholder.textContent = "Set your name";
+        identitySelector.appendChild(placeholder);
+      }
+      names.forEach(function(n){
+        var opt = document.createElement("option");
+        opt.value = n; opt.textContent = n;
+        identitySelector.appendChild(opt);
+      });
+      var addOpt = document.createElement("option");
+      addOpt.value = IDENTITY_NEW_VALUE; addOpt.textContent = "+ Add a new name…";
+      identitySelector.appendChild(addOpt);
+      identitySelector.value = (deviceUserName && names.indexOf(deviceUserName) !== -1) ? deviceUserName : IDENTITY_PLACEHOLDER_VALUE;
+    }, function(){ /* CSV not readable yet (no root folder chosen) -- leave it empty */ });
+  }
+  function revertIdentitySelector(previousValue){
+    if (!identitySelector) return;
+    var hasOpt = Array.prototype.some.call(identitySelector.options, function(o){ return o.value === previousValue; });
+    identitySelector.value = hasOpt ? previousValue : IDENTITY_PLACEHOLDER_VALUE;
+  }
+  function beginPinVerifyFlow(name, previousValue){
+    return openNumberpad({
+      title: "Enter PIN",
+      subtitle: "for “" + name + "”",
+      verify: function(pin){
+        return readUsersCsv().then(function(rows){
+          var row = findUserRowCI(rows, name);
+          return !!(row && row.pin === pin);
+        });
+      }
+    }).then(function(pin){
+      if (pin === null){ revertIdentitySelector(previousValue); return; }
+      return setDeviceUserName(name).then(function(saved){
         deviceUserName = saved;
         updateUserIdentityBtn();
-        showToast(saved ? "Saves on this device will be attributed to “" + saved + "”." : "Cleared — saves on this device will show no name.");
-      }).catch(function(){
-        showToast("Couldn't save your name on this device.");
+        showToast("Saves on this device will be attributed to “" + saved + "”.");
       });
+    }).catch(function(err){
+      console.error("Checking PIN failed:", err);
+      showToast("Couldn't read utzline-users.csv.");
+      revertIdentitySelector(previousValue);
     });
-  });
-  userIdentityOk.addEventListener("click", function(){ closeUserIdentity(userIdentityInput.value); });
-  userIdentityCancel.addEventListener("click", function(){ closeUserIdentity(null); });
-  userIdentityBackdrop.addEventListener("click", function(e){ if (e.target === userIdentityBackdrop) closeUserIdentity(null); });
-  userIdentityInput.addEventListener("keydown", function(e){
-    if (e.key === "Enter"){ e.preventDefault(); closeUserIdentity(userIdentityInput.value); }
-    else if (e.key === "Escape"){ e.preventDefault(); closeUserIdentity(null); }
-  });
+  }
+  // Shared by both the "+ Add a new name..." flow below AND
+  // ensureDeviceUserNameForSave()'s own forced-name-at-save path -- numberpad
+  // x2 (choose + confirm) then the "show me in" app list, then writes the
+  // new row and signs in. Resolves the saved name on success, or null if
+  // cancelled/failed at any step along the way (never rejects) so BOTH
+  // callers can branch on a plain truthy check.
+  function createNewIdentity(newName, previousValue){
+    return openNumberpad({ title: "Choose a 4-digit PIN", subtitle: "for “" + newName + "”" }).then(function(pin1){
+      if (pin1 === null){ revertIdentitySelector(previousValue); return null; }
+      return openNumberpad({
+        title: "Confirm PIN",
+        subtitle: "for “" + newName + "”",
+        verify: function(p){ return p === pin1; }
+      }).then(function(pin2){
+        if (pin2 === null){ revertIdentitySelector(previousValue); return null; }
+        return openAppChecksModal().then(function(checked){
+          if (checked === null){ revertIdentitySelector(previousValue); return null; }
+          return readUsersCsv().then(function(freshRows){
+            if (findUserRowCI(freshRows, newName)){
+              showToast("“" + newName + "” already exists now — try again and pick it from the list.");
+              revertIdentitySelector(previousValue);
+              return null;
+            }
+            freshRows.push({ name: newName, pin: pin1, showInApps: checked.join(";") });
+            return writeUsersCsv(freshRows).then(function(){
+              return setDeviceUserName(newName);
+            }).then(function(saved){
+              deviceUserName = saved;
+              updateUserIdentityBtn();
+              return populateIdentitySelector().then(function(){
+                showToast("Saves on this device will be attributed to “" + deviceUserName + "”.");
+                return saved;
+              });
+            });
+          });
+        });
+      });
+    }).catch(function(err){
+      console.error("Adding a new name/PIN failed:", err);
+      showToast("Couldn't save that to utzline-users.csv.");
+      revertIdentitySelector(previousValue);
+      return null;
+    });
+  }
+  function beginAddNewIdentityFlow(previousValue){
+    return showRenameDialog("", "New name — added to utzline-users.csv, shared across the whole team:", "Add").then(function(rawName){
+      if (rawName === null){ revertIdentitySelector(previousValue); return; }
+      var newName = sanitizeUserName(rawName);
+      if (!newName){ showToast("Enter a name first."); revertIdentitySelector(previousValue); return; }
+      return readUsersCsv().then(function(rows){
+        if (findUserRowCI(rows, newName)){
+          showToast("“" + newName + "” already exists — pick it from the list and enter its PIN instead.");
+          revertIdentitySelector(previousValue);
+          return;
+        }
+        return createNewIdentity(newName, previousValue);
+      });
+    }).catch(function(err){
+      console.error("Adding a new name/PIN failed:", err);
+      showToast("Couldn't save that to utzline-users.csv.");
+      revertIdentitySelector(previousValue);
+    });
+  }
+  if (identitySelector){
+    identitySelector.addEventListener("change", function(){
+      var picked = identitySelector.value;
+      var previous = (deviceUserName && Array.prototype.some.call(identitySelector.options, function(o){ return o.value === deviceUserName; })) ? deviceUserName : IDENTITY_PLACEHOLDER_VALUE;
+      if (picked === IDENTITY_PLACEHOLDER_VALUE) return; // re-selecting the placeholder itself -- no-op
+      // Identity is always shown here even before a Projects folder is
+      // chosen (see #identityGateRow's own comment) -- but the registry
+      // itself lives IN that folder, so guard against trying to read/write
+      // it before there's anywhere for it to live.
+      if (!projectsRootHandle){
+        showToast("Choose a Projects folder first, then set your name.");
+        revertIdentitySelector(previous);
+        return;
+      }
+      if (picked === IDENTITY_NEW_VALUE) beginAddNewIdentityFlow(previous);
+      else if (picked !== deviceUserName) beginPinVerifyFlow(picked, previous);
+    });
+  }
 
   // Project Info (Project No./Name/Head Contractor, "project-meta.json"),
   // and the "Add joinery item" (Room + Joinery code) dialog, both moved to
@@ -12632,11 +12918,15 @@
     // actually running, on any device, without digging into devtools.
     var hintTextEl = document.getElementById("emptyHintText");
     if (hintTextEl) hintTextEl.appendChild(document.createTextNode(" · " + APP_VERSION));
-    // Shared device identity (added v39) -- independent of the
-    // project-gate flow below, so it loads (and the toolbar button's
-    // label updates) whether or not a Projects folder is even chosen yet.
-    // Never blocks boot: loadDeviceUserName() swallows its own errors.
-    if (!VIEW_ONLY_MODE) loadDeviceUserName();
+    // Shared name+PIN identity (added v39, ported to the CSV+PIN registry
+    // 2026-09-23) -- independent of the project-gate flow below, so it
+    // loads (and the startup screen's identity row updates) whether or not
+    // a Projects folder is even chosen yet. Loaded in BOTH Site Measure and
+    // the Viewer now (previously editor-only, since only the editor
+    // "saved") -- Andrew, verbatim: "implement the username as per the
+    // delivery itp throughout the entire system." Never blocks boot:
+    // loadDeviceUserName() swallows its own errors.
+    loadDeviceUserName();
     if (window.claude && window.claude.use){
       window.claude.use("downloads").then(function(d){ downloadsApi = d; }).catch(function(){});
     }
