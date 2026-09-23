@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.1">
+<link rel="manifest" href="./manifest.json?v=v45.2">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.1">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.1">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.2">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.2">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -693,6 +693,36 @@
   .joinery-item-box{max-width:380px;}
   .modal-box .joinery-item-title{font-weight:700; margin-bottom:2px;}
   .modal-box .joinery-item-subtitle{font-size:12px; color:var(--text-secondary); margin-bottom:14px;}
+
+  /* ---------- Job note dialogs (2026-09-22) ----------
+     "Add job note": drag a PDF (site instructions, a delivery docket, a
+     photo-report already exported to PDF -- anything worth keeping against
+     THIS joinery item specifically) straight onto the dropzone below, or
+     tap it to fall back to the ordinary file picker for anyone on a
+     mouse/touch device without a second window to drag from. "View job
+     note" lists whatever's already been added, newest first. Same small
+     "modal-box" family as every other dialog in this app -- see the
+     Joinery Item dialog's own comment just above. */
+  .jobnote-box{max-width:380px;}
+  .jobnote-dropzone{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; text-align:center; padding:28px 16px; margin:10px 0 14px;
+    border:2px dashed var(--border-strong); border-radius:10px;
+    background:var(--surface-2); color:var(--text-secondary); font-size:13px;
+    cursor:pointer; transition:border-color .12s, background .12s;
+  }
+  .jobnote-dropzone svg{ width:26px; height:26px; stroke:currentColor; }
+  .jobnote-dropzone.dragover{ border-color:var(--accent); background:var(--surface-0); color:var(--text-primary); }
+  .jobnote-dropzone-title{ font-weight:600; color:var(--text-primary); }
+  .jobnote-status{ font-size:12px; color:var(--text-secondary); min-height:16px; margin-top:-6px; margin-bottom:8px; }
+  .jobnote-list{ display:flex; flex-direction:column; gap:6px; max-height:280px; overflow-y:auto; margin-bottom:14px; }
+  .jobnote-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 11px; border-radius:8px; border:1px solid var(--border-strong);
+    background:var(--surface-2); font-size:12.5px;
+  }
+  .jobnote-row-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .jobnote-empty{ font-size:13px; color:var(--text-secondary); padding:8px 2px 14px; }
 
   /* ---------- in-page camera capture ----------
      Added in v37 (2026-09-19) so taking a photo to insert never leaves the
@@ -1513,6 +1543,43 @@
         </div>
       </div>
     </div>
+
+    <!-- "Add job note" (2026-09-22) -- see the jobnote-box CSS comment for
+         the full story. Site Measure and the Viewer both offer this (the
+         Viewer's own one-time write-permission upgrade happens right when
+         a file is actually dropped/picked -- see addJobNoteFile's own
+         comment), never the ITP apps, which only ever get the read-only
+         "View job note" dialog below. -->
+    <div class="modal-backdrop" id="jobNoteAddBackdrop" hidden>
+      <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="jobNoteAddTitle">
+        <p id="jobNoteAddTitle" class="joinery-item-title">Add job note</p>
+        <p id="jobNoteAddSubtitle" class="joinery-item-subtitle"></p>
+        <div class="jobnote-dropzone" id="jobNoteDropzone" tabindex="0" role="button" aria-label="Drag a PDF here, or tap to choose a file">
+          <svg viewBox="0 0 20 20" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 15v1.5A1.5 1.5 0 0 0 5.5 18h9a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+          <span class="jobnote-dropzone-title">Drag a PDF here</span>
+          <span>or tap to choose a file</span>
+        </div>
+        <p class="jobnote-status" id="jobNoteAddStatus"></p>
+        <input type="file" id="jobNoteFileInput" accept="application/pdf,.pdf" style="display:none;">
+        <div class="modal-actions">
+          <button class="mbtn" id="jobNoteAddCancel">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- "View job note" (2026-09-22) -- pure read, offered everywhere a
+         marker's popover shows at all (Site Measure, Viewer, and both ITP
+         apps' own Level Plan screens), unlike "Add job note" above. -->
+    <div class="modal-backdrop" id="jobNoteViewBackdrop" hidden>
+      <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="jobNoteViewTitle">
+        <p id="jobNoteViewTitle" class="joinery-item-title">Job notes</p>
+        <p id="jobNoteViewSubtitle" class="joinery-item-subtitle"></p>
+        <div class="jobnote-list" id="jobNoteListEl"></div>
+        <div class="modal-actions">
+          <button class="mbtn" id="jobNoteViewCancel">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1527,7 +1594,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.1";
+  var APP_VERSION = "v45.2";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3105,6 +3172,72 @@
       return dirH.getDirectoryHandle("drafts", { create: !!create });
     });
   }
+
+  /* ---- Job notes (2026-09-22) ----
+     Andrew's follow-up once the Viewer's read-only guarantee ruled out a
+     bare "mark as check measured" tap there: "allow a job note to be added
+     to a joinery item, when this happens it changes the icon. also add a
+     view job note on right click button." A PDF (a delivery docket, site
+     instructions, anything worth keeping against THIS item specifically)
+     dragged or picked onto the "Add job note" dialog. Storage mirrors the
+     joinery item page's own "Site Measures" convention exactly, just its
+     own sibling branch under Project Saves -- one subfolder per item (same
+     key as everywhere else: joineryItemPageKey/resolveJoineryItemPageKey),
+     holding every note ever added for it, oldest to newest by filename
+     (overlayTimestampStamp sorts lexicographically = chronologically, same
+     trick listJoineryOverlays already relies on). Works identically in
+     both project shapes -- "Project Saves" already exists as a plain
+     project-root folder regardless of shape (see getSiteMeasuresDir's own
+     comment), nothing shape-specific here at all. */
+  function jobNotesBranchName(){ return "Job Notes"; }
+  function getJobNotesDirForItem(projectHandle, key, create){
+    return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
+      return psH.getDirectoryHandle(jobNotesBranchName(), { create: !!create });
+    }).then(function(jnH){
+      return jnH.getDirectoryHandle(key, { create: !!create });
+    });
+  }
+  function jobNoteFileName(originalName){
+    var base = sanitizeFileBase(String(originalName || "note").replace(/\.pdf$/i, "")) || "note";
+    return overlayTimestampStamp() + " - " + base + ".pdf";
+  }
+  // Every note for this item, newest first -- an item nobody's ever added
+  // one for simply has no folder yet, which is not an error, just an empty
+  // list (same convention listJoineryOverlays already uses).
+  function listJobNotes(projectHandle, key){
+    return getJobNotesDirForItem(projectHandle, key, false).then(function(dirH){
+      if (!dirH || typeof dirH.values !== "function") return [];
+      var out = [];
+      var iter = dirH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return out;
+          if (res.value && res.value.kind === "file" && /\.pdf$/i.test(res.value.name)) out.push({ fileName: res.value.name, handle: res.value });
+          return step();
+        });
+      }
+      return step();
+    }, function(){ return []; }).then(function(list){
+      list.sort(function(a, b){ return b.fileName.localeCompare(a.fileName); });
+      return list;
+    });
+  }
+  // Writes the file, then advances the shared status forward to "measured"
+  // (never downgrading one already further along -- see
+  // setJoineryStatusForward's own comment) -- attaching a note is, per
+  // Andrew's own framing, itself evidence the item's been looked at on
+  // site, exactly like the plain "Mark as check measured" button means
+  // elsewhere.
+  function addJobNote(projectHandle, level, room, joineryId, key, file, updatedBy){
+    return getJobNotesDirForItem(projectHandle, key, true).then(function(dirH){
+      return dirH.getFileHandle(jobNoteFileName(file.name), { create: true });
+    }).then(function(fh){
+      return verifiedHandleWrite(fh, file);
+    }).then(function(){
+      return setJoineryStatusForward(projectHandle, level, room, joineryId, "measured", updatedBy);
+    });
+  }
+  function jobNoteKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
   // A person's name, filesystem-sanitised the same way the identity
   // dialog's own sanitizeUserName already does (NOT sanitizeFileBase --
   // that one's own empty-input fallback is the word "plan", which would
@@ -3488,6 +3621,10 @@
       history = [deepClone(state.objects)]; historyIndex = 0;
       fitToView();
       renderAll();
+      // Fire-and-forget -- re-renders a second time once the shared status
+      // file lands, so a level's markers pick up their 📏/📦/🏆 icon as
+      // soon as it's known rather than needing a manual refresh.
+      refreshJoineryStatusCache();
       updateUndoRedoButtons();
       hideProjectGate();
       if (switchProjectBtn) switchProjectBtn.style.display = activeProjectHandle ? "" : "none";
@@ -3552,6 +3689,10 @@
       history = [deepClone(state.objects)]; historyIndex = 0;
       fitToView();
       renderAll();
+      // Fire-and-forget -- re-renders a second time once the shared status
+      // file lands, so a level's markers pick up their 📏/📦/🏆 icon as
+      // soon as it's known rather than needing a manual refresh.
+      refreshJoineryStatusCache();
       updateUndoRedoButtons();
       hideProjectGate();
       // "Switch project / level" has nowhere useful to go back to without a
@@ -3956,6 +4097,142 @@
     closeJoineryItemDialog();
     openJoineryItemPage(obj);
   });
+
+  /* ============================== Job note dialogs (2026-09-22) ==============================
+     See addJobNote's own comment for the storage/status side. Offered from
+     a roomlink marker's own right-click popover in BOTH Site Measure and
+     the Viewer -- see showLockPopover's own comment on why "Add job note"
+     (unlike the plain "Mark as check measured" button) is the Viewer's one
+     deliberate write exception. */
+  var jobNoteAddBackdrop = document.getElementById("jobNoteAddBackdrop");
+  var jobNoteAddSubtitleEl = document.getElementById("jobNoteAddSubtitle");
+  var jobNoteDropzone = document.getElementById("jobNoteDropzone");
+  var jobNoteAddStatusEl = document.getElementById("jobNoteAddStatus");
+  var jobNoteFileInput = document.getElementById("jobNoteFileInput");
+  var activeJobNoteMarker = null;
+  function openAddJobNoteDialog(obj){
+    activeJobNoteMarker = obj;
+    jobNoteAddSubtitleEl.textContent = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
+    jobNoteAddStatusEl.textContent = "";
+    jobNoteAddBackdrop.hidden = false;
+  }
+  function closeAddJobNoteDialog(){
+    jobNoteAddBackdrop.hidden = true;
+    activeJobNoteMarker = null;
+    jobNoteDropzone.classList.remove("dragover");
+  }
+  document.getElementById("jobNoteAddCancel").addEventListener("click", closeAddJobNoteDialog);
+  jobNoteAddBackdrop.addEventListener("click", function(e){ if (e.target === jobNoteAddBackdrop) closeAddJobNoteDialog(); });
+
+  // The Viewer's Projects-root handle is deliberately opened READ permission
+  // only (see pickProjectsRootFolder's own comment) -- this is the one
+  // deliberate, narrowly-scoped exception, requested only at the moment a
+  // note is actually about to be written, and only on the ACTIVE PROJECT's
+  // own directory handle (never re-requested on the whole Projects root the
+  // Viewer originally picked) -- the smallest handle already in memory that
+  // covers where a note needs to go. Every other write path in the Viewer
+  // stays exactly as blocked as before (see VIEW_ONLY_MODE throughout this
+  // file); this permission is only ever consumed by addJobNote's own write.
+  // Site Measure already has readwrite on everything, so this is an instant
+  // resolve there -- never prompts.
+  function ensureProjectWritePermission(){
+    if (!VIEW_ONLY_MODE) return Promise.resolve(true);
+    if (!activeProjectHandle) return Promise.resolve(false);
+    return activeProjectHandle.queryPermission({ mode: "readwrite" }).then(function(perm){
+      if (perm === "granted") return true;
+      // requestPermission needs a genuine user gesture to be allowed to
+      // prompt at all -- this is always reached from the drop/file-input
+      // "change" handlers below, both themselves fired directly off a real
+      // gesture, so that requirement is already satisfied here.
+      return activeProjectHandle.requestPermission({ mode: "readwrite" }).then(function(p){ return p === "granted"; });
+    }).catch(function(){ return false; });
+  }
+  function handleJobNoteFile(file){
+    if (!activeJobNoteMarker || !file) return;
+    if (file.type && file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")){
+      jobNoteAddStatusEl.textContent = "Only PDF files can be added as a job note.";
+      return;
+    }
+    var obj = activeJobNoteMarker;
+    jobNoteAddStatusEl.textContent = "Adding “" + file.name + "”…";
+    ensureProjectWritePermission().then(function(ok){
+      if (!ok){
+        jobNoteAddStatusEl.textContent = "Couldn't get permission to save that here — try again, or add this note from Site Measure instead.";
+        return;
+      }
+      var key = jobNoteKeyFor(obj);
+      return addJobNote(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode || "", key, file, deviceUserName || (VIEW_ONLY_MODE ? "Viewer" : "Site Measure")).then(function(){
+        renderAll();
+        showToast("Job note added to “" + roomlinkDisplayText(obj) + "”.");
+        closeAddJobNoteDialog();
+      });
+    }).catch(function(err){
+      console.error("Add job note failed:", err);
+      jobNoteAddStatusEl.textContent = "Couldn't save that file — try again.";
+    });
+  }
+  jobNoteDropzone.addEventListener("click", function(){ jobNoteFileInput.click(); });
+  jobNoteDropzone.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); jobNoteFileInput.click(); } });
+  jobNoteDropzone.addEventListener("dragover", function(e){ e.preventDefault(); jobNoteDropzone.classList.add("dragover"); });
+  jobNoteDropzone.addEventListener("dragleave", function(){ jobNoteDropzone.classList.remove("dragover"); });
+  jobNoteDropzone.addEventListener("drop", function(e){
+    e.preventDefault();
+    jobNoteDropzone.classList.remove("dragover");
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) handleJobNoteFile(files[0]);
+  });
+  jobNoteFileInput.addEventListener("change", function(){
+    if (jobNoteFileInput.files && jobNoteFileInput.files.length) handleJobNoteFile(jobNoteFileInput.files[0]);
+    jobNoteFileInput.value = "";
+  });
+
+  // "View job note" -- pure read, so this (unlike "Add job note" above)
+  // will also be offered from both ITP apps' own Level Plan screens.
+  var jobNoteViewBackdrop = document.getElementById("jobNoteViewBackdrop");
+  var jobNoteViewSubtitleEl = document.getElementById("jobNoteViewSubtitle");
+  var jobNoteListEl = document.getElementById("jobNoteListEl");
+  function closeViewJobNoteDialog(){ jobNoteViewBackdrop.hidden = true; }
+  document.getElementById("jobNoteViewCancel").addEventListener("click", closeViewJobNoteDialog);
+  jobNoteViewBackdrop.addEventListener("click", function(e){ if (e.target === jobNoteViewBackdrop) closeViewJobNoteDialog(); });
+  function openViewJobNoteDialog(obj){
+    jobNoteViewSubtitleEl.textContent = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
+    jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">Loading…</p>";
+    jobNoteViewBackdrop.hidden = false;
+    var key = jobNoteKeyFor(obj);
+    listJobNotes(activeProjectHandle, key).then(function(notes){
+      jobNoteListEl.innerHTML = "";
+      if (!notes.length){
+        jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">No job notes yet for this item.</p>";
+        return;
+      }
+      notes.forEach(function(note){
+        var row = document.createElement("div");
+        row.className = "jobnote-row";
+        var nameSpan = document.createElement("span");
+        nameSpan.className = "jobnote-row-name";
+        nameSpan.textContent = note.fileName;
+        row.appendChild(nameSpan);
+        var openBtn = document.createElement("button");
+        openBtn.type = "button"; openBtn.className = "mbtn";
+        openBtn.textContent = "Open";
+        openBtn.addEventListener("click", function(){
+          note.handle.getFile().then(function(file){
+            var url = URL.createObjectURL(file);
+            window.open(url, "_blank");
+            setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+          }).catch(function(err){
+            console.error("Open job note failed:", err);
+            showToast("Couldn't open that file — try again.");
+          });
+        });
+        row.appendChild(openBtn);
+        jobNoteListEl.appendChild(row);
+      });
+    }).catch(function(err){
+      console.error("List job notes failed:", err);
+      jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">Couldn't load job notes — try again.</p>";
+    });
+  }
 
   // Placing a new joinery marker/item ("Add joinery item here", the
   // long-press/right-click flow that used to live here as promptAddRoomAt)
@@ -4837,7 +5114,7 @@
   // Short human label for a layer-list row: the object's own text where it
   // has one worth showing, otherwise just its type name.
   function objectSummary(obj){
-    var text = obj.type === "text" ? obj.text : (obj.label ? obj.label.text : null);
+    var text = obj.type === "text" ? obj.text : (obj.type === "roomlink" ? roomlinkDisplayText(obj) : (obj.label ? obj.label.text : null));
     var t = (text || "").replace(/\s+/g, " ").trim();
     if (t) return t.length > 28 ? t.slice(0, 27) + "…" : t;
     return TYPE_NAMES[obj.type] || obj.type;
@@ -5089,6 +5366,130 @@
   // roomlink objects (which just reads obj.type === "roomlink" off
   // whatever's already in state.objects) is untouched and stays right
   // where it is throughout this file.
+
+  // Andrew (2026-09-22): a marker's on-plan label only needs to show its
+  // joinery code -- the room name/number it also used to show ("Room 101 ·
+  // K-01") is redundant now that the joinery item's own page is the real
+  // destination (see openJoineryItemPage/showLockPopover's "Open joinery
+  // item" row). obj.label.text itself is left completely untouched -- it's
+  // a string baked in once, at marker-creation time, by UTZLINE Projects
+  // (makeRoomLinkObject), and every already-saved project has that old
+  // "Room · Code" string sitting in it -- rewriting it everywhere would be
+  // a real migration for zero benefit, since every renderer can just
+  // compute the short display text fresh from the marker's own roomName/
+  // joineryCode fields instead. Falls back to roomName only for the rare
+  // marker with no code typed in yet, so it's never left with a blank
+  // label. Every place across every app that shows a roomlink's label
+  // (this file's own renderObject/objectSummary, UTZLINE Projects' own
+  // planRenderMarkers, and both ITP apps' own buildPlanMarkerEl) computes
+  // it this same way now.
+  function roomlinkDisplayText(obj){
+    return obj.joineryCode || obj.roomName || "";
+  }
+
+  /* ---- joinery-status.json (2026-09-22) ----
+     Andrew: "we also need on the right click menu, a mark as check measured
+     button, this also changes the red dot to the following: site measured
+     📏 / (manufacture itp signed off) 📦 / installed (install itp signed
+     off) 🏆". A single project-wide, project-ROOT file (a sibling of
+     joinery-items.json, deliberately NOT nested under the flat-only
+     "Project Saves/" tree, so the exact same file/format works unchanged in
+     a legacy folder-based project too) -- read and written by Site Measure,
+     the Viewer, Install ITP, and Manufacture ITP alike; the format is
+     mirrored byte-for-byte across all four (no shared module to import from
+     -- see readJoineryItems' own comment on the same file in either ITP
+     app for the identical reasoning).
+     One record per joinery item that has EVER reached "measured" or
+     beyond -- an item with no record at all is simply unset (today's plain
+     dot, no icon). Identity is the same (level, room, joineryId) path key
+     used everywhere else in this ecosystem -- there's still no stable
+     per-item ID anywhere.
+     Status only ever moves FORWARD (measured -> manufactured -> installed),
+     never back -- see joineryStatusRank/setJoineryStatusForward below. Site
+     Measure is the only place that ever writes "measured" here (via the
+     "Mark as check measured" popover row, and via "Add job note" -- see
+     each one's own comment); Install/Manufacture ITP write "manufactured"/
+     "installed" on their own sign-off. The Viewer never writes a bare
+     status this way at all (it stays read-only for that, per Andrew's own
+     answer weighing that against the Viewer's read-only-by-construction
+     folder permission) -- it only ever moves the needle by attaching a job
+     note (see addJobNote's own comment), which is itself just a call into
+     setJoineryStatusForward like everything else here.
+     Cached in memory (joineryStatusCache) rather than re-read on every
+     render -- renderObject/renderAll run synchronously and far too often
+     (every drag frame) to await a file read from there; refreshJoineryStatusCache
+     re-reads it and re-renders once, on level open and after this app's own
+     writes to it. */
+  var joineryStatusCache = null; // null until the first read resolves; [] once loaded with no records
+  function joineryStatusRank(status){
+    return status === "installed" ? 3 : status === "manufactured" ? 2 : status === "measured" ? 1 : 0;
+  }
+  function joineryStatusIcon(status){
+    return status === "installed" ? "🏆" : status === "manufactured" ? "📦" : status === "measured" ? "📏" : "";
+  }
+  function readJoineryStatuses(projectHandle){
+    if (!projectHandle) return Promise.resolve([]);
+    return projectHandle.getFileHandle("joinery-status.json", { create: false }).then(function(fh){
+      return fh.getFile();
+    }).then(function(file){
+      return file.text();
+    }).then(function(text){
+      try{ var arr = JSON.parse(text); return Array.isArray(arr) ? arr : []; }catch(e){ return []; }
+    }, function(){ return []; }); // no file yet -- not an error, every item just reads as unset
+  }
+  function findJoineryStatus(list, level, room, joineryId){
+    for (var i = 0; i < list.length; i++){
+      var rec = list[i];
+      if (rec && rec.level === level && (rec.room || "") === (room || "") && (rec.joineryId || "") === (joineryId || "")) return rec;
+    }
+    return null;
+  }
+  // Read-modify-write with the forward-only guard baked in -- resolves to
+  // whatever status ends up on record (which may be unchanged from before
+  // this call, if newStatus wasn't actually an advance). Every caller
+  // funnels through this one function rather than writing the file
+  // directly, so the forward-only rule can never accidentally be bypassed
+  // from just one call site. Updates joineryStatusCache in place too, so a
+  // caller that then calls renderAll() sees the change immediately without
+  // waiting on a fresh read.
+  function setJoineryStatusForward(projectHandle, level, room, joineryId, newStatus, updatedBy){
+    if (!projectHandle) return Promise.resolve(null);
+    return readJoineryStatuses(projectHandle).then(function(list){
+      var rec = findJoineryStatus(list, level, room, joineryId);
+      var curRank = rec ? joineryStatusRank(rec.status) : 0;
+      var newRank = joineryStatusRank(newStatus);
+      if (newRank <= curRank){ joineryStatusCache = list; return rec ? rec.status : null; }
+      var stamp = new Date().toISOString();
+      if (rec){
+        rec.status = newStatus; rec.updatedAt = stamp; rec.updatedBy = updatedBy || "";
+      } else {
+        list.push({ level: level, room: room || "", joineryId: joineryId || "", status: newStatus, updatedAt: stamp, updatedBy: updatedBy || "" });
+      }
+      var payload = JSON.stringify(list);
+      return projectHandle.getFileHandle("joinery-status.json", { create: true }).then(function(fh){
+        return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
+      }).then(function(){ joineryStatusCache = list; return newStatus; });
+    });
+  }
+  // Re-reads the whole file and re-renders once it lands -- called right
+  // after a level opens (see applyRestoredState) so the on-plan icons show
+  // up as soon as they're known, and again after this app's own writes to
+  // the file so the change is visible without waiting for the next level
+  // switch. Never blocks anything else on the read -- renderAll already ran
+  // once (with whatever joineryStatusCache happened to hold, often null ->
+  // no icons yet) by the time this resolves.
+  function refreshJoineryStatusCache(){
+    if (!activeProjectHandle){ joineryStatusCache = []; return Promise.resolve(); }
+    return readJoineryStatuses(activeProjectHandle).then(function(list){
+      joineryStatusCache = list;
+      renderAll();
+    });
+  }
+  function joineryStatusIconFor(obj){
+    if (!joineryStatusCache) return "";
+    var rec = findJoineryStatus(joineryStatusCache, activeLevelName, obj.roomName, obj.joineryCode || "");
+    return rec ? joineryStatusIcon(rec.status) : "";
+  }
 
   /* ============================== end caps ============================== */
   // sizeA/sizeB are the two arms' independent lengths — arm A and arm B are
@@ -5414,7 +5815,29 @@
       g.appendChild(el("circle", { cx: obj.x, cy: obj.y, r: rlR + rlPad * 2, fill: "#ffffff" }));
       g.appendChild(el("circle", { cx: obj.x, cy: obj.y, r: rlR + rlPad, fill: "#000000" }));
       g.appendChild(el("circle", { cx: obj.x, cy: obj.y, r: rlR, fill: obj.color, "fill-opacity": objOpacity(obj) }));
-      g.appendChild(renderLabelGroup(obj.label, "label"));
+      // Display text only -- see roomlinkDisplayText's own comment. obj.label
+      // itself (position/rotation/font/color) is passed through untouched,
+      // just its .text swapped for the short display form; nothing here
+      // mutates the real, saved obj.label.text.
+      var rlLabel = {};
+      for (var rlLabelKey in obj.label){ if (obj.label.hasOwnProperty(rlLabelKey)) rlLabel[rlLabelKey] = obj.label[rlLabelKey]; }
+      rlLabel.text = roomlinkDisplayText(obj);
+      g.appendChild(renderLabelGroup(rlLabel, "label"));
+      // Job-status badge (📏/📦/🏆, from the shared joinery-status.json --
+      // see setJoineryStatusForward's own comment) -- sits at the marker's
+      // own top-right, entirely separate from the dot's own color/fill
+      // above. Blank/absent for an item that's still fully unset, exactly
+      // like today, before this feature existed.
+      var rlIcon = joineryStatusIconFor(obj);
+      if (rlIcon){
+        var rlBadge = el("text", {
+          x: obj.x + rlR * 0.85, y: obj.y - rlR * 0.85, "font-size": Math.max(12, rlR * 1.1),
+          "text-anchor": "middle", "dominant-baseline": "middle",
+          stroke: "#ffffff", "stroke-width": 3, "paint-order": "stroke"
+        });
+        rlBadge.textContent = rlIcon;
+        g.appendChild(rlBadge);
+      }
     }
     return g;
   }
@@ -6734,6 +7157,10 @@
   // Bring to front's own composition.
   var SEND_BACK_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="9" height="9" rx="1"/><path d="M14.5 7.5H16A1 1 0 0 1 17 8.5V16A1 1 0 0 1 16 17H8.5A1 1 0 0 1 7.5 16V14.5"/></svg>';
   var ROOM_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17V4.5a1 1 0 0 1 1-1h4l4 2v11.5"/><path d="M5 17h9"/><circle cx="11.3" cy="10.5" r="0.7" fill="currentColor" stroke="none"/></svg>';
+  // A little tape measure -- "Mark as check measured" (📏 once set).
+  var MEASURE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="14" height="6" rx="1.3"/><path d="M6 7.5v2.2M9 7.5v2.2M12 7.5v2.2M15 7.5v2.2"/></svg>';
+  // A small paperclip -- "Add job note"/"View job note".
+  var JOBNOTE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.2l-6 6a3 3 0 0 0 4.24 4.24l5.3-5.3a1.8 1.8 0 0 0-2.55-2.55l-5.3 5.3a0.6 0.6 0 0 0 0.85 0.85l4.9-4.9"/></svg>';
   // Same curved-arrow language (and literal paths) as the toolbar's own
   // Undo/Redo icons -- CCW curves left like Undo, CW curves right like
   // Redo, so "which way does this arrow turn" already reads consistently
@@ -6846,6 +7273,54 @@
       popoverRow(wrap, ROOM_ICON + "<span>Open joinery item</span>", function(){
         hideLockPopover();
         openRoomFromMarker(obj);
+      });
+    }
+
+    // "Mark as check measured" (2026-09-22, Andrew) -- Site Measure only,
+    // never the Viewer: the Viewer's own folder handle is deliberately
+    // opened read-only at the browser/OS level (see pickProjectsRootFolder's
+    // own comment) specifically so it can never write, and a bare status
+    // flip isn't worth breaking that guarantee for -- Andrew's own answer,
+    // weighing this exact tradeoff, was that the Viewer's only write path
+    // stays "Add job note" below (attaching a PDF is worth the one-time
+    // permission prompt; a plain button tap isn't). Sets the shared
+    // joinery-status.json record to "measured" (📏) -- see
+    // setJoineryStatusForward's own comment for the file itself and the
+    // forward-only rule. Hidden once the item's already at "measured" or
+    // beyond (manufactured/installed) -- same reasoning as "Bring to
+    // front"'s own already-there guard just below: a row that can only ever
+    // no-op isn't offered at all.
+    if (isRealObject && obj.type === "roomlink" && !VIEW_ONLY_MODE){
+      var rlCurStatusRec = joineryStatusCache ? findJoineryStatus(joineryStatusCache, activeLevelName, obj.roomName, obj.joineryCode || "") : null;
+      var rlCurRank = rlCurStatusRec ? joineryStatusRank(rlCurStatusRec.status) : 0;
+      if (rlCurRank < joineryStatusRank("measured")){
+        popoverRow(wrap, MEASURE_ICON + "<span>Mark as check measured</span>", function(){
+          hideLockPopover();
+          setJoineryStatusForward(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode || "", "measured", deviceUserName || "Site Measure").then(function(status){
+            renderAll();
+            if (status) showToast("Marked “" + roomlinkDisplayText(obj) + "” as site measured.");
+          }).catch(function(err){
+            console.error("Mark as check measured failed:", err);
+            showToast("Couldn't save that — try again.");
+          });
+        });
+      }
+    }
+
+    // "Add job note" / "View job note" (2026-09-22, Andrew) -- unlike "Mark
+    // as check measured" above, offered in BOTH Site Measure and the
+    // Viewer: attaching a PDF is a deliberate, occasional action worth the
+    // Viewer's one-time write-permission prompt (see
+    // ensureProjectWritePermission's own comment), even though a bare
+    // status-flip tap isn't. "View" is pure read, offered unconditionally.
+    if (isRealObject && obj.type === "roomlink"){
+      popoverRow(wrap, JOBNOTE_ICON + "<span>Add job note</span>", function(){
+        hideLockPopover();
+        openAddJobNoteDialog(obj);
+      });
+      popoverRow(wrap, JOBNOTE_ICON + "<span>View job note</span>", function(){
+        hideLockPopover();
+        openViewJobNoteDialog(obj);
       });
     }
 

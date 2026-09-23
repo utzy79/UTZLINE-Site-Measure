@@ -960,7 +960,61 @@
 // folder rename, Unified Implementation Brief section O) -- Site Measure's
 // listExistingLevels() picks up the same exclusion so that folder never
 // shows up mislabeled as a level here either. No other functional change.
-var CACHE_NAME = "utzline-sitemeasure-cache-v45.1";
+//
+// v45.2 (2026-09-23, per Andrew: "here in the viewers we dont need to see
+// the room number and code, just the joinery code. we also need on the
+// right click menu, a mark as check measured button, this also changes the
+// red dot to the following site measured / (manufacture itp signed off) /
+// installed (install itp signed off)"). Two pieces:
+//
+// (1) A roomlink marker's on-plan label (and its Layers-list entry) now
+// shows only its joinery code, never "Room · Code" -- computed fresh at
+// render time (roomlinkDisplayText()), never migrating any already-saved
+// label text. Applies here, in the Viewer, and in both ITP apps' own Level
+// Plan screens (UTZLINE Projects' own plan screen untouched -- never asked
+// for there).
+//
+// (2) A new project-root file, joinery-status.json (a sibling of
+// joinery-items.json, same "works unchanged in both a legacy folder
+// project and a flat UTZLINE-Projects-created one" convention), tracks one
+// forward-only status per joinery item: unset -> measured (📏) ->
+// manufactured (📦) -> installed (🏆), never demoted. A new "Mark as check
+// measured" row on the right-click/long-press menu (Site Measure only --
+// the Viewer never gets this, see below) sets "measured"; Manufacture
+// ITP's and Install ITP's own checklist sign-offs auto-advance to
+// "manufactured"/"installed" the moment both signatures are on the page
+// (and retroactively, the next time an already-signed checklist from
+// before this existed is opened). The status badge renders on markers
+// here, in the Viewer, and on both ITP apps' own Level Plan screens.
+//
+// The Viewer was asked for the same status system, but its Projects-root
+// folder handle is deliberately opened with browser-level READ-ONLY
+// permission (VIEW_ONLY_MODE) -- a defense-in-depth guarantee documented
+// throughout source.html, not just app-logic gating -- so a bare status-
+// flip button there would mean either quietly breaking that guarantee or
+// prompting for a blanket read-write upgrade on first use. Raised with
+// Andrew directly; his answer replaced a Viewer status button with a job-
+// notes feature instead: "the viewer wont mark as chack measured, all it
+// does is allow a job note to be added to a joinery item, when this
+// happens it changes the icon." So the Viewer gets no "Mark as check
+// measured" row at all, but does get "Add job note" (drag a PDF onto a
+// popup, or tap to pick a file) and "View job note" (lists what's already
+// there), both writing under this item's own
+// "Project Saves/Job Notes/<key>/" folder; adding a note also forward-
+// advances an unset status to "measured". The Viewer's one and only write
+// path is this action, permission-scoped to just the active project's own
+// folder handle (never the whole Projects root) and requested only at the
+// moment "Add job note" is actually used -- every other Viewer action
+// stays exactly as read-only as before. Site Measure gets both "Mark as
+// check measured" and the job-note rows.
+// New regression test run_joinery_status_and_job_notes.js exercises all of
+// this end to end (label simplification, the row appearing/hiding/writing
+// the real file, the forward-only guard against an ITP-set status ever
+// being demoted, the Viewer never offering the check-measured row, and a
+// dropped PDF landing on disk and advancing the status). Full regression
+// suite re-run clean afterward (same 4 pre-existing environment-flake
+// failures as v45.0/v45.1, none new).
+var CACHE_NAME = "utzline-sitemeasure-cache-v45.2";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
