@@ -1014,7 +1014,7 @@
 // dropped PDF landing on disk and advancing the status). Full regression
 // suite re-run clean afterward (same 4 pre-existing environment-flake
 // failures as v45.0/v45.1, none new).
-var CACHE_NAME = "utzline-sitemeasure-cache-v45.3";
+var CACHE_NAME = "utzline-sitemeasure-cache-v45.4";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

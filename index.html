@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.3">
+<link rel="manifest" href="./manifest.json?v=v45.4">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.3">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.3">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.4">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.4">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1687,7 +1687,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.3";
+  var APP_VERSION = "v45.4";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3315,19 +3315,21 @@
       return list;
     });
   }
-  // Writes the file, then advances the shared status forward to "measured"
-  // (never downgrading one already further along -- see
-  // setJoineryStatusForward's own comment) -- attaching a note is, per
-  // Andrew's own framing, itself evidence the item's been looked at on
-  // site, exactly like the plain "Mark as check measured" button means
-  // elsewhere.
+  // Writes the file, then marks the shared record's independent "has a job
+  // note" flag (see markJobNoteAdded's own comment) -- deliberately NOT the
+  // status pipeline any more. Originally (v45.2) this advanced status to
+  // "measured", on the reasoning that attaching a note is itself evidence
+  // the item's been looked at on site; Andrew corrected this 2026-09-23:
+  // "measured is only done by the right click selector on site measures
+  // app, 🛠️ is triggered by adding a JOB note" -- the two are now
+  // completely independent signals on the same record.
   function addJobNote(projectHandle, level, room, joineryId, key, file, updatedBy){
     return getJobNotesDirForItem(projectHandle, key, true).then(function(dirH){
       return dirH.getFileHandle(jobNoteFileName(file.name), { create: true });
     }).then(function(fh){
       return verifiedHandleWrite(fh, file);
     }).then(function(){
-      return setJoineryStatusForward(projectHandle, level, room, joineryId, "measured", updatedBy);
+      return markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy);
     });
   }
   function jobNoteKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
@@ -3342,12 +3344,14 @@
      per-item-folder convention (same key everywhere else uses), but adds
      revision tracking Job Notes never needed: "if a second drawing is
      added, ask if this is a revision and add it accordingly (dont delete
-     old, but have a selecter to open RevA, REVB, etc.)". Each independent
-     drawing gets its own subfolder (a "drawing group", named by a stamp
-     unique to when it was first added); every revision of that SAME
-     drawing is a separate, never-overwritten file inside that one
-     subfolder, named "RevA - <when> - <original file name>.pdf", "RevB -
-     ...", and so on -- additive only, exactly as asked. A second drawing
+     old, but have a selecter to open RevA, REVB, etc.)" -- revised the same
+     day to plain zero-based numbering ("Revisions start at REV 0"), see
+     revLabelValue/nextRevLabel's own comments. Each independent drawing
+     gets its own subfolder (a "drawing group", named by a stamp unique to
+     when it was first added); every revision of that SAME drawing is a
+     separate, never-overwritten file inside that one subfolder, named
+     "REV 0 - <when> - <original file name>.pdf", "REV 1 - ...", and so on
+     -- additive only, exactly as asked. A second drawing
      the user says is NOT a revision of anything gets its own brand new
      group folder instead, so it shows up as a wholly separate drawing,
      never lumped in as a revision of the first (confirmed with Andrew
@@ -3372,39 +3376,55 @@
   function newShopDrawingGroupId(){
     return overlayTimestampStamp() + "-" + Math.random().toString(36).slice(2, 6);
   }
+  // Andrew, 2026-09-23: "Revisions start at REV 0" -- replaces the original
+  // v45.3 base-26 letter scheme (RevA, RevB, ...) with plain zero-based
+  // numbering. Unmatched/unparseable input reads as -1 (not 0), so
+  // nextRevLabel on a brand new drawing with zero existing revisions
+  // correctly starts at "REV 0" (-1 + 1), not "REV 1". Still recognises the
+  // old lettered form (shipped for less than a day, before this correction)
+  // so a drawing revision saved under it sorts correctly, always before any
+  // new-scheme numeric revision -- read-side compatibility only, nothing on
+  // disk is ever renamed.
   function revLabelValue(revLabel){
-    var m = /^Rev([A-Z]+)$/.exec(revLabel || "");
-    if (!m) return 0;
-    var letters = m[1], n = 0;
-    for (var i = 0; i < letters.length; i++){ n = n * 26 + (letters.charCodeAt(i) - 64); }
-    return n;
-  }
-  // RevA, RevB, ... RevZ, RevAA, RevAB, ... -- same base-26 letter scheme
-  // spreadsheet columns use, so it never runs out.
-  function nextRevLabel(existingRevLabels){
-    var maxN = 0;
-    (existingRevLabels || []).forEach(function(lbl){ var v = revLabelValue(lbl); if (v > maxN) maxN = v; });
-    var next = maxN + 1, out = "";
-    while (next > 0){
-      var rem = (next - 1) % 26;
-      out = String.fromCharCode(65 + rem) + out;
-      next = Math.floor((next - 1) / 26);
+    var m = /^REV (\d+)$/.exec(revLabel || "");
+    if (m) return parseInt(m[1], 10);
+    var legacy = /^Rev([A-Z]+)$/.exec(revLabel || "");
+    if (legacy){
+      var letters = legacy[1], n = 0;
+      for (var i = 0; i < letters.length; i++){ n = n * 26 + (letters.charCodeAt(i) - 64); }
+      return n - 1000000;
     }
-    return "Rev" + out;
+    return -1;
+  }
+  // REV 0, REV 1, REV 2, ... -- never runs out, no letters to overflow past
+  // Z. Not zero-padded (Andrew's own literal wording was "REV 0", not
+  // "REV 00") -- past 9 revisions on one drawing, a plain file browser's own
+  // alphabetical sort would show REV 10 before REV 2; every in-app list
+  // (listShopDrawingRevisions and its callers) sorts by revLabelValue, the
+  // parsed number, so the app's own ordering is unaffected either way.
+  function nextRevLabel(existingRevLabels){
+    var maxN = -1;
+    (existingRevLabels || []).forEach(function(lbl){ var v = revLabelValue(lbl); if (v > maxN) maxN = v; });
+    return "REV " + (maxN + 1);
   }
   function shopDrawingRevisionFileName(revLabel, originalName){
     var base = sanitizeFileBase(String(originalName || "drawing").replace(/\.pdf$/i, "")) || "drawing";
     return revLabel + " - " + overlayTimestampStamp() + " - " + base + ".pdf";
   }
-  // Splits "RevA - 2026-09-23 02-04-06 - elevation-north.pdf" into its
+  // Splits "REV 0 - 2026-09-23 02-04-06 - elevation-north.pdf" into its
   // revision label and the original file's own display name -- found by
   // slicing off the rev-label prefix, then the FIRST " - " after it (the
   // timestamp itself never contains " - ", only a plain space between its
   // date and time halves, so this can't be fooled by an original file name
-  // that happens to contain dashes of its own).
+  // that happens to contain dashes of its own). Still recognises the old
+  // "RevA - ..." shape from before this same-day numbering change, so a
+  // drawing revision saved under the original v45.3 lettered scheme keeps
+  // reading back correctly rather than showing "REV ?" -- nothing on disk
+  // is ever renamed/migrated, this is read-side only.
   function parseShopDrawingRevisionFileName(fileName){
-    var m = /^Rev([A-Z]+) - /.exec(fileName);
-    var revLabel = m ? ("Rev" + m[1]) : "Rev?";
+    var m = /^REV (\d+) - /.exec(fileName) || /^Rev([A-Z]+) - /.exec(fileName);
+    var revLabel = "REV ?";
+    if (m) revLabel = (/^\d+$/.test(m[1]) ? "REV " + m[1] : "Rev" + m[1]);
     var afterRev = m ? fileName.slice(m[0].length) : fileName;
     var idx = afterRev.indexOf(" - ");
     var displayName = idx >= 0 ? afterRev.slice(idx + 3) : afterRev;
@@ -5884,16 +5904,21 @@
      used everywhere else in this ecosystem -- there's still no stable
      per-item ID anywhere.
      Status only ever moves FORWARD (measured -> manufactured -> installed),
-     never back -- see joineryStatusRank/setJoineryStatusForward below. Site
-     Measure is the only place that ever writes "measured" here (via the
-     "Mark as check measured" popover row, and via "Add job note" -- see
-     each one's own comment); Install/Manufacture ITP write "manufactured"/
-     "installed" on their own sign-off. The Viewer never writes a bare
-     status this way at all (it stays read-only for that, per Andrew's own
-     answer weighing that against the Viewer's read-only-by-construction
-     folder permission) -- it only ever moves the needle by attaching a job
-     note (see addJobNote's own comment), which is itself just a call into
-     setJoineryStatusForward like everything else here.
+     never back -- see joineryStatusRank/setJoineryStatusForward below.
+     "Measured" is set ONLY by Site Measure's own "Mark as check measured"
+     popover row -- Andrew, 2026-09-23, correcting the original v45.2 design:
+     "measured is only done by the right click selector on site measures
+     app." Install/Manufacture ITP write "manufactured"/"installed" on their
+     own sign-off. The Viewer never writes a bare status this way at all (it
+     stays read-only for that, per Andrew's own answer weighing that against
+     the Viewer's read-only-by-construction folder permission).
+     Attaching a job note is a DIFFERENT, independent signal -- see
+     addJobNote/markJobNoteAdded's own comment -- deliberately no longer
+     folded into this same status field (Andrew, 2026-09-23: "🛠️ is
+     triggered by adding a JOB note", kept separate from "measured" rather
+     than substituting for it). A record can be mid-pipeline AND have a job
+     note at the same time; joineryDisplayIconFor below picks which single
+     icon wins when more than one applies.
      Cached in memory (joineryStatusCache) rather than re-read on every
      render -- renderObject/renderAll run synchronously and far too often
      (every drag frame) to await a file read from there; refreshJoineryStatusCache
@@ -5905,6 +5930,22 @@
   }
   function joineryStatusIcon(status){
     return status === "installed" ? "🏆" : status === "manufactured" ? "📦" : status === "measured" ? "📏" : "";
+  }
+  // Combines the forward-only status pipeline with the independent job-note
+  // flag into the ONE icon a marker actually shows (Andrew, 2026-09-23:
+  // icons now overlay the dot itself, same size as the dot -- there's only
+  // room to show one at a time). Priority, most-advanced-information-first:
+  // installed/manufactured (real downstream sign-off) beat a job note,
+  // which in turn beats a bare "measured" (a job note is itself a real
+  // attached document, more specific than a plain click) -- a disclosed
+  // design call, not something Andrew specified explicitly.
+  function joineryDisplayIcon(rec){
+    if (!rec) return "";
+    if (rec.status === "installed") return "🏆";
+    if (rec.status === "manufactured") return "📦";
+    if (rec.jobNote) return "🛠️";
+    if (rec.status === "measured") return "📏";
+    return "";
   }
   function readJoineryStatuses(projectHandle){
     if (!projectHandle) return Promise.resolve([]);
@@ -5967,7 +6008,32 @@
   function joineryStatusIconFor(obj){
     if (!joineryStatusCache) return "";
     var rec = findJoineryStatus(joineryStatusCache, activeLevelName, obj.roomName, obj.joineryCode || "");
-    return rec ? joineryStatusIcon(rec.status) : "";
+    return joineryDisplayIcon(rec);
+  }
+  // Read-modify-write for the independent "has a job note" flag -- a sibling
+  // of setJoineryStatusForward's own status field, on the exact same record
+  // (see that function's own comment for why the two are now decoupled).
+  // Never demotes: once true, stays true; a second/third job note just
+  // updates the timestamp/who. Adding the very first job note to an item
+  // that has no status record at all yet creates one with an empty status
+  // (rank 0, unset) plus jobNote:true, so the pipeline itself is completely
+  // untouched by this.
+  function markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy){
+    if (!projectHandle) return Promise.resolve(null);
+    return readJoineryStatuses(projectHandle).then(function(list){
+      var rec = findJoineryStatus(list, level, room, joineryId);
+      var stamp = new Date().toISOString();
+      if (rec){
+        rec.jobNote = true; rec.jobNoteAt = stamp; rec.jobNoteBy = updatedBy || "";
+      } else {
+        rec = { level: level, room: room || "", joineryId: joineryId || "", status: "", updatedAt: stamp, updatedBy: updatedBy || "", jobNote: true, jobNoteAt: stamp, jobNoteBy: updatedBy || "" };
+        list.push(rec);
+      }
+      var payload = JSON.stringify(list);
+      return projectHandle.getFileHandle("joinery-status.json", { create: true }).then(function(fh){
+        return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
+      }).then(function(){ joineryStatusCache = list; return rec; });
+    });
   }
 
   /* ============================== end caps ============================== */
@@ -6302,16 +6368,19 @@
       for (var rlLabelKey in obj.label){ if (obj.label.hasOwnProperty(rlLabelKey)) rlLabel[rlLabelKey] = obj.label[rlLabelKey]; }
       rlLabel.text = roomlinkDisplayText(obj);
       g.appendChild(renderLabelGroup(rlLabel, "label"));
-      // Job-status badge (📏/📦/🏆, from the shared joinery-status.json --
-      // see setJoineryStatusForward's own comment) -- sits at the marker's
-      // own top-right, entirely separate from the dot's own color/fill
-      // above. Blank/absent for an item that's still fully unset, exactly
-      // like today, before this feature existed.
+      // Status/job-note badge (🏆/📦/🛠️/📏, see joineryDisplayIcon's own
+      // comment for which one wins when more than one applies) -- Andrew,
+      // 2026-09-23: "icons to be bigger (same size as the dot, overlays
+      // over the dot)", correcting the original v45.2 design which sat a
+      // smaller badge off at the marker's top-right corner. Now centered
+      // directly on the dot at (obj.x, obj.y), sized to the dot's own full
+      // diameter. Blank/absent for an item with no status and no job note,
+      // exactly like today, before this feature existed.
       var rlIcon = joineryStatusIconFor(obj);
       if (rlIcon){
         var rlBadge = el("text", {
-          x: obj.x + rlR * 0.85, y: obj.y - rlR * 0.85, "font-size": Math.max(12, rlR * 1.1),
-          "text-anchor": "middle", "dominant-baseline": "middle",
+          x: obj.x, y: obj.y, "font-size": Math.max(16, rlR * 2),
+          "text-anchor": "middle", "dominant-baseline": "central",
           stroke: "#ffffff", "stroke-width": 3, "paint-order": "stroke"
         });
         rlBadge.textContent = rlIcon;
@@ -7791,17 +7860,23 @@
       }
     }
 
-    // "Add job note" / "View job note" (2026-09-22, Andrew) -- unlike "Mark
-    // as check measured" above, offered in BOTH Site Measure and the
-    // Viewer: attaching a PDF is a deliberate, occasional action worth the
-    // Viewer's one-time write-permission prompt (see
-    // ensureProjectWritePermission's own comment), even though a bare
-    // status-flip tap isn't. "View" is pure read, offered unconditionally.
-    if (isRealObject && obj.type === "roomlink"){
+    // "Add job note" (2026-09-22, Andrew) -- ORIGINALLY offered in both
+    // Site Measure and the Viewer (attaching a PDF being worth the Viewer's
+    // one-time write-permission prompt, see ensureProjectWritePermission's
+    // own comment). Andrew, 2026-09-23: "Remove add job note from the Site
+    // measure app. but keep add shop drawing" -- Site Measure loses the
+    // ability to add one; the Viewer is now the only place a job note can
+    // be attached from at all.
+    if (isRealObject && obj.type === "roomlink" && VIEW_ONLY_MODE){
       popoverRow(wrap, JOBNOTE_ICON + "<span>Add job note</span>", function(){
         hideLockPopover();
         openAddJobNoteDialog(obj);
       });
+    }
+    // "View job note" -- pure read, kept in BOTH apps (Site Measure can
+    // still see a note someone added from the Viewer, it just can't add one
+    // of its own any more).
+    if (isRealObject && obj.type === "roomlink"){
       popoverRow(wrap, JOBNOTE_ICON + "<span>View job note</span>", function(){
         hideLockPopover();
         openViewJobNoteDialog(obj);
