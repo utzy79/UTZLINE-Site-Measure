@@ -1,10 +1,12 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v45.8** (bump this line, and add a dated changelog
+**Current version: v45.9** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v45.9 (2026-09-23, same day):** Andrew's "manufacture status" pipeline splits again — a new "machined" stage (⚙️, rank 3) now sits between `"in_manufacture"` and `"manufactured"` in the shared, byte-for-byte-mirrored `joinery-status.json` rank table, written by a brand-new sibling app, **Machine Schedule**, built in parallel with this change. Every rank at or above the old `"manufactured"` (3) shifts up by one across the whole UTZLINE family: `manufactured` → 4, `delivered` → 5, `installed` → 6. `joineryStatusRank()`, `joineryStatusIcon()`, and `joineryDisplayIcon()` all got the new `"machined"` case (⚙️) and the renumbered ranks. This app remains a pure read-only consumer of `"machined"`/`"manufactured"`/`"delivered"`/`"installed"` — it still only ever writes `"measured"` (and, since v45.8, `"in_manufacture"` via job notes) itself — so no new write path was added; this is purely keeping the shared enum's rank/icon tables in sync across the family so this app's own on-plan status badge and rank comparisons stay correct. No status-filter dropdown or other place in this app lists status values explicitly, so nothing else needed updating.
 
 **v45.8 (2026-09-23):** Andrew, verbatim: "when a joinery item gets a job note (not shop drawing) it should update the joinery status to in manufacture in the joinery register." Reverses (in a different direction) the same-day v45.2/v45.3-era decoupling that made a job note a purely independent 🛠️ flag — `addJobNote()` now ALSO advances the shared forward-only `joinery-status.json` pipeline to `"in_manufacture"` (🏭), same call every ITP app already uses (`setJoineryStatusForward`), so an item already at `manufactured`/`delivered`/`installed` is never pushed backward by a job note added after the fact. The independent `jobNote`/`jobNoteAt`/`jobNoteBy` flag is unchanged and still tracked separately (it's what gates "View job note"'s own visibility) — this just also writes the pipeline stage now. Shop Drawings remain completely unwired from the pipeline, exactly as before.
 

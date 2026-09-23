@@ -1042,7 +1042,21 @@
 // existing sign-off write on open, and stale test expectations predating
 // the "View job note" gating above -- see redline-manufacture-itp-pwa's own
 // service-worker.js v5 note and the test files themselves).
-var CACHE_NAME = "utzline-sitemeasure-cache-v45.8";
+//
+// v45.9 (2026-09-23, same day): Andrew's "manufacture status" pipeline
+// splits again -- a new "machined" stage (⚙️, rank 3) now sits between
+// "in_manufacture" and "manufactured", written by a brand-new sibling app,
+// "Machine Schedule", built in parallel with this change. Every rank at or
+// above the old "manufactured" (3) shifts up by one across the whole
+// UTZLINE family: manufactured -> 4, delivered -> 5, installed -> 6.
+// joineryStatusRank/joineryStatusIcon/joineryDisplayIcon here got the new
+// "machined" case and the renumbered ranks; this app remains a pure
+// read-only consumer of the "machined"/"manufactured"/"delivered"/
+// "installed" stages (it still only ever writes "measured" and
+// "in_manufacture" itself, exactly as before) -- no new write path was
+// added, this is purely keeping the shared enum's rank/icon tables in sync
+// so this app's own on-plan status badge stays correct.
+var CACHE_NAME = "utzline-sitemeasure-cache-v45.9";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.8">
+<link rel="manifest" href="./manifest.json?v=v45.9">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.8">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.8">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.9">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.9">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1719,7 +1719,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.8";
+  var APP_VERSION = "v45.9";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -6067,13 +6067,25 @@
      the status changes for that joinery item, dates and who changed it" on
      hover. See setJoineryStatusForward below for how it's appended
      (including a one-time backfill for a record that already existed
-     before this field did). */
+     before this field did).
+     SPLIT AGAIN 2026-09-23, later the same day (Andrew): "manufacture
+     status" itself splits into two sequential stages -- a new "machined"
+     stage (⚙️, rank 3), written by a brand-new sibling app, "Machine
+     Schedule", now sitting BEFORE the existing "manufactured" stage in the
+     pipeline. Every rank at or above the old "manufactured" (3) shifts up
+     by one: manufactured -> 4, delivered -> 5, installed -> 6. Site Measure
+     and the Viewer are pure read-only consumers of this string here (this
+     app only ever writes "measured" itself, via setJoineryStatusForward
+     below) -- this app's own rank table/icon maps just need to stay in sync
+     with the shared enum so its on-plan icon/rank display stays correct;
+     no new write path was added on this side. */
   var joineryStatusCache = null; // null until the first read resolves; [] once loaded with no records
   function joineryStatusRank(status){
     switch (status){
-      case "installed": return 5;
-      case "delivered": return 4;
-      case "manufactured": return 3;
+      case "installed": return 6;
+      case "delivered": return 5;
+      case "manufactured": return 4;
+      case "machined": return 3;
       case "in_manufacture": return 2;
       case "measured": return 1;
       default: return 0;
@@ -6084,6 +6096,7 @@
       case "installed": return "🏆";
       case "delivered": return "🚚";
       case "manufactured": return "📦";
+      case "machined": return "⚙️";
       case "in_manufacture": return "🏭";
       case "measured": return "📏";
       default: return "";
@@ -6103,6 +6116,7 @@
     if (rec.status === "installed") return "🏆";
     if (rec.status === "delivered") return "🚚";
     if (rec.status === "manufactured") return "📦";
+    if (rec.status === "machined") return "⚙️";
     if (rec.status === "in_manufacture") return "🏭";
     if (rec.jobNote) return "🛠️";
     if (rec.status === "measured") return "📏";
