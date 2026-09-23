@@ -1,12 +1,16 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v45.7** (bump this line, and add a dated changelog
+**Current version: v45.8** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
 
-**v45.7 (2026-09-23):** three requests from Andrew, sent together with two
+**v45.8 (2026-09-23):** Andrew, verbatim: "when a joinery item gets a job note (not shop drawing) it should update the joinery status to in manufacture in the joinery register." Reverses (in a different direction) the same-day v45.2/v45.3-era decoupling that made a job note a purely independent 🛠️ flag — `addJobNote()` now ALSO advances the shared forward-only `joinery-status.json` pipeline to `"in_manufacture"` (🏭), same call every ITP app already uses (`setJoineryStatusForward`), so an item already at `manufactured`/`delivered`/`installed` is never pushed backward by a job note added after the fact. The independent `jobNote`/`jobNoteAt`/`jobNoteBy` flag is unchanged and still tracked separately (it's what gates "View job note"'s own visibility) — this just also writes the pipeline stage now. Shop Drawings remain completely unwired from the pipeline, exactly as before.
+
+Also, separately: Andrew, verbatim, on browsing the Job Notes folder in a file manager: "dont want job notes to have this format at the start on the filename 2026-09-23 23-17-48." A job note's filename now reads `"<original name> - 2026-09-23 23-17-48.pdf"` — the timestamp moved from the front to the end — rather than dropping it outright, since it's what keeps notes sorting newest-first (same "filename is the source of truth for when" convention UTZLINE Data Standard v1 §5 already uses for overlays). `listJobNotes()`'s own sort now extracts the stamp from wherever it sits in the name, so a job note saved before this change (still in the old prefix-first format on disk, never renamed) keeps sorting correctly alongside new ones. UTZLINE Projects' own read-only `listJobNotesForItem()` got the identical sort-key fix, so its "View job note" list stays consistent with this app's.
+
+New regression coverage added directly to `run_joinery_status_and_job_notes.js` (in `pdftest-projects/`): the in_manufacture-on-job-note wiring (badge shows 🏭, not 🛠️, and the underlying record's status is `in_manufacture`), the new suffix-timestamp filename shape, and a mixed old-prefix/new-suffix sort-order check confirming both formats still sort strictly newest-first together. Full suite re-run: 82/86 passing, the same 4 pre-existing sandbox SVG-rasterization flakes already documented in earlier versions' notes (unrelated to this change), none new. three requests from Andrew, sent together with two
 screenshots (verbatim): (1) "site measure app needs the correct user
 selector in the startup menu, same way that [UTZLINE Delivery ITP] has,
 also needs to be removed from the top menubar in the floor plan as well as

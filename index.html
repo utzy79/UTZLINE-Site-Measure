@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.7">
+<link rel="manifest" href="./manifest.json?v=v45.8">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.7">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.7">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.8">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1719,7 +1719,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.7";
+  var APP_VERSION = "v45.8";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3334,9 +3334,32 @@
       return jnH.getDirectoryHandle(key, { create: !!create });
     });
   }
+  // Changed 2026-09-23: Andrew, verbatim, on browsing this folder in a file
+  // manager: "dont want job notes to have this format at the start on the
+  // filename 2026-09-23 23-17-48." The timestamp itself is still needed --
+  // it's what listJobNotes below sorts by (newest first), per the same
+  // filename-is-source-of-truth-for-who/when convention UTZLINE Data
+  // Standard v1 §5 already established for overlays -- so rather than
+  // dropping it, it moves from the START of the filename to the END:
+  // "<original name> - 2026-09-23 23-17-48.pdf". A job note added before
+  // this change still has the OLD prefix-first format on disk (never
+  // renamed/migrated) -- jobNoteSortKey below finds the stamp wherever it
+  // sits in the name, so old and new files both keep sorting correctly
+  // together.
   function jobNoteFileName(originalName){
     var base = sanitizeFileBase(String(originalName || "note").replace(/\.pdf$/i, "")) || "note";
-    return overlayTimestampStamp() + " - " + base + ".pdf";
+    return base + " - " + overlayTimestampStamp() + ".pdf";
+  }
+  // Pulls the "yyyy-mm-dd hh-mm-ss" stamp out of a job note filename
+  // wherever it happens to sit (prefix, per the old format, or suffix, per
+  // the new one) -- plain string comparison on the extracted stamp is still
+  // exactly chronological order, same trick overlayTimestampStamp's own
+  // comment describes. A filename with no recognizable stamp at all (never
+  // expected in practice, but not fatal) sorts as if it had none, via the
+  // plain filename fallback below.
+  function jobNoteSortKey(fileName){
+    var m = /\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}/.exec(fileName || "");
+    return m ? m[0] : "";
   }
   // Every note for this item, newest first -- an item nobody's ever added
   // one for simply has no folder yet, which is not an error, just an empty
@@ -3355,25 +3378,47 @@
       }
       return step();
     }, function(){ return []; }).then(function(list){
-      list.sort(function(a, b){ return b.fileName.localeCompare(a.fileName); });
+      list.sort(function(a, b){
+        var ka = jobNoteSortKey(a.fileName), kb = jobNoteSortKey(b.fileName);
+        if (ka !== kb) return kb.localeCompare(ka);
+        return b.fileName.localeCompare(a.fileName);
+      });
       return list;
     });
   }
-  // Writes the file, then marks the shared record's independent "has a job
-  // note" flag (see markJobNoteAdded's own comment) -- deliberately NOT the
-  // status pipeline any more. Originally (v45.2) this advanced status to
-  // "measured", on the reasoning that attaching a note is itself evidence
-  // the item's been looked at on site; Andrew corrected this 2026-09-23:
-  // "measured is only done by the right click selector on site measures
-  // app, 🛠️ is triggered by adding a JOB note" -- the two are now
-  // completely independent signals on the same record.
+  // Writes the file, marks the shared record's independent "has a job note"
+  // flag (see markJobNoteAdded's own comment), AND advances the forward-only
+  // status pipeline to "in_manufacture". History, same day (2026-09-23):
+  // this went back and forth twice. Originally (v45.2) a job note advanced
+  // status to "measured"; Andrew then corrected that -- "measured is only
+  // done by the right click selector on site measures app, 🛠️ is triggered
+  // by adding a JOB note" -- decoupling the two into independent signals.
+  // Andrew's own LATEST instruction reverses that decoupling in a different
+  // direction: "when a joinery item gets a job note (not shop drawing) it
+  // should update the joinery status to in manufacture in the joinery
+  // register." So a job note is now, once again, wired into the pipeline --
+  // just to a later stage (in_manufacture, not measured) than the original
+  // v45.2 behaviour. setJoineryStatusForward's own forward-only guard means
+  // this is always safe to call unconditionally: an item already at
+  // "manufactured"/"delivered"/"installed" is never pushed backward by a
+  // job note added after the fact. Shop Drawings are explicitly excluded --
+  // see that feature's own comment ("deliberately NOT wired into the
+  // joinery-status pipeline") -- unaffected by this change.
   function addJobNote(projectHandle, level, room, joineryId, key, file, updatedBy){
     return getJobNotesDirForItem(projectHandle, key, true).then(function(dirH){
       return dirH.getFileHandle(jobNoteFileName(file.name), { create: true });
     }).then(function(fh){
       return verifiedHandleWrite(fh, file);
     }).then(function(){
-      return markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy);
+      // Sequential, NOT Promise.all -- both of these are independent
+      // read-modify-write calls against the SAME joinery-status.json file;
+      // running them concurrently would have each read the same pre-write
+      // snapshot and then race to write last, silently dropping whichever
+      // one lost. Order doesn't matter functionally (different fields), just
+      // that one fully completes (read AND write) before the other starts.
+      return markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy).then(function(){
+        return setJoineryStatusForward(projectHandle, level, room, joineryId, "in_manufacture", updatedBy);
+      });
     });
   }
   function jobNoteKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
