@@ -1042,7 +1042,7 @@
 // existing sign-off write on open, and stale test expectations predating
 // the "View job note" gating above -- see redline-manufacture-itp-pwa's own
 // service-worker.js v5 note and the test files themselves).
-var CACHE_NAME = "utzline-sitemeasure-cache-v45.5";
+var CACHE_NAME = "utzline-sitemeasure-cache-v45.6";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

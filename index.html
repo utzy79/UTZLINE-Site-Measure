@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.5">
+<link rel="manifest" href="./manifest.json?v=v45.6">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.5">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.5">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.6">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.6">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1687,7 +1687,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.5";
+  var APP_VERSION = "v45.6";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3769,7 +3769,7 @@
     return isFlatProject(activeProjectHandle).then(function(flat){
       if (flat) return listFlatLevelNames(activeProjectHandle);
       return listSubdirNames(activeProjectHandle).then(function(names){
-        return names.filter(function(n){ return n !== "itp" && n !== "itp-install" && n !== "itp-manufacture"; });
+        return names.filter(function(n){ return n !== "itp" && n !== "itp-install" && n !== "itp-manufacture" && n !== "itp-delivery"; });
       });
     });
   }
