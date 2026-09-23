@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.2">
+<link rel="manifest" href="./manifest.json?v=v45.3">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.2">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.2">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.3">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.3">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -552,6 +552,19 @@
      above the ordinary modal-backdrop layer so it always renders on top
      of whatever modal invoked it, present or not. */
   #insertSourceBackdrop{ z-index:41; }
+  /* Same stacking bug, same fix, for the new Shop Drawing "revision?" flow
+     (2026-09-23): decideShopDrawingRevision() calls the generic
+     showConfirm() dialog, and (when there's more than one existing
+     drawing) the picker below it, from INSIDE the still-open "Add shop
+     drawing" dialog (#shopDrawingAddBackdrop) -- without this, whichever
+     backdrop comes later in the DOM paints on top at the same default
+     z-index and silently swallows every click meant for the dialog
+     underneath, exactly like the bug described above. #confirmBackdrop is
+     given the higher of the two since it's the generic, reusable primitive
+     invoked from all over this file -- it must always win if it's ever
+     nested inside the picker too. */
+  #shopDrawingPickBackdrop{ z-index:41; }
+  #confirmBackdrop{ z-index:42; }
   .modal-box{
     background:var(--surface-1); border:1px solid var(--border-strong); border-radius:10px;
     box-shadow:var(--shadow); padding:18px 20px; max-width:320px; width:calc(100% - 40px);
@@ -723,6 +736,24 @@
   }
   .jobnote-row-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .jobnote-empty{ font-size:13px; color:var(--text-secondary); padding:8px 2px 14px; }
+
+  /* ---------- Shop drawing dialogs (2026-09-23) ----------
+     Reuses every jobnote-* class above unchanged (same dropzone/list/empty-
+     state shapes) -- these two are the only shop-drawing-specific pieces:
+     the per-row revision <select> in "View shop drawing" (its row now has
+     a THIRD item after the name, so the name needs to actually flex/shrink
+     rather than assuming it's the only thing sharing space with one Open
+     button), and the plain-button rows in the "which drawing is this a
+     revision of?" picker. */
+  .jobnote-row-name{ flex:1 1 auto; min-width:0; }
+  .shopdrawing-rev-select{
+    font:inherit; font-size:12px; padding:3px 6px; border-radius:6px;
+    border:1px solid var(--border-strong); background:var(--surface-0); color:var(--text-primary);
+  }
+  .shopdrawing-pick-row{
+    display:block; width:100%; text-align:left; font-size:12.5px;
+    padding:9px 11px; margin:0;
+  }
 
   /* ---------- in-page camera capture ----------
      Added in v37 (2026-09-19) so taking a photo to insert never leaves the
@@ -987,6 +1018,15 @@
          room open either, same reasoning switchProjectBtn already uses). -->
     <button class="ibtn" id="backBtn" title="Back — from a room, to this level's own main plan; from a level's own plan, to this project's level list" aria-label="Back" style="display:none;">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4L6 10l6 6"/></svg>
+    </button>
+    <!-- Only shown on a joinery item's own dedicated page (activeJoineryItemPage
+         set) -- Andrew: "make the joinery item screen to have a view job note
+         button" (2026-09-23), since until now "View job note" was only
+         reachable via right-click on the marker on the level's own plan, not
+         from inside the item's own page. See updateBackBtnVisibility() and
+         openViewJobNoteDialogForItemPage(). -->
+    <button class="ibtn" id="viewJobNoteItemPageBtn" title="View job note — PDFs Site Measure/Viewer have attached to this joinery item" aria-label="View job note" style="display:none;">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.2l-6 6a3 3 0 0 0 4.24 4.24l5.3-5.3a1.8 1.8 0 0 0-2.55-2.55l-5.3 5.3a0.6 0.6 0 0 0 0.85 0.85l4.9-4.9"/></svg>
     </button>
     <button class="tbtn" id="newBtn" title="Start a new file — with a project/level open, goes to Switch project/level to start a fresh one, without touching this level's own content. Press and hold (or right-click) to instead clear THIS level's plan and annotations back to blank in place.">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 2.5h6l3.5 3.5V16a1 1 0 0 1-1 1h-8.5a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z"/><path d="M11 2.5V6h3.5" stroke-linecap="round"/><path d="M10 9.5v4M8 11.5h4" stroke-linecap="round"/></svg>
@@ -1580,6 +1620,59 @@
         </div>
       </div>
     </div>
+
+    <!-- "Add shop drawing" (2026-09-23) -- Andrew: "add a shop drawing (NOT
+         A JOB NOTE) these are 2 different things." Same dropzone shape as
+         Add job note, own separate storage (see the "Shop drawings" JS
+         comment). Site Measure and the Viewer both offer this (confirmed
+         with Andrew 2026-09-23 -- full parity with Add job note), never the
+         ITP apps. -->
+    <div class="modal-backdrop" id="shopDrawingAddBackdrop" hidden>
+      <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="shopDrawingAddTitle">
+        <p id="shopDrawingAddTitle" class="joinery-item-title">Add shop drawing</p>
+        <p id="shopDrawingAddSubtitle" class="joinery-item-subtitle"></p>
+        <div class="jobnote-dropzone" id="shopDrawingDropzone" tabindex="0" role="button" aria-label="Drag a PDF here, or tap to choose a file">
+          <svg viewBox="0 0 20 20" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 15v1.5A1.5 1.5 0 0 0 5.5 18h9a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+          <span class="jobnote-dropzone-title">Drag a PDF here</span>
+          <span>or tap to choose a file</span>
+        </div>
+        <p class="jobnote-status" id="shopDrawingAddStatus"></p>
+        <input type="file" id="shopDrawingFileInput" accept="application/pdf,.pdf" style="display:none;">
+        <div class="modal-actions">
+          <button class="mbtn" id="shopDrawingAddCancel">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- The "which drawing is this a revision of?" step (2026-09-23) -- only
+         ever shown when there's more than one existing drawing to choose
+         from (see addShopDrawingFlow); with exactly one it's applied
+         directly, with zero there's nothing to ask about yet. -->
+    <div class="modal-backdrop" id="shopDrawingPickBackdrop" hidden>
+      <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="shopDrawingPickTitle">
+        <p id="shopDrawingPickTitle" class="joinery-item-title">Which drawing is this a revision of?</p>
+        <div class="jobnote-list" id="shopDrawingPickListEl"></div>
+        <div class="modal-actions">
+          <button class="mbtn" id="shopDrawingPickCancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- "View shop drawing" (2026-09-23) -- read-only list, one row per
+         independent drawing (never per revision) with its own revision
+         selector so an older RevA is never just silently gone once a RevB
+         exists -- "dont delete old, but have a selecter to open RevA,
+         REVB, etc." -->
+    <div class="modal-backdrop" id="shopDrawingViewBackdrop" hidden>
+      <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="shopDrawingViewTitle">
+        <p id="shopDrawingViewTitle" class="joinery-item-title">Shop drawings</p>
+        <p id="shopDrawingViewSubtitle" class="joinery-item-subtitle"></p>
+        <div class="jobnote-list" id="shopDrawingListEl"></div>
+        <div class="modal-actions">
+          <button class="mbtn" id="shopDrawingViewCancel">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1594,7 +1687,7 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.2";
+  var APP_VERSION = "v45.3";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3238,6 +3331,154 @@
     });
   }
   function jobNoteKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
+
+  /* ---- Shop drawings (2026-09-23) ----
+     Andrew, explicitly: "add a shop drawing (NOT A JOB NOTE) these are 2
+     different things." A shop drawing is the fabricator's own
+     elevation/section PDF for a joinery item -- a different kind of
+     document than a job note (site evidence like a delivery docket), so it
+     gets its own storage branch, own dialogs, own popover rows -- never
+     mixed with Job Notes' own files or folder. Mirrors Job Notes' own
+     per-item-folder convention (same key everywhere else uses), but adds
+     revision tracking Job Notes never needed: "if a second drawing is
+     added, ask if this is a revision and add it accordingly (dont delete
+     old, but have a selecter to open RevA, REVB, etc.)". Each independent
+     drawing gets its own subfolder (a "drawing group", named by a stamp
+     unique to when it was first added); every revision of that SAME
+     drawing is a separate, never-overwritten file inside that one
+     subfolder, named "RevA - <when> - <original file name>.pdf", "RevB -
+     ...", and so on -- additive only, exactly as asked. A second drawing
+     the user says is NOT a revision of anything gets its own brand new
+     group folder instead, so it shows up as a wholly separate drawing,
+     never lumped in as a revision of the first (confirmed with Andrew
+     2026-09-23: keep both as independent drawings, don't force a label).
+     Deliberately NOT wired into the joinery-status pipeline (📏/📦/🏆) --
+     unlike a job note, a shop drawing isn't evidence anyone's been to
+     site, so it doesn't advance anything. */
+  function shopDrawingsBranchName(){ return "Shop Drawings"; }
+  function getShopDrawingsDirForItem(projectHandle, key, create){
+    return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
+      return psH.getDirectoryHandle(shopDrawingsBranchName(), { create: !!create });
+    }).then(function(sdH){
+      return sdH.getDirectoryHandle(key, { create: !!create });
+    });
+  }
+  // A short random suffix on top of the usual second-resolution timestamp
+  // -- unlike Job Notes' plain overlayTimestampStamp() (where every file is
+  // its own independent entry, so a same-second collision just sorts two
+  // rows together harmlessly), two DIFFERENT brand-new drawings created in
+  // the same second must never collide onto the same group folder, or
+  // they'd wrongly merge into "revisions of each other".
+  function newShopDrawingGroupId(){
+    return overlayTimestampStamp() + "-" + Math.random().toString(36).slice(2, 6);
+  }
+  function revLabelValue(revLabel){
+    var m = /^Rev([A-Z]+)$/.exec(revLabel || "");
+    if (!m) return 0;
+    var letters = m[1], n = 0;
+    for (var i = 0; i < letters.length; i++){ n = n * 26 + (letters.charCodeAt(i) - 64); }
+    return n;
+  }
+  // RevA, RevB, ... RevZ, RevAA, RevAB, ... -- same base-26 letter scheme
+  // spreadsheet columns use, so it never runs out.
+  function nextRevLabel(existingRevLabels){
+    var maxN = 0;
+    (existingRevLabels || []).forEach(function(lbl){ var v = revLabelValue(lbl); if (v > maxN) maxN = v; });
+    var next = maxN + 1, out = "";
+    while (next > 0){
+      var rem = (next - 1) % 26;
+      out = String.fromCharCode(65 + rem) + out;
+      next = Math.floor((next - 1) / 26);
+    }
+    return "Rev" + out;
+  }
+  function shopDrawingRevisionFileName(revLabel, originalName){
+    var base = sanitizeFileBase(String(originalName || "drawing").replace(/\.pdf$/i, "")) || "drawing";
+    return revLabel + " - " + overlayTimestampStamp() + " - " + base + ".pdf";
+  }
+  // Splits "RevA - 2026-09-23 02-04-06 - elevation-north.pdf" into its
+  // revision label and the original file's own display name -- found by
+  // slicing off the rev-label prefix, then the FIRST " - " after it (the
+  // timestamp itself never contains " - ", only a plain space between its
+  // date and time halves, so this can't be fooled by an original file name
+  // that happens to contain dashes of its own).
+  function parseShopDrawingRevisionFileName(fileName){
+    var m = /^Rev([A-Z]+) - /.exec(fileName);
+    var revLabel = m ? ("Rev" + m[1]) : "Rev?";
+    var afterRev = m ? fileName.slice(m[0].length) : fileName;
+    var idx = afterRev.indexOf(" - ");
+    var displayName = idx >= 0 ? afterRev.slice(idx + 3) : afterRev;
+    return { revLabel: revLabel, displayName: displayName };
+  }
+  // Every revision inside ONE drawing group's own folder, oldest (RevA)
+  // first.
+  function listShopDrawingRevisions(groupHandle){
+    var out = [];
+    var iter = groupHandle.values();
+    function step(){
+      return iter.next().then(function(res){
+        if (res.done) return out;
+        if (res.value && res.value.kind === "file" && /\.pdf$/i.test(res.value.name)){
+          var parsed = parseShopDrawingRevisionFileName(res.value.name);
+          out.push({ fileName: res.value.name, handle: res.value, revLabel: parsed.revLabel, displayName: parsed.displayName });
+        }
+        return step();
+      });
+    }
+    return step().then(function(list){
+      list.sort(function(a, b){ return revLabelValue(a.revLabel) - revLabelValue(b.revLabel); });
+      return list;
+    });
+  }
+  // Every independent drawing for this item, newest drawing group first --
+  // each with its own revisions array (oldest first, so revisions[revisions.length-1]
+  // is always "the latest revision of this drawing").
+  function listShopDrawings(projectHandle, key){
+    return getShopDrawingsDirForItem(projectHandle, key, false).then(function(dirH){
+      if (!dirH || typeof dirH.values !== "function") return [];
+      var groupHandles = [];
+      var iter = dirH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return groupHandles;
+          if (res.value && res.value.kind === "directory") groupHandles.push(res.value);
+          return step();
+        });
+      }
+      return step();
+    }, function(){ return []; }).then(function(groupHandles){
+      return Promise.all(groupHandles.map(function(groupH){
+        return listShopDrawingRevisions(groupH).then(function(revisions){
+          return { drawingId: groupH.name, revisions: revisions };
+        });
+      }));
+    }).then(function(groups){
+      groups = groups.filter(function(g){ return g.revisions.length > 0; });
+      groups.sort(function(a, b){ return b.drawingId.localeCompare(a.drawingId); });
+      return groups;
+    });
+  }
+  // asRevisionOfDrawingId: pass an existing group's drawingId to add this
+  // file as its next revision (RevB, RevC, ...); omit/null to start a
+  // brand new, independent drawing (RevA in its own fresh group folder).
+  function addShopDrawing(projectHandle, key, file, asRevisionOfDrawingId){
+    var groupIdPromise = asRevisionOfDrawingId
+      ? Promise.resolve(asRevisionOfDrawingId)
+      : Promise.resolve(newShopDrawingGroupId());
+    return groupIdPromise.then(function(groupId){
+      return getShopDrawingsDirForItem(projectHandle, key, true).then(function(dirH){
+        return dirH.getDirectoryHandle(groupId, { create: true });
+      }).then(function(groupH){
+        return listShopDrawingRevisions(groupH).then(function(revisions){
+          var revLabel = nextRevLabel(revisions.map(function(r){ return r.revLabel; }));
+          return groupH.getFileHandle(shopDrawingRevisionFileName(revLabel, file.name), { create: true });
+        });
+      });
+    }).then(function(fh){
+      return verifiedHandleWrite(fh, file);
+    });
+  }
+  function shopDrawingKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
   // A person's name, filesystem-sanitised the same way the identity
   // dialog's own sanitizeUserName already does (NOT sanitizeFileBase --
   // that one's own empty-input fallback is the word "plan", which would
@@ -4171,12 +4412,24 @@
       jobNoteAddStatusEl.textContent = "Couldn't save that file — try again.";
     });
   }
+  // Real bug Andrew hit in the field: every dialog in this app (including
+  // this one) is a DOM descendant of #stage, and #stage has its OWN global
+  // "drop a photo/PDF anywhere to insert it onto the plan" listener (see
+  // its own comment further down). A plain e.preventDefault() here stops
+  // the browser's default "navigate to the file" behaviour but does NOT
+  // stop the event from continuing to bubble up to that outer #stage
+  // listener too -- so dropping a PDF onto this dropzone was ALSO
+  // inserting it as a second image on the main floor plan at the same
+  // time it correctly saved as a job note. e.stopPropagation() on every
+  // drag/drop event here is what actually confines the drop to this
+  // dropzone alone.
   jobNoteDropzone.addEventListener("click", function(){ jobNoteFileInput.click(); });
   jobNoteDropzone.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); jobNoteFileInput.click(); } });
-  jobNoteDropzone.addEventListener("dragover", function(e){ e.preventDefault(); jobNoteDropzone.classList.add("dragover"); });
-  jobNoteDropzone.addEventListener("dragleave", function(){ jobNoteDropzone.classList.remove("dragover"); });
+  jobNoteDropzone.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); jobNoteDropzone.classList.add("dragover"); });
+  jobNoteDropzone.addEventListener("dragleave", function(e){ e.stopPropagation(); jobNoteDropzone.classList.remove("dragover"); });
   jobNoteDropzone.addEventListener("drop", function(e){
     e.preventDefault();
+    e.stopPropagation();
     jobNoteDropzone.classList.remove("dragover");
     var files = e.dataTransfer && e.dataTransfer.files;
     if (files && files.length) handleJobNoteFile(files[0]);
@@ -4194,11 +4447,21 @@
   function closeViewJobNoteDialog(){ jobNoteViewBackdrop.hidden = true; }
   document.getElementById("jobNoteViewCancel").addEventListener("click", closeViewJobNoteDialog);
   jobNoteViewBackdrop.addEventListener("click", function(e){ if (e.target === jobNoteViewBackdrop) closeViewJobNoteDialog(); });
-  function openViewJobNoteDialog(obj){
-    jobNoteViewSubtitleEl.textContent = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
+  // Core dialog logic, taking an already-resolved key + subtitle directly
+  // rather than a marker object -- openViewJobNoteDialog(obj) below (the
+  // existing right-click-on-plan popover path) and
+  // openViewJobNoteDialogForItemPage() (the new item-page button, added
+  // 2026-09-23 per Andrew) both resolve their own key the correct way for
+  // where they're called from and hand it to this shared core. Deliberately
+  // NOT resolved by recomputing resolveJoineryItemPageKey from a synthetic
+  // object here -- that function disambiguates same-room/same-code markers
+  // by their relative position among the LEVEL's own state.objects, which
+  // isn't available while already on the item's own page (its state.objects
+  // holds the item's own drawn content instead).
+  function openViewJobNoteDialogCore(key, subtitle){
+    jobNoteViewSubtitleEl.textContent = subtitle;
     jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">Loading…</p>";
     jobNoteViewBackdrop.hidden = false;
-    var key = jobNoteKeyFor(obj);
     listJobNotes(activeProjectHandle, key).then(function(notes){
       jobNoteListEl.innerHTML = "";
       if (!notes.length){
@@ -4232,6 +4495,222 @@
       console.error("List job notes failed:", err);
       jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">Couldn't load job notes — try again.</p>";
     });
+  }
+  // Existing entry point: right-click a marker on the level's own plan ->
+  // "View job note" in the popover. Resolves its key/subtitle from the real
+  // marker object exactly as before.
+  function openViewJobNoteDialog(obj){
+    var subtitle = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
+    openViewJobNoteDialogCore(jobNoteKeyFor(obj), subtitle);
+  }
+  // New entry point (2026-09-23, per Andrew): the "View job note" toolbar
+  // button shown only on a joinery item's own dedicated page. Reuses
+  // activeJoineryItemPage.key directly -- it was already correctly resolved
+  // once, at page-open time, using the real marker reference (see
+  // openJoineryItemPage), so there's no need (and no safe way) to recompute
+  // it here.
+  function openViewJobNoteDialogForItemPage(){
+    if (!activeJoineryItemPage) return;
+    var p = activeJoineryItemPage;
+    var subtitle = [p.levelName, p.roomName, p.displayName].filter(Boolean).join(" · ");
+    openViewJobNoteDialogCore(p.key, subtitle);
+  }
+
+  /* ============================== Shop drawing dialogs (2026-09-23) ==============================
+     See addShopDrawing's own comment for the storage/revision side. A
+     wholly separate feature from Job Notes above -- own dialogs, own
+     dropzone, own popover rows -- per Andrew: "add a shop drawing (NOT A
+     JOB NOTE) these are 2 different things." Offered from a roomlink
+     marker's own right-click popover in BOTH Site Measure and the Viewer
+     (confirmed with Andrew 2026-09-23: full Add+View parity with Job
+     Notes), never the ITP apps. */
+  var shopDrawingAddBackdrop = document.getElementById("shopDrawingAddBackdrop");
+  var shopDrawingAddSubtitleEl = document.getElementById("shopDrawingAddSubtitle");
+  var shopDrawingDropzone = document.getElementById("shopDrawingDropzone");
+  var shopDrawingAddStatusEl = document.getElementById("shopDrawingAddStatus");
+  var shopDrawingFileInput = document.getElementById("shopDrawingFileInput");
+  var activeShopDrawingMarker = null;
+  function openAddShopDrawingDialog(obj){
+    activeShopDrawingMarker = obj;
+    shopDrawingAddSubtitleEl.textContent = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
+    shopDrawingAddStatusEl.textContent = "";
+    shopDrawingAddBackdrop.hidden = false;
+  }
+  function closeAddShopDrawingDialog(){
+    shopDrawingAddBackdrop.hidden = true;
+    activeShopDrawingMarker = null;
+    shopDrawingDropzone.classList.remove("dragover");
+  }
+  document.getElementById("shopDrawingAddCancel").addEventListener("click", closeAddShopDrawingDialog);
+  shopDrawingAddBackdrop.addEventListener("click", function(e){ if (e.target === shopDrawingAddBackdrop) closeAddShopDrawingDialog(); });
+
+  // The "which drawing is this a revision of?" picker -- only ever opened
+  // from within decideShopDrawingRevision below, when there's more than one
+  // existing drawing to choose from. Resolves the pending promise with the
+  // chosen drawingId, or null if cancelled (which aborts the whole add).
+  var shopDrawingPickBackdrop = document.getElementById("shopDrawingPickBackdrop");
+  var shopDrawingPickListEl = document.getElementById("shopDrawingPickListEl");
+  var shopDrawingPickResolve = null;
+  function openShopDrawingPicker(groups){
+    return new Promise(function(resolve){
+      shopDrawingPickResolve = resolve;
+      shopDrawingPickListEl.innerHTML = "";
+      groups.forEach(function(g){
+        var latest = g.revisions[g.revisions.length - 1];
+        var row = document.createElement("button");
+        row.type = "button"; row.className = "mbtn shopdrawing-pick-row";
+        row.textContent = latest.displayName + " (" + g.revisions.length + " revision" + (g.revisions.length === 1 ? "" : "s") + ", latest " + latest.revLabel + ")";
+        row.addEventListener("click", function(){
+          shopDrawingPickBackdrop.hidden = true;
+          if (shopDrawingPickResolve) shopDrawingPickResolve(g.drawingId);
+          shopDrawingPickResolve = null;
+        });
+        shopDrawingPickListEl.appendChild(row);
+      });
+      shopDrawingPickBackdrop.hidden = false;
+    });
+  }
+  function closeShopDrawingPicker(){
+    shopDrawingPickBackdrop.hidden = true;
+    if (shopDrawingPickResolve) shopDrawingPickResolve(null);
+    shopDrawingPickResolve = null;
+  }
+  document.getElementById("shopDrawingPickCancel").addEventListener("click", closeShopDrawingPicker);
+  shopDrawingPickBackdrop.addEventListener("click", function(e){ if (e.target === shopDrawingPickBackdrop) closeShopDrawingPicker(); });
+
+  // Andrew: "if a second drawing is added, ask if this is a revision and
+  // add it accordingly. (dont delete old, but have a selecter to open
+  // RevA, REVB, etc.)" Resolves to the drawingId this file should be added
+  // as the next revision OF, or null to start a brand new, independent
+  // drawing. With zero existing drawings there's nothing to ask about yet
+  // -- straight to "new drawing" (RevA). With exactly one, "yes" applies to
+  // it directly, no picker needed. With more than one, "yes" opens the
+  // picker above; cancelling that picker aborts the whole add (returns
+  // "cancelled" rather than resolving a drawingId, so the caller can tell
+  // "start fresh" apart from "stop entirely").
+  function decideShopDrawingRevision(existingGroups){
+    if (!existingGroups.length) return Promise.resolve(null);
+    return showConfirm("Is this a revision of an existing shop drawing for this item?").then(function(isRevision){
+      if (!isRevision) return null;
+      if (existingGroups.length === 1) return existingGroups[0].drawingId;
+      return openShopDrawingPicker(existingGroups).then(function(drawingId){
+        return drawingId === null ? "cancelled" : drawingId;
+      });
+    });
+  }
+  function handleShopDrawingFile(file){
+    if (!activeShopDrawingMarker || !file) return;
+    if (file.type && file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")){
+      shopDrawingAddStatusEl.textContent = "Only PDF files can be added as a shop drawing.";
+      return;
+    }
+    var obj = activeShopDrawingMarker;
+    var key = shopDrawingKeyFor(obj);
+    shopDrawingAddStatusEl.textContent = "Checking existing drawings…";
+    ensureProjectWritePermission().then(function(ok){
+      if (!ok){
+        shopDrawingAddStatusEl.textContent = "Couldn't get permission to save that here — try again, or add this from Site Measure instead.";
+        return;
+      }
+      return listShopDrawings(activeProjectHandle, key).then(function(groups){
+        return decideShopDrawingRevision(groups);
+      }).then(function(asRevisionOf){
+        if (asRevisionOf === "cancelled"){ shopDrawingAddStatusEl.textContent = ""; return; }
+        shopDrawingAddStatusEl.textContent = "Adding “" + file.name + "”…";
+        return addShopDrawing(activeProjectHandle, key, file, asRevisionOf).then(function(){
+          showToast(asRevisionOf ? "New revision added to that shop drawing." : "Shop drawing added to “" + roomlinkDisplayText(obj) + "”.");
+          closeAddShopDrawingDialog();
+        });
+      });
+    }).catch(function(err){
+      console.error("Add shop drawing failed:", err);
+      shopDrawingAddStatusEl.textContent = "Couldn't save that file — try again.";
+    });
+  }
+  // Same stopPropagation lesson as the job-note dropzone above (see its own
+  // comment) -- every dialog here is a DOM descendant of #stage's own
+  // global drop-to-insert-onto-the-plan listener.
+  shopDrawingDropzone.addEventListener("click", function(){ shopDrawingFileInput.click(); });
+  shopDrawingDropzone.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); shopDrawingFileInput.click(); } });
+  shopDrawingDropzone.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); shopDrawingDropzone.classList.add("dragover"); });
+  shopDrawingDropzone.addEventListener("dragleave", function(e){ e.stopPropagation(); shopDrawingDropzone.classList.remove("dragover"); });
+  shopDrawingDropzone.addEventListener("drop", function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    shopDrawingDropzone.classList.remove("dragover");
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) handleShopDrawingFile(files[0]);
+  });
+  shopDrawingFileInput.addEventListener("change", function(){
+    if (shopDrawingFileInput.files && shopDrawingFileInput.files.length) handleShopDrawingFile(shopDrawingFileInput.files[0]);
+    shopDrawingFileInput.value = "";
+  });
+
+  // "View shop drawing" -- pure read. One row per independent drawing, each
+  // with its own revision <select> (defaulting to the latest) and an Open
+  // button that opens whichever revision is currently selected.
+  var shopDrawingViewBackdrop = document.getElementById("shopDrawingViewBackdrop");
+  var shopDrawingViewSubtitleEl = document.getElementById("shopDrawingViewSubtitle");
+  var shopDrawingListEl = document.getElementById("shopDrawingListEl");
+  function closeViewShopDrawingDialog(){ shopDrawingViewBackdrop.hidden = true; }
+  document.getElementById("shopDrawingViewCancel").addEventListener("click", closeViewShopDrawingDialog);
+  shopDrawingViewBackdrop.addEventListener("click", function(e){ if (e.target === shopDrawingViewBackdrop) closeViewShopDrawingDialog(); });
+  function openViewShopDrawingDialogCore(key, subtitle){
+    shopDrawingViewSubtitleEl.textContent = subtitle;
+    shopDrawingListEl.innerHTML = "<p class=\"jobnote-empty\">Loading…</p>";
+    shopDrawingViewBackdrop.hidden = false;
+    listShopDrawings(activeProjectHandle, key).then(function(groups){
+      shopDrawingListEl.innerHTML = "";
+      if (!groups.length){
+        shopDrawingListEl.innerHTML = "<p class=\"jobnote-empty\">No shop drawings yet for this item.</p>";
+        return;
+      }
+      groups.forEach(function(g){
+        var row = document.createElement("div");
+        row.className = "jobnote-row";
+        var nameSpan = document.createElement("span");
+        nameSpan.className = "jobnote-row-name";
+        nameSpan.textContent = g.revisions[0].displayName;
+        row.appendChild(nameSpan);
+        // Revisions never get deleted, so even a single-revision drawing
+        // gets a (disabled-feeling but still real) one-item selector --
+        // consistent rather than the row's shape jumping around once a
+        // second revision eventually shows up.
+        var select = document.createElement("select");
+        select.className = "shopdrawing-rev-select";
+        g.revisions.forEach(function(rev, i){
+          var opt = document.createElement("option");
+          opt.value = String(i);
+          opt.textContent = rev.revLabel;
+          select.appendChild(opt);
+        });
+        select.selectedIndex = g.revisions.length - 1; // latest revision by default
+        row.appendChild(select);
+        var openBtn = document.createElement("button");
+        openBtn.type = "button"; openBtn.className = "mbtn";
+        openBtn.textContent = "Open";
+        openBtn.addEventListener("click", function(){
+          var rev = g.revisions[Number(select.value)];
+          rev.handle.getFile().then(function(file){
+            var url = URL.createObjectURL(file);
+            window.open(url, "_blank");
+            setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+          }).catch(function(err){
+            console.error("Open shop drawing failed:", err);
+            showToast("Couldn't open that file — try again.");
+          });
+        });
+        row.appendChild(openBtn);
+        shopDrawingListEl.appendChild(row);
+      });
+    }).catch(function(err){
+      console.error("List shop drawings failed:", err);
+      shopDrawingListEl.innerHTML = "<p class=\"jobnote-empty\">Couldn't load shop drawings — try again.</p>";
+    });
+  }
+  function openViewShopDrawingDialog(obj){
+    var subtitle = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
+    openViewShopDrawingDialogCore(shopDrawingKeyFor(obj), subtitle);
   }
 
   // Placing a new joinery marker/item ("Add joinery item here", the
@@ -7161,6 +7640,11 @@
   var MEASURE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="14" height="6" rx="1.3"/><path d="M6 7.5v2.2M9 7.5v2.2M12 7.5v2.2M15 7.5v2.2"/></svg>';
   // A small paperclip -- "Add job note"/"View job note".
   var JOBNOTE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.2l-6 6a3 3 0 0 0 4.24 4.24l5.3-5.3a1.8 1.8 0 0 0-2.55-2.55l-5.3 5.3a0.6 0.6 0 0 0 0.85 0.85l4.9-4.9"/></svg>';
+  // A folded drawing/document page -- "Add shop drawing"/"View shop
+  // drawing" (2026-09-23) -- deliberately not the paperclip above, since
+  // Andrew was explicit these are two different things and shouldn't look
+  // alike in the popover either.
+  var SHOPDRAWING_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.8h7l3 3v11.4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1z"/><path d="M12 2.8v3h3"/><path d="M6.5 10.5h7M6.5 13.5h4.5"/></svg>';
   // Same curved-arrow language (and literal paths) as the toolbar's own
   // Undo/Redo icons -- CCW curves left like Undo, CW curves right like
   // Redo, so "which way does this arrow turn" already reads consistently
@@ -7321,6 +7805,22 @@
       popoverRow(wrap, JOBNOTE_ICON + "<span>View job note</span>", function(){
         hideLockPopover();
         openViewJobNoteDialog(obj);
+      });
+    }
+
+    // "Add shop drawing" / "View shop drawing" (2026-09-23, Andrew) -- a
+    // deliberately separate feature from Job Notes just above: "add a shop
+    // drawing (NOT A JOB NOTE) these are 2 different things." Same
+    // Site-Measure-and-Viewer availability as Job Notes (confirmed with
+    // Andrew 2026-09-23), for the same reason.
+    if (isRealObject && obj.type === "roomlink"){
+      popoverRow(wrap, SHOPDRAWING_ICON + "<span>Add shop drawing</span>", function(){
+        hideLockPopover();
+        openAddShopDrawingDialog(obj);
+      });
+      popoverRow(wrap, SHOPDRAWING_ICON + "<span>View shop drawing</span>", function(){
+        hideLockPopover();
+        openViewShopDrawingDialog(obj);
       });
     }
 
@@ -9125,6 +9625,14 @@
   function updateBackBtnVisibility(){
     if (!backBtn) return;
     backBtn.style.display = (activeLevelName && (activeJoineryItemPage || activeRoomName || activeProjectHandle)) ? "" : "none";
+    // "View job note" toolbar button (2026-09-23, per Andrew) -- only ever
+    // shown on a joinery item's own dedicated page, never on a level's or
+    // room's own plan (those already have the popover's own "View job
+    // note" row for that). This function is already called at every screen
+    // transition that could change activeJoineryItemPage, so it's the
+    // right place to also toggle this rather than needing per-call-site
+    // bookkeeping.
+    if (viewJobNoteItemPageBtn) viewJobNoteItemPageBtn.style.display = activeJoineryItemPage ? "" : "none";
   }
 
   var confirmBackdrop = document.getElementById("confirmBackdrop");
@@ -11906,6 +12414,8 @@
   roomsBtn.addEventListener("click", openRoomsPicker);
   var backBtn = document.getElementById("backBtn");
   if (backBtn) backBtn.addEventListener("click", backBtnClicked);
+  var viewJobNoteItemPageBtn = document.getElementById("viewJobNoteItemPageBtn");
+  if (viewJobNoteItemPageBtn) viewJobNoteItemPageBtn.addEventListener("click", openViewJobNoteDialogForItemPage);
   var viewerRecolorInput = document.getElementById("viewerRecolorInput");
   var viewerRecolorResetBtn = document.getElementById("viewerRecolorResetBtn");
   // "input" (not "change") so the preview updates live while dragging
