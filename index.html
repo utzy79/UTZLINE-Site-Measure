@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.9">
+<link rel="manifest" href="./manifest.json?v=v45.10">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.9">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.9">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.10">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.10">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -212,6 +212,7 @@
   #toolbarRowFile{border-bottom:1px solid var(--border);}
   .ibtn{
     display:flex; align-items:center; justify-content:center;
+    position:relative;
     width:32px; height:32px;
     border-radius:6px; border:1px solid transparent;
     background:transparent; color:var(--text-primary);
@@ -223,6 +224,27 @@
   .ibtn[disabled]{opacity:0.35; cursor:default; pointer-events:none;}
   .ibtn.active{background:var(--accent); color:#fff; border-color:var(--accent-ink);}
   .ibtn:focus-visible, button:focus-visible, input:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+  /* (v45.10, 2026-09-24) A small always-visible count badge on
+     #overlayLayersBtn -- Andrew: "we still dont have the layer button for
+     different peoples check measure saves, this is a must". The button
+     and its whole multi-person mechanism were already there and already
+     working (see renderOverlayLayers()'s own comment and
+     run_site_measure_overlay_layers.js) -- what wasn't there was anything
+     making an icon-only toolbar button, that only exists at all once
+     someone else has already saved, easy to actually notice: no visible
+     label ever (a hover-only `title` tooltip means nothing on the touch
+     tablets this app is actually used on), sitting one slot away from the
+     similarly-shaped, unrelated "Objects" layersBtn. This badge gives it a
+     number the instant it appears, and the toast in openJoineryItemPage()
+     now names it directly too -- see that function's own comment. */
+  .ibtn-badge{
+    position:absolute; top:-4px; right:-4px;
+    min-width:15px; height:15px; padding:0 3px;
+    border-radius:999px; background:var(--accent); color:#fff;
+    font-size:10px; font-weight:700; line-height:15px; text-align:center;
+    pointer-events:none; box-shadow:0 0 0 1.5px var(--surface-0);
+  }
+  .ibtn.active .ibtn-badge{ box-shadow:0 0 0 1.5px var(--accent); }
   .tbtn{
     display:flex; align-items:center; gap:6px;
     height:32px; padding:0 12px;
@@ -551,18 +573,14 @@
      above the ordinary modal-backdrop layer so it always renders on top
      of whatever modal invoked it, present or not. */
   #insertSourceBackdrop{ z-index:41; }
-  /* Same stacking bug, same fix, for the new Shop Drawing "revision?" flow
-     (2026-09-23): decideShopDrawingRevision() calls the generic
-     showConfirm() dialog, and (when there's more than one existing
-     drawing) the picker below it, from INSIDE the still-open "Add shop
-     drawing" dialog (#shopDrawingAddBackdrop) -- without this, whichever
-     backdrop comes later in the DOM paints on top at the same default
-     z-index and silently swallows every click meant for the dialog
-     underneath, exactly like the bug described above. #confirmBackdrop is
-     given the higher of the two since it's the generic, reusable primitive
-     invoked from all over this file -- it must always win if it's ever
-     nested inside the picker too. */
-  #shopDrawingPickBackdrop{ z-index:41; }
+  /* #shopDrawingPickBackdrop (the "which drawing is this a revision of?"
+     picker) used to need the same z-index:41 treatment as
+     #insertSourceBackdrop above, for the same stacking reason -- removed
+     2026-09-24 along with the rest of the "Add shop drawing" write flow
+     (see that feature's own comment further down). #confirmBackdrop's own
+     z-index:42 stays -- it's the generic, reusable showConfirm() primitive,
+     still invoked from inside #insertSourceBackdrop and elsewhere, and
+     must still always win when nested inside one of those. */
   #confirmBackdrop{ z-index:42; }
   .modal-box{
     background:var(--surface-1); border:1px solid var(--border-strong); border-radius:10px;
@@ -764,10 +782,9 @@
     font:inherit; font-size:12px; padding:3px 6px; border-radius:6px;
     border:1px solid var(--border-strong); background:var(--surface-0); color:var(--text-primary);
   }
-  .shopdrawing-pick-row{
-    display:block; width:100%; text-align:left; font-size:12.5px;
-    padding:9px 11px; margin:0;
-  }
+  /* .shopdrawing-pick-row removed 2026-09-24 along with the "which drawing
+     is this a revision of?" picker it styled -- see the "Add shop drawing"
+     removal comment further down. */
 
   /* ---------- in-page camera capture ----------
      Added in v37 (2026-09-19) so taking a photo to insert never leaves the
@@ -927,17 +944,26 @@
   }
 
   /* ---- Viewer mode (read-only build for the drafting office) ----
-     Hides every mutating control -- New/Open/Open project/Insert image/
-     rename/Save, the drawing tools, undo/redo (there's never any history to
-     step through), Lock-all and the snap toggles (drawing aids for tools
-     that aren't here), and Auto-backup (nothing to back up). Left fully in
-     place: Select/Pan/Zoom-to-rectangle, zoom in/out/fit, Switch project /
-     level, Rooms, the Layers list, Share (this is how printing/exporting
-     works here), and the appearance/help/exit controls. The body class is
-     set once at boot from VIEW_ONLY_MODE and never toggled at runtime --
-     see that flag's own comment for why. */
-  body.viewer-mode #newBtn, body.viewer-mode #openBtn,
-  body.viewer-mode #openProjectBtn, body.viewer-mode #insertImageBtn,
+     Hides every mutating control -- Insert image/rename/Save, the drawing
+     tools, undo/redo (there's never any history to step through), Lock-all
+     and the snap toggles (drawing aids for tools that aren't here), and
+     Auto-backup (nothing to back up). Left fully in place: Select/Pan/
+     Zoom-to-rectangle, zoom in/out/fit, Switch project/level, Rooms, Home,
+     the Layers list, Share (this is how printing/exporting works here), and
+     the appearance/help/exit controls. The body class is set once at boot
+     from VIEW_ONLY_MODE and never toggled at runtime -- see that flag's own
+     comment for why.
+     #homeBtn (2026-09-24, replacing the old #newBtn/"New") is deliberately
+     NOT in this hide-list, unlike its predecessor -- Home is pure read-only
+     navigation (goHome(), same as Switch project/level and Rooms just
+     below, both already left visible here), never a mutation, so it stays
+     available in the Viewer too -- consistent with "Use a Different
+     Projects Folder" a few lines down being deliberately excluded from this
+     same list for the identical reason. #openBtn/#openProjectBtn (Open/Open
+     project) no longer exist at all (removed 2026-09-24, see the toolbar's
+     own comment), so they're gone from this list rather than just no-op
+     selectors. */
+  body.viewer-mode #insertImageBtn,
   body.viewer-mode #saveBtn,
   body.viewer-mode #autoBackupGroup, body.viewer-mode #lockAllBtn,
   body.viewer-mode #snapGridBtn, body.viewer-mode #snapHVBtn,
@@ -1041,18 +1067,44 @@
     <button class="ibtn" id="viewJobNoteItemPageBtn" title="View job note — PDFs Site Measure/Viewer have attached to this joinery item" aria-label="View job note" style="display:none;">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.2l-6 6a3 3 0 0 0 4.24 4.24l5.3-5.3a1.8 1.8 0 0 0-2.55-2.55l-5.3 5.3a0.6 0.6 0 0 0 0.85 0.85l4.9-4.9"/></svg>
     </button>
-    <button class="tbtn" id="newBtn" title="Start a new file — with a project/level open, goes to Switch project/level to start a fresh one, without touching this level's own content. Press and hold (or right-click) to instead clear THIS level's plan and annotations back to blank in place.">
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 2.5h6l3.5 3.5V16a1 1 0 0 1-1 1h-8.5a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z"/><path d="M11 2.5V6h3.5" stroke-linecap="round"/><path d="M10 9.5v4M8 11.5h4" stroke-linecap="round"/></svg>
-      New
+    <!-- "New" -> "Home" (2026-09-24), Andrew, verbatim: "New button, change
+         to home button." The old #newBtn ("Start a new file") is gone --
+         this button now takes you all the way back to this app's own
+         startup screen (the project list, or the "Choose Projects Folder"
+         setup screen if none is chosen yet) from anywhere, via goHome() --
+         see that function's own comment further down for exactly what it
+         does and why it reuses the same destination boot()/
+         bootIntoProjectGate() itself lands on, rather than inventing a
+         second "home". id kept as a distinct, honestly-named "homeBtn"
+         (not left as "newBtn") since it's a different control now, not a
+         relabel of the same one. -->
+    <button class="tbtn" id="homeBtn" title="Home — back to this app's own startup screen (your project list, or Choose Projects Folder if none is chosen yet)">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L10 3.5l7 6"/><path d="M4.7 8.2V16a1 1 0 0 0 1 1H8.5v-4.3h3V17h2.8a1 1 0 0 0 1-1V8.2"/></svg>
+      Home
     </button>
-    <button class="tbtn" id="openBtn" title="Open a photo, plan image, or PDF (pick a page if it has more than one)">
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 6.5a1.5 1.5 0 0 1 1.5-1.5h3l1.5 2h6.5A1.5 1.5 0 0 1 17 8.5v6A1.5 1.5 0 0 1 15.5 16h-11A1.5 1.5 0 0 1 3 14.5z"/></svg>
-      Open
-    </button>
-    <button class="tbtn" id="openProjectBtn" title="Open a UTZLINE Site Measure project file (.utzline.json — older .redline.json files from before the rename still open too) you saved earlier — everything stays fully editable: every object, its color, locks, hidden items, all of it">
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 6a1 1 0 0 1 1-1h3.3l1.2 1.4h7a1 1 0 0 1 1 1v7.1a1 1 0 0 1-1 1h-11.5a1 1 0 0 1-1-1z"/><path d="M10 8.6v4M8 10.6l2 2 2-2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Open project
-    </button>
+    <!-- "Open" and "Open project" -- REMOVED ENTIRELY (2026-09-24), Andrew,
+         verbatim: "remove the following buttons from the site measure app
+         ... Open ... Open Project." Two separate buttons/handlers,
+         confirmed by reading the code, not one button with two labels:
+         #openBtn replaced the whole plan's base photo/PDF with a newly
+         picked one (via the hidden #fileInput file picker, with a replace-
+         plan confirm once there was something to lose); #openProjectBtn
+         loaded a previously-exported standalone .utzline.json/.redline.json
+         PROJECT FILE (every object, fully editable) via the hidden
+         #openProjectInput file picker, again with a replace-plan confirm.
+         Both are gone along with their hidden <input>s and click/change
+         handlers (openProjectFile() is now fully unreachable and removed
+         too -- see its own former call site). Loading a base photo/PDF is
+         still possible via drag-and-drop onto the canvas, or Ctrl/Cmd+V
+         paste, when nothing is loaded yet (loadImageFile() itself is
+         untouched -- the drop handler still calls it directly); there is no
+         remaining way to re-import a standalone .utzline.json project file
+         from this toolbar (the real, current workflow is entirely through a
+         Projects folder, where UTZLINE Projects owns creation and Site
+         Measure/Viewer read and write each level's own file automatically
+         -- saveProject()/projectPayload(), the EXPORT half of this same old
+         single-file mechanism used by the general Save button in that
+         fallback mode, are untouched and still work). -->
     <button class="tbtn" id="insertImageBtn" title="Paste (Ctrl/Cmd+V) or insert a second photo or PDF page onto the canvas — place it anywhere, even outside the main photo, then resize and annotate it (hold Shift while dragging a corner to keep its proportions)">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="2.5" y="3.5" width="15" height="13" rx="1.3"/><circle cx="7" cy="8" r="1.4"/><path d="M3 14.5l4-4 3 3 3.5-3.5L17.5 14" stroke-linecap="round"/></svg>
       Insert image
@@ -1215,6 +1267,9 @@
            saved layers on this same item on and off). -->
       <button class="ibtn" id="overlayLayersBtn" title="Other people's saved Site Measure layers for this item" aria-label="Toggle Site Measure layers panel" style="display:none;">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="2.5" y="4" width="10" height="10" rx="1.5"/><rect x="7.5" y="9" width="10" height="10" rx="1.5"/></svg>
+        <!-- (v45.10) Count of other people's saved layers -- see the
+             .ibtn-badge CSS comment. Kept in sync by renderOverlayLayers(). -->
+        <span class="ibtn-badge" id="overlayLayersBadge" hidden>0</span>
       </button>
       <button class="ibtn" id="showHintBtn" title="Show the quick-help tip again (drag/pan/zoom controls)" aria-label="Show quick help tip">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.2"/><path d="M7.8 7.6a2.2 2.2 0 1 1 3.1 2c-.7.5-1.1.9-1.1 1.9"/><circle cx="10" cy="14" r="0.15" fill="currentColor"/></svg>
@@ -1232,9 +1287,10 @@
       </button>
     </div>
     </div><!-- /toolbarRowDraw -->
-    <input type="file" id="fileInput" accept="image/*,application/pdf" style="display:none">
+    <!-- #fileInput (Open) and #openProjectInput (Open project) removed
+         2026-09-24 along with those two buttons -- see the toolbar's own
+         comment above. #insertImageInput (Insert image) is untouched. -->
     <input type="file" id="insertImageInput" accept="image/*,application/pdf" style="display:none">
-    <input type="file" id="openProjectInput" accept=".json,application/json" style="display:none">
   </div>
 
   <div class="stage" id="stage">
@@ -1653,42 +1709,13 @@
       </div>
     </div>
 
-    <!-- "Add shop drawing" (2026-09-23) -- Andrew: "add a shop drawing (NOT
-         A JOB NOTE) these are 2 different things." Same dropzone shape as
-         Add job note, own separate storage (see the "Shop drawings" JS
-         comment). Site Measure and the Viewer both offer this (confirmed
-         with Andrew 2026-09-23 -- full parity with Add job note), never the
-         ITP apps. -->
-    <div class="modal-backdrop" id="shopDrawingAddBackdrop" hidden>
-      <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="shopDrawingAddTitle">
-        <p id="shopDrawingAddTitle" class="joinery-item-title">Add shop drawing</p>
-        <p id="shopDrawingAddSubtitle" class="joinery-item-subtitle"></p>
-        <div class="jobnote-dropzone" id="shopDrawingDropzone" tabindex="0" role="button" aria-label="Drag a PDF here, or tap to choose a file">
-          <svg viewBox="0 0 20 20" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 15v1.5A1.5 1.5 0 0 0 5.5 18h9a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
-          <span class="jobnote-dropzone-title">Drag a PDF here</span>
-          <span>or tap to choose a file</span>
-        </div>
-        <p class="jobnote-status" id="shopDrawingAddStatus"></p>
-        <input type="file" id="shopDrawingFileInput" accept="application/pdf,.pdf" style="display:none;">
-        <div class="modal-actions">
-          <button class="mbtn" id="shopDrawingAddCancel">Close</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- The "which drawing is this a revision of?" step (2026-09-23) -- only
-         ever shown when there's more than one existing drawing to choose
-         from (see addShopDrawingFlow); with exactly one it's applied
-         directly, with zero there's nothing to ask about yet. -->
-    <div class="modal-backdrop" id="shopDrawingPickBackdrop" hidden>
-      <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="shopDrawingPickTitle">
-        <p id="shopDrawingPickTitle" class="joinery-item-title">Which drawing is this a revision of?</p>
-        <div class="jobnote-list" id="shopDrawingPickListEl"></div>
-        <div class="modal-actions">
-          <button class="mbtn" id="shopDrawingPickCancel">Cancel</button>
-        </div>
-      </div>
-    </div>
+    <!-- "Add shop drawing" and its "which drawing is this a revision of?"
+         follow-up dialog (#shopDrawingAddBackdrop/#shopDrawingPickBackdrop)
+         REMOVED (2026-09-24), Andrew, verbatim: "remove the following
+         buttons from the site measure app... Add shop drawing on right
+         click (Keep view shop drawing)." See the "Shop drawings" JS
+         comment for the full removal note; "View shop drawing" just below
+         is untouched. -->
 
     <!-- "View shop drawing" (2026-09-23) -- read-only list, one row per
          independent drawing (never per revision) with its own revision
@@ -1719,7 +1746,103 @@
   // change, at the same time as service-worker.js's CACHE_NAME and the
   // delivered zip's filename, so all three always agree on the same number
   // instead of drifting out of sync with each other.
-  var APP_VERSION = "v45.9";
+  // v45.10 (2026-09-24) -- two independent requests from Andrew, sent
+  // together today:
+  //
+  // PART 1 -- four toolbar/popover button changes, Andrew's own words
+  // verbatim: "remove the following buttons from the site measure app.
+  // delete on right click. New button, change to home button. Open. Open
+  // Project. Add shop drawing on right click (Keep view shop drawing)."
+  //   1. "delete on right click" -- the "Delete" row is gone from
+  //      showLockPopover() (the one and only right-click/long-press
+  //      popover in the app, shared by every object type and by joinery
+  //      markers alike -- confirmed there was no second, separate menu to
+  //      disambiguate). Deleting an object is still possible via the
+  //      properties panel's own trash icon once selected -- that control
+  //      is untouched, only this second, redundant right-click path is
+  //      gone. The now-orphaned DELETE_ICON constant was removed with it.
+  //   2. "New button, change to home button" -- #newBtn is gone; a new
+  //      #homeBtn ("Home") sits in its place, wired to a brand-new
+  //      goHome() function (no pre-existing header/logo click-to-home
+  //      function existed anywhere in the app to reuse -- confirmed by
+  //      grepping every click handler on .brand/#brandIcon/#brandName;
+  //      wiring the header logo itself to Home is still a separate, still-
+  //      open item, see next-version-notes.md's own pending list item 4).
+  //      goHome() auto-saves whatever's open, then always lands all the
+  //      way back on the top-level project list -- a real behaviour change
+  //      from the old New/switchProject(), which only ever returned to
+  //      "this project's own level list." The old button's press-and-hold
+  //      "clear this level in place" gesture was deliberately NOT carried
+  //      over (a hidden destructive action under a button now labelled
+  //      "Home" is a hazard, and wasn't asked for). Judgment call,
+  //      disclosed: unlike the old #newBtn, #homeBtn stays visible in the
+  //      Viewer build too -- it's pure navigation, the same class of
+  //      control as #switchProjectBtn/#roomsBtn, both already viewer-
+  //      visible.
+  //   3. "Open" and "Open Project" -- confirmed genuinely two separate
+  //      buttons/handlers (#openBtn, #openProjectBtn), not one button with
+  //      two labels. Both removed entirely, along with their hidden file
+  //      inputs and the now-dead openProjectFile() function. What they did
+  //      before removal: #openBtn opened a photo/plan image or PDF as the
+  //      base plan (loadImageFile()) -- "Insert image" already does the
+  //      identical job and is untouched, as is drag-drop/paste of an
+  //      image; #openProjectBtn re-opened a previously-downloaded
+  //      .utzline.json project file in the plain single-file fallback mode
+  //      -- saveProject()/projectPayload() (the writing half) are
+  //      untouched, only the matching "read one back" button is gone.
+  //   4. "Add shop drawing on right click (Keep view shop drawing)" -- the
+  //      popover's "Add shop drawing" row is gone; "View shop drawing"
+  //      (unconditional, not right-click-only to begin with) is untouched,
+  //      exactly as asked. The whole write-side (openAddShopDrawingDialog,
+  //      openShopDrawingPicker, decideShopDrawingRevision,
+  //      handleShopDrawingFile, addShopDrawing, and their dialogs/DOM
+  //      vars/CSS) is gone with it -- nothing else in the app had a
+  //      non-right-click way to add one, so there was no separate Joinery
+  //      Item dialog path to preserve here. The read-side (listing/viewing
+  //      existing revisions) is completely unaffected.
+  //
+  // PART 2 -- the multi-person "Site Measure layers" panel (shipped v45.0,
+  // 2026-09-22), per Andrew's fresh report today: "we still dont have the
+  // layer button for different peoples check measure saves, this is a
+  // must." Investigated in full before changing anything: the underlying
+  // mechanism was NOT broken or missing -- re-running the existing
+  // run_site_measure_overlay_layers.js end to end (unchanged, still
+  // passing) confirms explicit Save still creates a permanent, immutable,
+  // username+datetime-stamped overlay per joinery item, silent autosave
+  // still only touches a private draft, and #overlayLayersBtn/
+  // #overlayLayersPanel still correctly list and toggle every other
+  // person's saved layer, in both this app and the Viewer. What WAS
+  // genuinely wrong: discoverability. #overlayLayersBtn is a bare icon --
+  // visually similar to the unrelated pre-existing "Objects" layersBtn
+  // right next to it, in an already-crowded toolbar, appearing/
+  // disappearing with no visible label ever (its `title` tooltip never
+  // shows at all on the touch tablets this app is actually used on in the
+  // field). A real user doing a real check-measure, with two other
+  // people's saves already sitting right there, could very plausibly never
+  // notice it. Fixed with two small, targeted additions -- not the bigger,
+  // separately-tracked "select an active joinery item before drawing"
+  // redesign, which stays exactly as out of scope as it's always been:
+  //   1. A new always-visible count badge (#overlayLayersBadge, see the
+  //      .ibtn-badge CSS comment) on the button itself, showing exactly
+  //      how many other people's layers exist the instant the button
+  //      appears -- no more anonymous, easy-to-miss icon.
+  //   2. openJoineryItemPage()'s own opening toast now names the count out
+  //      loud and points at the icon directly, every time there's at least
+  //      one other layer to see, rather than leaving it to be noticed on
+  //      its own.
+  // Reproduced end to end with a real Playwright test
+  // (pdftest-projects/run_layers_discoverability_fix.js) that never calls
+  // openJoineryItemPage() directly -- it right-clicks a real marker,
+  // clicks the real popover's "Open joinery item" row, then the real
+  // dialog's own accent button, for two different real people (different
+  // names, different real Save timestamps) -- and confirms, with
+  // screenshots, that a third person opening the same item in THIS app
+  // sees both of them offered with a badge reading "2", and that the
+  // VIEWER separately shows the single most recent overlay as its base
+  // view with the other still offered as a toggleable reference layer and
+  // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
+  // v45.0" section always described.
+  var APP_VERSION = "v45.10";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -1841,8 +1964,8 @@
   // only bridges in when this page is running inside the Claude app/chat's
   // own artifact view -- opening the artifact's plain link directly in a
   // regular browser tab (which is required for the native file/photo
-  // picker to work at all on some mobile in-app previews, see fileInput
-  // above) never gets that bridge, so downloadsApi stays null there
+  // picker inputs elsewhere in this file to work at all on some mobile
+  // in-app previews) never gets that bridge, so downloadsApi stays null there
   // forever. Rather than tell the user saving "isn't available" in that
   // very normal case, fall back to a completely standard Blob-URL + <a
   // download> click, which works in any real browser tab on any platform.
@@ -2197,7 +2320,6 @@
   var zoomLabel = document.getElementById("zoomLabel");
   var dimLabel = document.getElementById("dimLabel");
   var toast = document.getElementById("toast");
-  var fileInput = document.getElementById("fileInput");
   var measureCtx = document.createElement("canvas").getContext("2d");
 
   /* ============================== helpers ============================== */
@@ -3428,26 +3550,22 @@
      different things." A shop drawing is the fabricator's own
      elevation/section PDF for a joinery item -- a different kind of
      document than a job note (site evidence like a delivery docket), so it
-     gets its own storage branch, own dialogs, own popover rows -- never
-     mixed with Job Notes' own files or folder. Mirrors Job Notes' own
-     per-item-folder convention (same key everywhere else uses), but adds
-     revision tracking Job Notes never needed: "if a second drawing is
-     added, ask if this is a revision and add it accordingly (dont delete
-     old, but have a selecter to open RevA, REVB, etc.)" -- revised the same
-     day to plain zero-based numbering ("Revisions start at REV 0"), see
-     revLabelValue/nextRevLabel's own comments. Each independent drawing
-     gets its own subfolder (a "drawing group", named by a stamp unique to
-     when it was first added); every revision of that SAME drawing is a
-     separate, never-overwritten file inside that one subfolder, named
-     "REV 0 - <when> - <original file name>.pdf", "REV 1 - ...", and so on
-     -- additive only, exactly as asked. A second drawing
-     the user says is NOT a revision of anything gets its own brand new
-     group folder instead, so it shows up as a wholly separate drawing,
-     never lumped in as a revision of the first (confirmed with Andrew
-     2026-09-23: keep both as independent drawings, don't force a label).
+     gets its own storage branch -- never mixed with Job Notes' own files or
+     folder. Mirrors Job Notes' own per-item-folder convention (same key
+     everywhere else uses). Each independent drawing has its own subfolder
+     (a "drawing group", named by a stamp unique to when it was first
+     added); every revision of that SAME drawing is a separate,
+     never-overwritten file inside that one subfolder, named
+     "REV 0 - <when> - <original file name>.pdf", "REV 1 - ...", and so on.
      Deliberately NOT wired into the joinery-status pipeline (📏/📦/🏆) --
      unlike a job note, a shop drawing isn't evidence anyone's been to
-     site, so it doesn't advance anything. */
+     site, so it doesn't advance anything.
+     READ-ONLY as of 2026-09-24: the write side (addShopDrawing,
+     newShopDrawingGroupId, shopDrawingRevisionFileName, nextRevLabel, and
+     the "which drawing is this a revision of?" flow) was removed along with
+     the popover's own "Add shop drawing" row -- see that row's former
+     comment in showLockPopover. Everything below this comment is read-only
+     (View shop drawing) and untouched. */
   function shopDrawingsBranchName(){ return "Shop Drawings"; }
   function getShopDrawingsDirForItem(projectHandle, key, create){
     return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
@@ -3456,24 +3574,13 @@
       return sdH.getDirectoryHandle(key, { create: !!create });
     });
   }
-  // A short random suffix on top of the usual second-resolution timestamp
-  // -- unlike Job Notes' plain overlayTimestampStamp() (where every file is
-  // its own independent entry, so a same-second collision just sorts two
-  // rows together harmlessly), two DIFFERENT brand-new drawings created in
-  // the same second must never collide onto the same group folder, or
-  // they'd wrongly merge into "revisions of each other".
-  function newShopDrawingGroupId(){
-    return overlayTimestampStamp() + "-" + Math.random().toString(36).slice(2, 6);
-  }
-  // Andrew, 2026-09-23: "Revisions start at REV 0" -- replaces the original
-  // v45.3 base-26 letter scheme (RevA, RevB, ...) with plain zero-based
-  // numbering. Unmatched/unparseable input reads as -1 (not 0), so
-  // nextRevLabel on a brand new drawing with zero existing revisions
-  // correctly starts at "REV 0" (-1 + 1), not "REV 1". Still recognises the
-  // old lettered form (shipped for less than a day, before this correction)
-  // so a drawing revision saved under it sorts correctly, always before any
-  // new-scheme numeric revision -- read-side compatibility only, nothing on
-  // disk is ever renamed.
+  // Andrew, 2026-09-23: "Revisions start at REV 0". Unmatched/unparseable
+  // input reads as -1, so a sort by this value still places an unrecognised
+  // label first/oldest rather than crashing. Still recognises the old
+  // lettered form (RevA, RevB, ... shipped for less than a day before this
+  // correction) so a drawing revision saved under it sorts correctly,
+  // always before any new-scheme numeric revision -- read-side
+  // compatibility only, nothing on disk is ever renamed.
   function revLabelValue(revLabel){
     var m = /^REV (\d+)$/.exec(revLabel || "");
     if (m) return parseInt(m[1], 10);
@@ -3484,21 +3591,6 @@
       return n - 1000000;
     }
     return -1;
-  }
-  // REV 0, REV 1, REV 2, ... -- never runs out, no letters to overflow past
-  // Z. Not zero-padded (Andrew's own literal wording was "REV 0", not
-  // "REV 00") -- past 9 revisions on one drawing, a plain file browser's own
-  // alphabetical sort would show REV 10 before REV 2; every in-app list
-  // (listShopDrawingRevisions and its callers) sorts by revLabelValue, the
-  // parsed number, so the app's own ordering is unaffected either way.
-  function nextRevLabel(existingRevLabels){
-    var maxN = -1;
-    (existingRevLabels || []).forEach(function(lbl){ var v = revLabelValue(lbl); if (v > maxN) maxN = v; });
-    return "REV " + (maxN + 1);
-  }
-  function shopDrawingRevisionFileName(revLabel, originalName){
-    var base = sanitizeFileBase(String(originalName || "drawing").replace(/\.pdf$/i, "")) || "drawing";
-    return revLabel + " - " + overlayTimestampStamp() + " - " + base + ".pdf";
   }
   // Splits "REV 0 - 2026-09-23 02-04-06 - elevation-north.pdf" into its
   // revision label and the original file's own display name -- found by
@@ -3567,26 +3659,9 @@
       return groups;
     });
   }
-  // asRevisionOfDrawingId: pass an existing group's drawingId to add this
-  // file as its next revision (RevB, RevC, ...); omit/null to start a
-  // brand new, independent drawing (RevA in its own fresh group folder).
-  function addShopDrawing(projectHandle, key, file, asRevisionOfDrawingId){
-    var groupIdPromise = asRevisionOfDrawingId
-      ? Promise.resolve(asRevisionOfDrawingId)
-      : Promise.resolve(newShopDrawingGroupId());
-    return groupIdPromise.then(function(groupId){
-      return getShopDrawingsDirForItem(projectHandle, key, true).then(function(dirH){
-        return dirH.getDirectoryHandle(groupId, { create: true });
-      }).then(function(groupH){
-        return listShopDrawingRevisions(groupH).then(function(revisions){
-          var revLabel = nextRevLabel(revisions.map(function(r){ return r.revLabel; }));
-          return groupH.getFileHandle(shopDrawingRevisionFileName(revLabel, file.name), { create: true });
-        });
-      });
-    }).then(function(fh){
-      return verifiedHandleWrite(fh, file);
-    });
-  }
+  // addShopDrawing() (the write side -- new/next-revision file creation)
+  // was removed 2026-09-24 along with the popover's own "Add shop drawing"
+  // row; see this file's own "Shop drawings" comment above.
   function shopDrawingKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
   // A person's name, filesystem-sanitised the same way the identity
   // dialog's own sanitizeUserName already does (NOT sanitizeFileBase --
@@ -4255,9 +4330,27 @@
       // but-never-explicitly-Saved work could read as "my last Save" when
       // it isn't one yet, and nobody else can see it as a layer until it
       // is.
-      showToast(activeJoineryItemPage.ownHasDraft
+      //
+      // (v45.10, 2026-09-24) ALSO calling out other people's layers by name
+      // right here, whenever there are any -- Andrew: "we still dont have
+      // the layer button for different peoples check measure saves, this
+      // is a must". The button (#overlayLayersBtn) and the whole per-person
+      // mechanism were already correct (see run_site_measure_overlay_layers.js,
+      // unchanged and still passing) -- the actual gap was that its only
+      // signal was a small icon quietly appearing in an already-crowded
+      // toolbar, with a `title` tooltip that a touch tablet -- what this
+      // app is actually used on -- never shows at all. This toast, plus the
+      // new count badge on the button itself (see the .ibtn-badge CSS
+      // comment), are the fix: said out loud, every time, exactly when it
+      // first matters, rather than left for someone to notice on their own.
+      var otherLayerCount = (activeJoineryItemPage.layers || []).length;
+      var layerNote = otherLayerCount
+        ? " " + otherLayerCount + " other saved layer" + (otherLayerCount === 1 ? "" : "s") + " on this item — tap the layers-with-a-badge icon in the toolbar above to view/toggle."
+        : "";
+      showToast((activeJoineryItemPage.ownHasDraft
         ? "Opened “" + activeJoineryItemPage.displayName + "” — continuing your unsaved autosaved changes. Hit Save to make this a permanent, shared layer."
-        : "Opened “" + activeJoineryItemPage.displayName + "”.");
+        : "Opened “" + activeJoineryItemPage.displayName + "”.") + layerNote,
+        otherLayerCount ? 7000 : undefined);
     }).catch(function(err){
       if (err && err.code === "nav_cancelled") return; // declined the save-before-leaving confirm -- just stay put
       console.error("Open joinery item page failed:", err);
@@ -4662,134 +4755,24 @@
   }
 
   /* ============================== Shop drawing dialogs (2026-09-23) ==============================
-     See addShopDrawing's own comment for the storage/revision side. A
-     wholly separate feature from Job Notes above -- own dialogs, own
-     dropzone, own popover rows -- per Andrew: "add a shop drawing (NOT A
-     JOB NOTE) these are 2 different things." Offered from a roomlink
-     marker's own right-click popover in BOTH Site Measure and the Viewer
-     (confirmed with Andrew 2026-09-23: full Add+View parity with Job
-     Notes), never the ITP apps. */
-  var shopDrawingAddBackdrop = document.getElementById("shopDrawingAddBackdrop");
-  var shopDrawingAddSubtitleEl = document.getElementById("shopDrawingAddSubtitle");
-  var shopDrawingDropzone = document.getElementById("shopDrawingDropzone");
-  var shopDrawingAddStatusEl = document.getElementById("shopDrawingAddStatus");
-  var shopDrawingFileInput = document.getElementById("shopDrawingFileInput");
-  var activeShopDrawingMarker = null;
-  function openAddShopDrawingDialog(obj){
-    activeShopDrawingMarker = obj;
-    shopDrawingAddSubtitleEl.textContent = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
-    shopDrawingAddStatusEl.textContent = "";
-    shopDrawingAddBackdrop.hidden = false;
-  }
-  function closeAddShopDrawingDialog(){
-    shopDrawingAddBackdrop.hidden = true;
-    activeShopDrawingMarker = null;
-    shopDrawingDropzone.classList.remove("dragover");
-  }
-  document.getElementById("shopDrawingAddCancel").addEventListener("click", closeAddShopDrawingDialog);
-  shopDrawingAddBackdrop.addEventListener("click", function(e){ if (e.target === shopDrawingAddBackdrop) closeAddShopDrawingDialog(); });
-
-  // The "which drawing is this a revision of?" picker -- only ever opened
-  // from within decideShopDrawingRevision below, when there's more than one
-  // existing drawing to choose from. Resolves the pending promise with the
-  // chosen drawingId, or null if cancelled (which aborts the whole add).
-  var shopDrawingPickBackdrop = document.getElementById("shopDrawingPickBackdrop");
-  var shopDrawingPickListEl = document.getElementById("shopDrawingPickListEl");
-  var shopDrawingPickResolve = null;
-  function openShopDrawingPicker(groups){
-    return new Promise(function(resolve){
-      shopDrawingPickResolve = resolve;
-      shopDrawingPickListEl.innerHTML = "";
-      groups.forEach(function(g){
-        var latest = g.revisions[g.revisions.length - 1];
-        var row = document.createElement("button");
-        row.type = "button"; row.className = "mbtn shopdrawing-pick-row";
-        row.textContent = latest.displayName + " (" + g.revisions.length + " revision" + (g.revisions.length === 1 ? "" : "s") + ", latest " + latest.revLabel + ")";
-        row.addEventListener("click", function(){
-          shopDrawingPickBackdrop.hidden = true;
-          if (shopDrawingPickResolve) shopDrawingPickResolve(g.drawingId);
-          shopDrawingPickResolve = null;
-        });
-        shopDrawingPickListEl.appendChild(row);
-      });
-      shopDrawingPickBackdrop.hidden = false;
-    });
-  }
-  function closeShopDrawingPicker(){
-    shopDrawingPickBackdrop.hidden = true;
-    if (shopDrawingPickResolve) shopDrawingPickResolve(null);
-    shopDrawingPickResolve = null;
-  }
-  document.getElementById("shopDrawingPickCancel").addEventListener("click", closeShopDrawingPicker);
-  shopDrawingPickBackdrop.addEventListener("click", function(e){ if (e.target === shopDrawingPickBackdrop) closeShopDrawingPicker(); });
-
-  // Andrew: "if a second drawing is added, ask if this is a revision and
-  // add it accordingly. (dont delete old, but have a selecter to open
-  // RevA, REVB, etc.)" Resolves to the drawingId this file should be added
-  // as the next revision OF, or null to start a brand new, independent
-  // drawing. With zero existing drawings there's nothing to ask about yet
-  // -- straight to "new drawing" (RevA). With exactly one, "yes" applies to
-  // it directly, no picker needed. With more than one, "yes" opens the
-  // picker above; cancelling that picker aborts the whole add (returns
-  // "cancelled" rather than resolving a drawingId, so the caller can tell
-  // "start fresh" apart from "stop entirely").
-  function decideShopDrawingRevision(existingGroups){
-    if (!existingGroups.length) return Promise.resolve(null);
-    return showConfirm("Is this a revision of an existing shop drawing for this item?").then(function(isRevision){
-      if (!isRevision) return null;
-      if (existingGroups.length === 1) return existingGroups[0].drawingId;
-      return openShopDrawingPicker(existingGroups).then(function(drawingId){
-        return drawingId === null ? "cancelled" : drawingId;
-      });
-    });
-  }
-  function handleShopDrawingFile(file){
-    if (!activeShopDrawingMarker || !file) return;
-    if (file.type && file.type !== "application/pdf" && !/\.pdf$/i.test(file.name || "")){
-      shopDrawingAddStatusEl.textContent = "Only PDF files can be added as a shop drawing.";
-      return;
-    }
-    var obj = activeShopDrawingMarker;
-    var key = shopDrawingKeyFor(obj);
-    shopDrawingAddStatusEl.textContent = "Checking existing drawings…";
-    ensureProjectWritePermission().then(function(ok){
-      if (!ok){
-        shopDrawingAddStatusEl.textContent = "Couldn't get permission to save that here — try again, or add this from Site Measure instead.";
-        return;
-      }
-      return listShopDrawings(activeProjectHandle, key).then(function(groups){
-        return decideShopDrawingRevision(groups);
-      }).then(function(asRevisionOf){
-        if (asRevisionOf === "cancelled"){ shopDrawingAddStatusEl.textContent = ""; return; }
-        shopDrawingAddStatusEl.textContent = "Adding “" + file.name + "”…";
-        return addShopDrawing(activeProjectHandle, key, file, asRevisionOf).then(function(){
-          showToast(asRevisionOf ? "New revision added to that shop drawing." : "Shop drawing added to “" + roomlinkDisplayText(obj) + "”.");
-          closeAddShopDrawingDialog();
-        });
-      });
-    }).catch(function(err){
-      console.error("Add shop drawing failed:", err);
-      shopDrawingAddStatusEl.textContent = "Couldn't save that file — try again.";
-    });
-  }
-  // Same stopPropagation lesson as the job-note dropzone above (see its own
-  // comment) -- every dialog here is a DOM descendant of #stage's own
-  // global drop-to-insert-onto-the-plan listener.
-  shopDrawingDropzone.addEventListener("click", function(){ shopDrawingFileInput.click(); });
-  shopDrawingDropzone.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); shopDrawingFileInput.click(); } });
-  shopDrawingDropzone.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); shopDrawingDropzone.classList.add("dragover"); });
-  shopDrawingDropzone.addEventListener("dragleave", function(e){ e.stopPropagation(); shopDrawingDropzone.classList.remove("dragover"); });
-  shopDrawingDropzone.addEventListener("drop", function(e){
-    e.preventDefault();
-    e.stopPropagation();
-    shopDrawingDropzone.classList.remove("dragover");
-    var files = e.dataTransfer && e.dataTransfer.files;
-    if (files && files.length) handleShopDrawingFile(files[0]);
-  });
-  shopDrawingFileInput.addEventListener("change", function(){
-    if (shopDrawingFileInput.files && shopDrawingFileInput.files.length) handleShopDrawingFile(shopDrawingFileInput.files[0]);
-    shopDrawingFileInput.value = "";
-  });
+     "Add shop drawing" (this dialog, its dropzone, the "which drawing is
+     this a revision of?" picker, and their JS -- openAddShopDrawingDialog/
+     closeAddShopDrawingDialog/openShopDrawingPicker/closeShopDrawingPicker/
+     decideShopDrawingRevision/handleShopDrawingFile, plus the
+     #shopDrawingAddBackdrop and #shopDrawingPickBackdrop markup and the
+     now-unused write-side addShopDrawing()/newShopDrawingGroupId()/
+     shopDrawingRevisionFileName() helpers) was REMOVED WHOLESALE
+     (2026-09-24), Andrew, verbatim: "remove the following buttons from the
+     site measure app... Add shop drawing on right click (Keep view shop
+     drawing)." The only way this dialog was ever opened was the popover row
+     removed in showLockPopover -- with that row gone, every one of these
+     was fully unreachable, not merely one caller among several, so all of
+     it came out together rather than being left as dead code. "View shop
+     drawing" below is untouched (Andrew's own explicit "Keep view shop
+     drawing") and shares none of the above -- shopDrawingKeyFor,
+     getShopDrawingsDirForItem, listShopDrawingRevisions,
+     parseShopDrawingRevisionFileName and listShopDrawings all stay, since
+     View still reads through every one of them. */
 
   // "View shop drawing" -- pure read. One row per independent drawing, each
   // with its own revision <select> (defaulting to the latest) and an Open
@@ -7893,7 +7876,10 @@
   var EYE_ICON_OPEN = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10s2.8-5.5 8-5.5S18 10 18 10s-2.8 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/></svg>';
   var EYE_ICON_CLOSED = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10s2.8-5.5 8-5.5S18 10 18 10s-2.8 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.3"/><path d="M3.5 3.5l13 13"/></svg>';
   var EDIT_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 3.7l3.5 3.5L6 17.5H2.5V14z"/></svg>';
-  var DELETE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 6h12M8 6V4.5A1 1 0 0 1 9 3.5h2A1 1 0 0 1 12 4.5V6M6 6l.6 9.5A1.5 1.5 0 0 0 8.1 17h3.8a1.5 1.5 0 0 0 1.5-1.5L14 6"/></svg>';
+  // DELETE_ICON removed (2026-09-24) along with the popover's own "Delete"
+  // row -- see showLockPopover's own comment. The properties panel's trash
+  // button has always had its own separate, inline copy of this icon and is
+  // unaffected.
   var MIRROR_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v15" stroke-dasharray="1.6 1.8"/><path d="M7 6.5L3.8 9l3.2 2.5"/><path d="M13 6.5L16.2 9l-3.2 2.5"/></svg>';
   var BRING_FRONT_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="9" height="9" rx="1"/><path d="M5.5 12.5H4A1 1 0 0 1 3 11.5V4A1 1 0 0 1 4 3h7.5a1 1 0 0 1 1 1v1.5"/></svg>';
   // Same two-rectangle language as Bring to front, mirrored: the BACK
@@ -7984,19 +7970,18 @@
     var isEmptyCanvas = !!obj.__isEmptyCanvas;
     var isRealObject = !isBaseImage && !isEmptyCanvas;
 
-    // Delete sits at the top of the menu -- it's the row people reach for
-    // most often, and putting it first means one same-spot tap instead of
-    // hunting past Edit text/Lock every time. Only while unlocked -- same
-    // rule as dragging or editing it: a locked item has to be freed first,
-    // so it's never removed by an accidental right-click tap while it's
-    // meant to be protected.
-    if (isRealObject && !obj.locked && !VIEW_ONLY_MODE){
-      popoverRow(wrap, DELETE_ICON + "<span>Delete</span>", function(){
-        hideLockPopover();
-        state.selectedId = obj.id;
-        deleteSelected();
-      });
-    }
+    // "Delete on right click" -- REMOVED (2026-09-24), Andrew, verbatim:
+    // "remove the following buttons from the site measure app. delete on
+    // right click." This row used to sit right here (top of the menu,
+    // calling deleteSelected() on this object) -- deleting an object is
+    // still fully possible, just no longer from this popover: the
+    // selected-item properties panel's own trash button (`.panel-actions
+    // .ibtn[title="Delete"]`, confirmed by run_layers_panel_no_delete.js to
+    // be a second, separate, still-untouched way to delete) remains. The
+    // DELETE_ICON constant this row used to reference is now unused
+    // anywhere else (the properties panel's own trash button has always had
+    // its own separate, inline copy of the same icon markup) and has been
+    // removed below along with this row.
 
     // Editing straight from the right-click menu, while unlocked -- a
     // locked item can't be typed into until it's freed, same as it can't
@@ -8089,16 +8074,24 @@
       }
     }
 
-    // "Add shop drawing" / "View shop drawing" (2026-09-23, Andrew) -- a
-    // deliberately separate feature from Job Notes just above: "add a shop
-    // drawing (NOT A JOB NOTE) these are 2 different things." Same
-    // Site-Measure-and-Viewer availability as Job Notes (confirmed with
-    // Andrew 2026-09-23), for the same reason.
+    // "View shop drawing" (2026-09-23, Andrew) -- a deliberately separate
+    // feature from Job Notes above: "add a shop drawing (NOT A JOB NOTE)
+    // these are 2 different things." Same Site-Measure-and-Viewer
+    // availability as Job Notes (confirmed with Andrew 2026-09-23).
+    //
+    // "Add shop drawing on right click" -- REMOVED (2026-09-24), Andrew,
+    // verbatim: "remove the following buttons from the site measure app...
+    // Add shop drawing on right click (Keep view shop drawing)." This
+    // popover's own "Add shop drawing" row (which opened
+    // openAddShopDrawingDialog) is gone; "View shop drawing" just below is
+    // deliberately untouched, per Andrew's own explicit "Keep view shop
+    // drawing." A shop drawing can no longer be ADDED from this app at all
+    // (there was never a second, non-right-click way to add one -- see the
+    // removed openAddShopDrawingDialog's own former comment) -- adding one
+    // is now something that has to happen another way (outside this app,
+    // or a future feature); viewing an already-added one here is
+    // unaffected.
     if (isRealObject && obj.type === "roomlink"){
-      popoverRow(wrap, SHOPDRAWING_ICON + "<span>Add shop drawing</span>", function(){
-        hideLockPopover();
-        openAddShopDrawingDialog(obj);
-      });
       popoverRow(wrap, SHOPDRAWING_ICON + "<span>View shop drawing</span>", function(){
         hideLockPopover();
         openViewShopDrawingDialog(obj);
@@ -8730,6 +8723,15 @@
     var btn = document.getElementById("overlayLayersBtn");
     var layers = (activeJoineryItemPage && activeJoineryItemPage.layers) || [];
     if (btn) btn.style.display = layers.length ? "" : "none";
+    // (v45.10) See the .ibtn-badge CSS comment -- a plain count, always in
+    // sync with the button's own visibility above, is the whole fix: no
+    // separate call sites to keep aligned, just this one already-existing
+    // chokepoint every layer-list change already renders through.
+    var badge = document.getElementById("overlayLayersBadge");
+    if (badge){
+      badge.hidden = !layers.length;
+      badge.textContent = String(layers.length);
+    }
     if (!layers.length){
       if (overlayLayersPanelOpen) setOverlayLayersPanelOpen(false);
       return;
@@ -9654,6 +9656,56 @@
       showToast("Couldn't save “" + activeWorkName() + "” before switching (" + describeError(err) + ") — try Save first, then switch again.", 8000);
     });
   }
+  // "Home" (2026-09-24) -- Andrew, verbatim: "New button, change to home
+  // button." Takes the place of the old #newBtn ("Start a new file")
+  // entirely -- see homeBtnEl's own click-handler comment further down.
+  // Goes all the way back out to this app's own startup screen from
+  // ANY depth (a joinery item's own page, a room, or a level's own main
+  // plan), unlike switchProject() just above (which only steps out to THIS
+  // project's own level list) or backToLevelsFromRoomsBtn (one tier
+  // shallower still) -- the same reasoning those two share, just carried
+  // one step further out. Deliberately reuses bootIntoProjectGate()'s own
+  // destination logic (a chosen Projects folder means the project LIST;
+  // none chosen means the "Choose Projects Folder" setup screen) rather
+  // than inventing a second definition of "home" -- this IS the same
+  // screen the app's own header/logo would go to if a click-to-home
+  // affordance is ever added there too (see next-version-notes.md's own
+  // still-open item on that), so there is deliberately only one "go home"
+  // function to keep them from ever drifting apart.
+  function goHome(){
+    function afterSave(){
+      activeProjectName = ""; activeProjectHandle = null;
+      activeLevelName = ""; activeLevelHandle = null; activeLevelIsFlat = false;
+      activeLevelSavesHandle = null; activeLevelPdfsHandle = null; activeLevelBackupsHandle = null;
+      activeRoomName = ""; activeRoomHandle = null;
+      activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
+      activeJoineryItemPage = null;
+      clearActiveWorkInMemory();
+      refreshBrandSubtitle();
+      state.fileBase = "plan";
+      updateFileNameBtn();
+      if (switchProjectBtn) switchProjectBtn.style.display = "none";
+      if (roomsBtn) roomsBtn.style.display = "none";
+      if (roomJumpSelect) roomJumpSelect.style.display = "none";
+      updateBackBtnVisibility();
+      if (projectsRootHandle){
+        populateProjectList().then(function(){
+          gateListFolderLabel.textContent = "Projects folder: “" + projectsRootName + "”";
+          showGateState("list");
+        });
+      } else {
+        // No Projects folder chosen at all yet (shouldn't normally happen
+        // once the toolbar/canvas is showing, but falls back safely to the
+        // literal first screen boot() itself would show).
+        showGateState("setup");
+      }
+    }
+    saveActiveWorkBeforeLeaving().then(afterSave).catch(function(err){
+      if (err && err.code === "nav_cancelled") return; // declined the confirm -- just stay put
+      console.error("Auto-save before going home failed:", err);
+      showToast("Couldn't save “" + activeWorkName() + "” before going home (" + describeError(err) + ") — try Save first, then try Home again.", 8000);
+    });
+  }
   // One tier deeper than switchProject(): leaves whichever of the level's
   // own plan or a room is currently open and shows THIS level's room list
   // instead of stepping all the way out to the project's level list --
@@ -10324,64 +10376,50 @@
   // fields anywhere besides this dialog; the separate UTZLINE ITP/
   // Manufacture ITP apps read the file directly and are unaffected).
 
-  /* ============================== open / drop image ============================== */
-  // "New" used to always wipe THIS plan's content back to blank in place --
-  // safe from an accidental tap (there's a confirm dialog first) but not
-  // from simply leaving it a moment too long afterward: the next auto-
-  // backup tick (~30s) autosaves whatever's on screen straight over the
-  // level's real save file, and a level opened only moments earlier (before
-  // its first rolling backup snapshot) had nothing left to recover the real
-  // content from. With a project/level open, the app already has a
-  // completely safe way to reach the same "blank canvas to draw on" goal --
-  // starting a brand new level, which never touches this level's own files
-  // at all -- so that's the primary tap now. The old in-place clear is
-  // still here for the rarer case of wanting to reuse THIS level's own
-  // folder for something else entirely: press and hold (or right-click) the
-  // button, same gesture the project/level list rows already use for their
-  // own less-common destructive action.
-  var newBtnEl = document.getElementById("newBtn");
+  /* ============================== home / drop image ============================== */
+  // "New" -> "Home" (2026-09-24), Andrew, verbatim: "New button, change to
+  // home button." This button used to always offer a way to blank out the
+  // current plan (a plain tap routed to switchProject() with a project/
+  // level open, since v32; press-and-hold cleared THIS level's content in
+  // place). None of that survives the rename -- its whole job now is
+  // goHome() (see that function's own comment below): step all the way back
+  // out to this app's own startup screen from anywhere (a joinery item's
+  // own page, a room, or a level's main plan), auto-saving whatever's open
+  // first. The old press-and-hold "clear this level in place" gesture is
+  // deliberately NOT carried over onto a button now labelled Home -- a
+  // destructive action hidden behind a long-press on what reads as a plain
+  // navigation control would be a real hazard, and Andrew didn't ask for it
+  // to be kept.
+  var homeBtnEl = document.getElementById("homeBtn");
   // NOTE: deliberately NOT named startBlankPlan -- that name is already a
   // top-level function declared earlier (used by openLevel/openRoom to seed
   // a brand-new level/room's blank canvas). Two top-level function
   // declarations sharing a name silently collide (the later one wins for
   // every caller), which previously made a fresh level/room's own open flow
   // pop an incorrect toast showing the raw level/room name. Kept distinct on
-  // purpose.
+  // purpose. Still used below by this button's own single-file-fallback-
+  // mode branch (see homeBtnEl's click handler).
   function startBlankPlanWithToast(toastMsg){
     var blank = generateBlank();
     applyLoadedImage(blank.dataURL, blank.w, blank.h, "plan");
     showToast(toastMsg);
   }
-  newBtnEl.addEventListener("click", function(){
-    if (activeLevelName){ switchProject(); return; }
+  homeBtnEl.addEventListener("click", function(){
+    if (activeLevelName){ goHome(); return; }
     // No project/level system in play (the plain single-file fallback mode
-    // this app also supports) -- there's no separate, safer place to route
-    // this to, so it keeps its original direct behavior.
-    if (!state.objects.length){ startBlankPlanWithToast("Started a new file — Open, Insert image, or paste a photo/PDF to begin."); return; }
+    // this app also supports, for browsers with no File System Access API)
+    // -- there's no startup/project-gate screen to go "home" TO in this
+    // mode, so this keeps this button's own former "New" behavior as this
+    // mode's closest equivalent: a safe way to clear the canvas and start
+    // over.
+    if (!state.objects.length){ startBlankPlanWithToast("Started a new file — Insert image, or paste a photo/PDF to begin."); return; }
     showConfirm("Start a new file? This clears the current plan and its " + state.objects.length + " annotation(s) (save a project file first if you want to keep them).").then(function(ok){
-      if (ok) startBlankPlanWithToast("Started a new file — Open, Insert image, or paste a photo/PDF to begin.");
+      if (ok) startBlankPlanWithToast("Started a new file — Insert image, or paste a photo/PDF to begin.");
     });
   });
-  wireLongPress(newBtnEl, function(){
-    if (!activeLevelName) return; // nothing extra to offer in single-file mode -- the plain tap above already covers it
-    if (!state.objects.length){ startBlankPlanWithToast("Cleared this level's content — Open, Insert image, or paste a photo/PDF to begin."); return; }
-    showConfirm("Clear this level's content? This wipes the current plan and its " + state.objects.length + " annotation(s) back to blank, reusing this same level's folder (save a project file first if you want to keep them).").then(function(ok){
-      if (ok) startBlankPlanWithToast("Cleared this level's content — Open, Insert image, or paste a photo/PDF to begin.");
-    });
-  });
-  document.getElementById("openBtn").addEventListener("click", function(){
-    // Flush whatever's currently drawn to disk BEFORE handing off to the
-    // OS's own file/camera picker -- see autosaveLevelPlanIfActive's own
-    // comment on why this now happens here too, not just after a photo
-    // comes back in.
-    if (!state.objects.length){ autosaveLevelPlanIfActive(); fileInput.click(); return; }
-    showConfirmSync("Open a new image? This replaces the current plan and its " + state.objects.length + " annotation(s).", function(){ autosaveLevelPlanIfActive(); fileInput.click(); });
-  });
-  fileInput.addEventListener("change", function(){
-    var f = fileInput.files && fileInput.files[0];
-    if (f) loadImageFile(f);
-    fileInput.value = "";
-  });
+  // #openBtn ("Open") removed 2026-09-24 -- see the toolbar's own comment.
+  // loadImageFile() itself is untouched below (the drag/drop handler still
+  // calls it directly when nothing's loaded yet).
   ["dragover"].forEach(function(evt){
     stage.addEventListener(evt, function(e){ e.preventDefault(); stage.classList.add("drop-active"); });
   });
@@ -12814,20 +12852,27 @@
     updateFileNameBtn();
   }
 
-  /* ============================== save / open project ==============================
+  /* ============================== save project (single-file fallback mode) ==============================
      Distinct from Save PDF (a flattened, non-editable picture): a project
      file is the same shape the IndexedDB autosave already uses, just written
      out as a plain .utzline.json file instead of tucked away in this
-     browser's storage -- so it survives a cleared browser, moves between
-     machines, and (since it's an ordinary named file) supports working on
-     several separate plans side by side, each with its own save. Reopening
-     one keeps every object fully editable -- nothing is flattened. */
+     browser's storage -- so it survives a cleared browser and moves between
+     machines. Every object is written out fully editable -- nothing is
+     flattened -- but as of 2026-09-24 there is no button left anywhere in
+     this app that reads one of these files back in: "Open project"
+     (openProjectFile(), #openProjectBtn, #openProjectInput) was removed
+     entirely, per Andrew, verbatim: "remove the following buttons from the
+     site measure app... Open Project." This function (and saveAll() below)
+     is otherwise untouched -- it's the export half of the same mechanism,
+     still used by the general Save button in the plain single-file fallback
+     mode (no Projects folder / File System Access API) this app also
+     supports; the real, current workflow (a Projects folder) never calls
+     it at all. */
   function projectPayload(){
     return {
-      // Renamed from the app's old name (was "Redline") -- only the NEW
-      // marker is ever written now, but openProjectFile() below still
-      // accepts the old one too, so nobody's already-saved project files
-      // become unopenable just because the app was renamed.
+      // Renamed from the app's old name (was "Redline") -- kept for the
+      // benefit of very old .redline.json files that may still exist
+      // somewhere; only the new marker is ever written now.
       utzlineProject: 1,
       imageDataURL: state.imageDataURL, imageW: state.imageW, imageH: state.imageH,
       imageTiles: state.imageTiles || null,
@@ -12855,35 +12900,16 @@
     // race over the same toast, and each result is visible in turn rather
     // than whichever happens to resolve last silently winning.
     return saveBlobSmart(blob, suggestFilename("utzline.json")).then(function(res){
-      showToast(res.status === "saved" ? "Project saved — Open project to keep working on it later." : "Sent.");
+      showToast(res.status === "saved" ? "Project file saved." : "Sent.");
     }).catch(function(err){
       if (!err || err.code === "declined") return;
       if (err.code === "rate_limited"){ showToast("Try again in a moment."); return; }
       showToast("Couldn't save the project file — try again.");
     });
   }
-  function openProjectFile(file){
-    var reader = new FileReader();
-    reader.onload = function(){
-      var saved;
-      try{ saved = JSON.parse(String(reader.result)); }catch(e){ saved = null; }
-      // Accept files saved under either marker: the current one, and the
-      // old one from before the app was renamed (was "Redline") -- so a
-      // project someone saved months ago still opens today.
-      if (!saved || !(saved.utzlineProject || saved.redlineProject) || !savedHasImage(saved)){
-        showToast("That doesn't look like a UTZLINE Site Measure project file.");
-        return;
-      }
-      applyRestoredState(saved);
-      fitToView();
-      renderAll();
-      updateUndoRedoButtons();
-      scheduleAutosave();
-      showToast("Opened " + (file.name || "project") + " — " + state.objects.length + " object(s), fully editable.");
-    };
-    reader.onerror = function(){ showToast("Could not read that file."); };
-    reader.readAsText(file);
-  }
+  // openProjectFile() (reading one of these .utzline.json files back in)
+  // was removed 2026-09-24 along with "Open project" -- see projectPayload's
+  // own comment above.
   // Save PDF and Save project used to be two separate buttons/taps. What
   // people actually want once they're done marking up a plan is both files
   // -- the flattened PDF to send off, the project file to keep editing --
@@ -12916,16 +12942,8 @@
   // around the native colour picker, not just once it's dismissed.
   if (viewerRecolorInput) viewerRecolorInput.addEventListener("input", function(){ applyViewerLineColor(viewerRecolorInput.value); });
   if (viewerRecolorResetBtn) viewerRecolorResetBtn.addEventListener("click", resetViewerLineColors);
-  var openProjectInput = document.getElementById("openProjectInput");
-  document.getElementById("openProjectBtn").addEventListener("click", function(){
-    if (!state.objects.length){ openProjectInput.click(); return; }
-    showConfirmSync("Open a project file? This replaces the current plan and its " + state.objects.length + " annotation(s) (make sure you've saved it first if you want to keep it).", function(){ openProjectInput.click(); });
-  });
-  openProjectInput.addEventListener("change", function(){
-    var f = openProjectInput.files && openProjectInput.files[0];
-    if (f) openProjectFile(f);
-    openProjectInput.value = "";
-  });
+  // #openProjectBtn/#openProjectInput ("Open project") removed 2026-09-24 --
+  // see projectPayload's own comment above.
 
   // Viewer mode's own visible marker -- the body class does the actual
   // work (see the .viewer-mode CSS above), this just makes it obvious at a
