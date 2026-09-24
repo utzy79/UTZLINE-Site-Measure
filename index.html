@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.11">
+<link rel="manifest" href="./manifest.json?v=v45.12">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.11">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.11">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.12">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.12">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1842,7 +1842,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v45.11";
+  var APP_VERSION = "v45.12";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -4334,28 +4334,49 @@
         VIEW_ONLY_MODE ? Promise.resolve(null) : readJoineryDraft(activeProjectHandle, key, deviceUserName)
       ]).then(function(results){
         var pdfsHandle = results[0], backupsHandle = results[1], overlays = results[2], ownDraft = results[3];
-        // Newest overlay per user wins (listJoineryOverlays already sorts
-        // each user's own entries into chronological order, so the LAST
-        // entry seen for a given user in this forEach is that user's most
-        // recent one).
-        var latestByUser = {};
-        overlays.forEach(function(o){ latestByUser[o.user] = o; });
+        // (v45.12, 2026-09-24) Andrew, verbatim, on why v45.11's fix still
+        // wasn't enough: "still not working, every site measure save needs
+        // to be added as an extra layer, using the username and datetime in
+        // the filename. this is to eliminate any risk of deletion...alll
+        // username layers need to be accessible regardless of who is using
+        // the viewer." Every permanent Save already WAS its own immutable,
+        // username+datetime-stamped file on disk (see listJoineryOverlays'
+        // own comment) -- nothing was ever at risk of deletion. The actual
+        // bug was right here: this code used to collapse straight to each
+        // user's single newest overlay (an old `latestByUser` map, one slot
+        // per username, later entries silently overwriting earlier ones),
+        // so anyone's OWN earlier Saves -- and, on the Viewer, anyone's
+        // earlier Saves at all -- were quietly dropped from the layer list
+        // and never offered as a toggle, even though the files themselves
+        // were sitting right there untouched. That's "only gives you one
+        // name to exclude" exactly: with two people each saving twice, the
+        // old code could only ever show two layers total, not four.
+        //
+        // Fixed by keeping every single overlay file as its own distinct
+        // layer -- the only entry ever left out is the exact file used to
+        // seed the base/editable view below, matched by the entry itself
+        // (object identity), never by which user it belongs to. Every
+        // OTHER overlay -- including a user's own older Saves -- is now a
+        // toggleable reference layer, labelled "username — date" by
+        // renderOverlayLayersPanel exactly as before (that rendering code
+        // was already correct; only the list feeding it was too narrow).
         var baseEntry = null; // whichever overlay (if any) becomes the non-toggleable base view
         if (!VIEW_ONLY_MODE){
-          // Site Measure itself: "my own" work is always the base, editable
-          // layer -- everyone else is a toggleable reference layer, same as
-          // ever regardless of who saved most recently.
+          // Site Measure itself: "my own" MOST RECENT Save is always the
+          // base, editable layer -- everyone else's Saves, and any of my
+          // OWN older ones, are all toggleable reference layers.
           var mySlug = overlayUserSlug(deviceUserName);
-          baseEntry = latestByUser[mySlug] || null;
-          delete latestByUser[mySlug];
+          overlays.forEach(function(o){
+            if (o.user === mySlug && (!baseEntry || o.stamp > baseEntry.stamp)) baseEntry = o;
+          });
         } else {
           // The Viewer has no "own" layer to prefer -- picks the single
           // most recent overlay across EVERYONE as the base view, per the
           // interim "most-recent-layer-wins" placeholder rule (the real
           // "official layer" picker is still a separate, not-yet-built
-          // piece meant to live in UTZLINE Projects). Every other user's
-          // latest overlay is still offered as a toggleable reference layer
-          // underneath it.
+          // piece meant to live in UTZLINE Projects). Every OTHER overlay,
+          // from every user and every earlier Save, is still offered as a
+          // toggleable reference layer underneath it.
           // Compares stamps ALONE, never the user-name prefix -- the stamp
           // is the only part that actually encodes chronological order
           // (fixed-width, zero-padded, left-to-right), so comparing
@@ -4364,15 +4385,13 @@
           // landed on opposite sides of their names' own alphabetical
           // order -- a real bug caught before it shipped, not a real-world
           // report.
-          var newest = null;
-          Object.keys(latestByUser).forEach(function(u){
-            var entry = latestByUser[u];
-            if (!newest || entry.stamp > newest.stamp) newest = entry;
+          overlays.forEach(function(o){
+            if (!baseEntry || o.stamp > baseEntry.stamp) baseEntry = o;
           });
-          baseEntry = newest;
-          if (baseEntry) delete latestByUser[baseEntry.user];
         }
-        var otherEntries = Object.keys(latestByUser).sort().map(function(u){ return latestByUser[u]; });
+        var otherEntries = overlays.filter(function(o){ return o !== baseEntry; }).sort(function(a, b){
+          return (a.user + " \u0000 " + a.stamp).localeCompare(b.user + " \u0000 " + b.stamp);
+        });
         var otherLayersPromise = Promise.all(otherEntries.map(function(entry){
           return readJsonFileHandle(entry.handle).then(function(data){
             return { user: entry.user, stamp: entry.stamp, fileName: entry.fileName, visible: true, objects: (data && data.objects) || [] };
