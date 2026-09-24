@@ -1,10 +1,14 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v45.10** (bump this line, and add a dated changelog
+**Current version: v45.11** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v45.11 (2026-09-24):** Andrew, verbatim: "check measure layering is still not working properly, on windows or app, only gives you one name to exclude, needs to show all names." Root cause: `resolveJoineryItemPageKey()` disambiguates two joinery markers that happen to share the same Room+Code by sorting every marker with that Room+Code *currently loaded on this device* — a real, known scenario (duplicate codes happen "by habit," flagged since v44.3). Since crews sync a level file via Dropbox at different times, two devices can easily hold different local copies of which duplicate-coded markers exist at the moment either one opens an item, so they compute *different* storage keys for what a person on the ground would call the same item — their Site Measure overlays (and job notes, and shop drawings) silently split across two folders and stop seeing each other's layers at all. Confirmed directly with a new reproduction test before touching any code.
+
+Fixed by caching a colliding marker's disambiguated key permanently on the marker itself the first time it's resolved, and silently re-saving the level file right away — every device, in every future session, then reads the same already-decided key instead of re-guessing it from whatever else happens to be loaded locally. Scoped to ONLY markers actually involved in a real collision; an ordinary non-duplicate item (the overwhelming majority) is completely unaffected, no extra background write. A real implementation pitfall — the first draft of this fix raced `openJoineryItemPage`'s own state swap and briefly wiped a flat level's markers in testing — was caught by the existing regression suite before shipping and fixed with a dedicated, synchronous-capture-then-write helper. New tests: `repro_duplicate_key_divergence.js`, `repro_multi_layer_bug.js`. Full suite re-run: 91/97 passing, same 6 pre-existing/already-documented failures as before (4 sandbox flakes + 2 intentionally-broken UTZLINE Projects tests, both unrelated to this app), none new. See `next-version-notes.md` for the full write-up.
 
 **v45.10 (2026-09-24):** Two independent requests from Andrew, sent together.
 

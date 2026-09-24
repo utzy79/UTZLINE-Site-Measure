@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.10">
+<link rel="manifest" href="./manifest.json?v=v45.11">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.10">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.10">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.11">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.11">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1842,7 +1842,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v45.10";
+  var APP_VERSION = "v45.11";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3335,15 +3335,56 @@
   // fresh, separate, blank page of their own from here on, which is
   // exactly the "each item gets its own page" guarantee v44.3 was for.
   //
-  // Known limitation, worth being upfront about: if the SET of colliding
-  // markers ever changes (one's deleted, or dragged far enough to change
-  // this sort order), which key a given marker resolves to can shift --
-  // rare, and far better than the guaranteed collision this replaces, but
-  // not perfectly stable the way a real, permanent per-item ID would be.
-  // That's the bigger fix still on the roadmap (see the Unified
-  // Implementation Brief's own note on stable IDs); this is the safe,
-  // fully self-contained interim fix that needs no change anywhere else.
+  // (v45.11, 2026-09-24) The "known limitation" above was the real,
+  // long-anticipated bug, not a theoretical one: Andrew's report that the
+  // Site Measure layers panel "only gives you one name to exclude, needs
+  // to show all names" traced back to exactly this instability, just
+  // triggered a much easier way than "someone deletes/drags a marker" --
+  // real crews sync a level file via Dropbox at different times (see
+  // next-version-notes.md's own "two-tier" usage note), so two devices can
+  // easily hold different local sets of a level's duplicate-coded markers
+  // at the moment either one opens an item. A device that hasn't yet
+  // synced a sibling computes a DIFFERENT index/suffix than one that has --
+  // confirmed directly (repro_duplicate_key_divergence.js): two people
+  // "measuring the same K-01" end up writing their Site Measure overlays
+  // (and job notes, and shop drawings -- every consumer of this same key)
+  // into two entirely separate storage folders, so neither ever sees the
+  // other listed as a layer at all. The exact same instability could even
+  // bite a single device across two calls in the same session if a sibling
+  // was added or removed in between (see openViewJobNoteDialogCore's own
+  // older comment about working around this for exactly that reason).
+  //
+  // Fixed with the "real, permanent per-item ID" this comment already
+  // flagged as the proper eventual fix: once resolved, the disambiguated
+  // key is cached directly on the marker itself as obj.pageKey, which rides
+  // along in the level file's own JSON save exactly like roomName/
+  // joineryCode always have (no format/schema migration -- it's just
+  // another field on an object already saved wholesale). Every later call
+  // for this same marker -- on any device, in any session, regardless of
+  // what else is or isn't currently loaded -- returns the cached value
+  // directly, without ever touching `siblings` again. Only the very first
+  // resolution for a given marker still depends on a complete sibling set
+  // (unavoidable -- it's the one moment the disambiguation actually has to
+  // be decided), a far narrower window than recomputing unconditionally on
+  // every single open forever. Silently re-saves the level file the moment
+  // a new key is assigned (best-effort, and skipped entirely in the
+  // read-only Viewer) so the assignment survives even if the user never
+  // otherwise touches this level again before navigating away -- without
+  // that, the cache would only ever help within a single already-open
+  // session.
+  //
+  // Deliberately scoped to ONLY the colliding case (siblings.length > 1) --
+  // a level with no duplicate-coded markers at all (the overwhelming
+  // majority of items, always) has nothing unstable to fix here in the
+  // first place, so it takes the exact same plain, side-effect-free
+  // baseKey return this function always gave it, no caching, no extra
+  // background disk write on every single item open. Every marker actually
+  // involved in a real collision gets cached and persisted, including the
+  // one that keeps the bare, un-suffixed key -- so if a THIRD duplicate is
+  // added later, neither existing one's already-settled key can shift
+  // again either.
   function resolveJoineryItemPageKey(levelName, obj){
+    if (obj.pageKey) return obj.pageKey;
     var roomName = obj.roomName || "";
     var joineryCode = obj.joineryCode || "";
     var baseKey = joineryItemPageKey(levelName, roomName, joineryCode);
@@ -3357,8 +3398,65 @@
       return String(a.id).localeCompare(String(b.id));
     });
     var index = siblings.indexOf(obj);
-    if (index <= 0) return baseKey;
-    return baseKey + "-" + (index + 1);
+    var key = (index > 0) ? (baseKey + "-" + (index + 1)) : baseKey;
+    obj.pageKey = key;
+    if (!VIEW_ONLY_MODE) persistFreshPageKeyAssignment();
+    return key;
+  }
+  // Dedicated, minimal, race-safe persistence for the obj.pageKey
+  // assignment above -- deliberately NOT just "call saveActiveLevelFile(
+  // false)" here, even though that's the function every other silent
+  // level-file write in this app already goes through. Caught directly by
+  // run_joinery_item_dialog.js's flat-level regression test before this
+  // shipped: resolveJoineryItemPageKey runs partway through
+  // openJoineryItemPage's own promise chain, a few lines before that same
+  // chain reassigns state.objects to the just-opened item's own (often
+  // blank) content. saveActiveLevelFile/saveFlatLevelFile both read the
+  // LIVE state.objects global from inside an async .then() callback --
+  // fine for every other call site, which never has a state.objects swap
+  // already in flight, but here the callback often didn't fire until
+  // AFTER that swap, silently overwriting the level's real markers/
+  // objects with the item's blank canvas. This instead captures every
+  // field the write needs synchronously, before returning control to the
+  // rest of openJoineryItemPage, and only the actual disk I/O happens
+  // asynchronously afterward -- immune to whatever state.objects becomes
+  // moments later. Best-effort and silent either way, same as
+  // scheduleAutosave elsewhere: a background bookkeeping write failing
+  // should never surface an error to the person trying to open an item.
+  function persistFreshPageKeyAssignment(){
+    if (!activeProjectHandle || !activeLevelName) return;
+    var objectsSnapshot = state.objects.slice();
+    if (activeLevelIsFlat && !activeRoomName){
+      var imageDataURL = state.imageDataURL, imageTiles = state.imageTiles || null,
+          imageW = state.imageW, imageH = state.imageH, savedBy = deviceUserName || "",
+          projectName = activeProjectName, levelName2 = activeLevelName, projectHandle = activeProjectHandle;
+      readFlatLevelFile(projectHandle, projectName, levelName2).then(function(existing){
+        var markers = objectsSnapshot.filter(function(o){ return o && o.type === "roomlink"; });
+        var objects = objectsSnapshot.filter(function(o){ return !(o && o.type === "roomlink"); });
+        return writeFlatLevelFile(projectHandle, projectName, levelName2, {
+          imageDataURL: imageDataURL, imageTiles: imageTiles, imageW: imageW, imageH: imageH,
+          rooms: existing ? existing.rooms : [], markers: markers, objects: objects, savedBy: savedBy
+        });
+      }).catch(function(){});
+      return;
+    }
+    var savesHandle = activeWorkSavesHandle();
+    if (!savesHandle) return;
+    var payload, blob;
+    try{
+      payload = {
+        utzlineProject: 1,
+        imageDataURL: state.imageDataURL, imageW: state.imageW, imageH: state.imageH,
+        imageTiles: state.imageTiles || null,
+        fileBase: state.fileBase, objects: objectsSnapshot, style: defaultStyle(),
+        savedBy: deviceUserName || ""
+      };
+      blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+    }catch(e){ return; }
+    var fileName = projectSaveFilename(activeWorkName());
+    savesHandle.getFileHandle(fileName, { create: true }).then(function(fh){
+      return verifiedHandleWrite(fh, blob);
+    }).catch(function(){});
   }
   function readJoineryItemPage(projectHandle, key){
     return getSiteMeasuresDir(projectHandle, false).then(function(dirH){
