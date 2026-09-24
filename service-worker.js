@@ -1056,7 +1056,7 @@
 // "in_manufacture" itself, exactly as before) -- no new write path was
 // added, this is purely keeping the shared enum's rank/icon tables in sync
 // so this app's own on-plan status badge stays correct.
-var CACHE_NAME = "utzline-sitemeasure-cache-v45.12";
+var CACHE_NAME = "utzline-sitemeasure-cache-v45.13";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

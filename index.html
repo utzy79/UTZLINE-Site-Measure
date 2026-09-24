@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.12">
+<link rel="manifest" href="./manifest.json?v=v45.13">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.12">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.12">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.13">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.13">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1842,7 +1842,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v45.12";
+  var APP_VERSION = "v45.13";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3630,12 +3630,15 @@
     }).then(function(fh){
       return verifiedHandleWrite(fh, file);
     }).then(function(){
-      // Sequential, NOT Promise.all -- both of these are independent
-      // read-modify-write calls against the SAME joinery-status.json file;
-      // running them concurrently would have each read the same pre-write
-      // snapshot and then race to write last, silently dropping whichever
-      // one lost. Order doesn't matter functionally (different fields), just
-      // that one fully completes (read AND write) before the other starts.
+      // Sequential rather than Promise.all -- kept that way for simplicity,
+      // though it's no longer required for correctness the way it used to
+      // be: since the v45.13 event-sourced rewrite (see the "joinery-status.json
+      // v2" comment above readJoineryStatuses), these two calls append two
+      // separate, independently-named immutable event files (a "jobnote"
+      // event and a "status" event) rather than racing to read-modify-write
+      // the same shared file, so running them concurrently would now be
+      // just as safe. Order still doesn't matter functionally either way
+      // (different fields, different files).
       return markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy).then(function(){
         return setJoineryStatusForward(projectHandle, level, room, joineryId, "in_manufacture", updatedBy);
       });
@@ -6222,15 +6225,249 @@
     if (rec.status === "measured") return "📏";
     return "";
   }
-  function readJoineryStatuses(projectHandle){
-    if (!projectHandle) return Promise.resolve([]);
+  /* ---- joinery-status.json v2: event-sourced storage (v45.13, 2026-09-24) ----
+     Andrew, on why this needed to change again, verbatim: "we will have 30
+     people using this app in different stages, all coming back to the same
+     database. there would be for instance upto 5 different machinist, 5
+     site managers (installers) 5 delivery drivers, etc. needs to be
+     foolproof and nevel lose data. some of this will be done via dropbox
+     upload after the fact. it then needs to all tie together without
+     deleting."
+
+     The block just above (joineryStatusRank/joineryStatusIcon/
+     joineryDisplayIcon) is untouched -- this only replaces HOW a record is
+     stored and computed, not the pipeline's own rules. The old storage was
+     exactly the same shape of risk already fixed for Site Measure's own
+     overlay layers (see the "Site Measure overlay layers" comment above
+     listJoineryOverlays), just with a far wider blast radius: FIVE
+     different apps (this one, Install ITP, Manufacture ITP, Delivery ITP,
+     Machine Schedule) all read the WHOLE shared array, changed one record,
+     and wrote the WHOLE array back, with no lock or version check. With one
+     editor at a time that's fine; with up to 30 people across five apps,
+     some syncing via Dropbox hours after the fact, two overlapping writes
+     -- even to two completely different items -- can silently clobber each
+     other, and a record's entire status HISTORY (not just its current
+     value) would go with it.
+
+     New shape, one folder per item (key = joineryItemPageKey -- the plain,
+     non-disambiguated key already used identically for Job Notes; this
+     deliberately does NOT use resolveJoineryItemPageKey's own duplicate-
+     Room+Code disambiguation, so two items sharing a Room+Code still
+     collide into the same status record exactly as they always have --
+     unchanged behaviour, not a regression and not a fix; a separate,
+     not-yet-raised concern):
+       Project Saves/Joinery Status/<key>/<user> - <stamp> - status.json --
+         IMMUTABLE. One file per forward status transition, ever written,
+         never overwritten or deleted.
+       Project Saves/Joinery Status/<key>/<user> - <stamp> - jobnote.json --
+         IMMUTABLE. One file per "a job note got added" signal.
+     "Current status" for an item is computed by READING every event file in
+     its folder and folding them together (foldJoineryStatusEvents) --
+     whichever status event has the highest rank wins (forward-only, exactly
+     as before, just decided at read time instead of trusted from one
+     mutable field), every status event becomes one history row, and the
+     latest jobNote event sets the jobNote flag. Two people -- or two apps,
+     or a device syncing hours late via Dropbox -- can never collide,
+     because no two of them are ever writing to the same file; whatever
+     order their files land on disk in, the fold (not write order) decides
+     the right answer. Nothing is ever silently overwritten or lost.
+
+     MIGRATION: every real project today only has the old single file, with
+     real history Andrew's team is actively relying on -- this is NOT a
+     "nothing to lose, clean cutover" situation the way the overlay rebuild
+     was, so the old data is migrated, not abandoned. The first time any
+     WRITE-CAPABLE app (i.e. not the read-only Viewer, which never has
+     permission to create anything) touches a project's status pipeline
+     after this update, migrateLegacyJoineryStatusIfNeeded reads whatever
+     joinery-status.json already has and writes one event file per history
+     entry (plus a jobNote event, if that flag was set) -- using each
+     entry's own ORIGINAL timestamp (never "now") to name the file, so if
+     two devices both happen to migrate the same project before either
+     finishes, they compute the IDENTICAL filename for the IDENTICAL
+     historical entry and simply overwrite each other with identical
+     content, rather than creating a duplicate. The old joinery-status.json
+     file itself is left on disk afterward, untouched and unread from then
+     on -- the same "leave it, don't delete it" convention the overlay
+     cutover already established. The Viewer, which only ever holds read
+     permission, never attempts migration; if it opens a project nobody's
+     migrated yet, readJoineryStatuses falls back to reading the OLD file
+     directly so status/icons still show correctly, until a write-capable
+     app performs the real migration. */
+  function joineryStatusEventsBranchName(){ return "Joinery Status"; }
+  function getJoineryStatusEventsRootDir(projectHandle, create){
+    return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
+      return psH.getDirectoryHandle(joineryStatusEventsBranchName(), { create: !!create });
+    });
+  }
+  function getJoineryStatusItemDir(projectHandle, key, create){
+    return getJoineryStatusEventsRootDir(projectHandle, create).then(function(rootH){
+      return rootH.getDirectoryHandle(key, { create: !!create });
+    });
+  }
+  // Millisecond precision (unlike overlayTimestampStamp's second precision)
+  // -- two DIFFERENT event kinds for the same user in the same second are
+  // already disambiguated by the kind suffix in the filename, but two of
+  // the SAME kind that close together would still need this to never
+  // collide.
+  function statusEventStamp(d){
+    d = d || new Date();
+    function p2(n){ return (n < 10 ? "0" : "") + n; }
+    function p3(n){ return (n < 10 ? "00" : n < 100 ? "0" : "") + n; }
+    return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + " " +
+      p2(d.getHours()) + "-" + p2(d.getMinutes()) + "-" + p2(d.getSeconds()) + "-" + p3(d.getMilliseconds());
+  }
+  // For MIGRATING an already-recorded historical entry -- derives the stamp
+  // from that entry's own original `at` (an ISO string), not "now", so two
+  // devices independently migrating the same old entry always compute the
+  // same filename -- see this section's own top comment.
+  function statusEventStampFromIso(iso){
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) d = new Date(0);
+    return statusEventStamp(d);
+  }
+  function statusEventFileName(user, stamp, kind){
+    return overlayUserSlug(user) + " - " + stamp + " - " + kind + ".json";
+  }
+  function listJoineryStatusEventsForItem(projectHandle, key){
+    return getJoineryStatusItemDir(projectHandle, key, false).then(function(dirH){
+      if (!dirH || typeof dirH.values !== "function") return [];
+      var handles = [];
+      var iter = dirH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return handles;
+          if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) handles.push(res.value);
+          return step();
+        });
+      }
+      return step();
+    }, function(){ return []; }).then(function(handles){
+      return Promise.all(handles.map(function(fh){ return readJsonFileHandle(fh); }));
+    }).then(function(events){
+      return events.filter(function(e){ return e && typeof e === "object"; });
+    });
+  }
+  // Turns one item's raw event list into the exact same record shape every
+  // caller in every app already expects (status/updatedAt/updatedBy/
+  // history[]/jobNote/jobNoteAt/jobNoteBy) -- so every DISPLAY/render call
+  // site downstream of readJoineryStatuses needs zero changes at all.
+  function foldJoineryStatusEvents(events){
+    if (!events || !events.length) return null;
+    var statusEvents = events.filter(function(e){ return e.kind === "status" && e.status; });
+    var jobNoteEvents = events.filter(function(e){ return e.kind === "jobNote"; });
+    if (!statusEvents.length && !jobNoteEvents.length) return null;
+    var any = statusEvents[0] || jobNoteEvents[0];
+    var rec = { level: any.level || "", room: any.room || "", joineryId: any.joineryId || "" };
+    var best = null;
+    statusEvents.forEach(function(e){ if (!best || joineryStatusRank(e.status) > joineryStatusRank(best.status)) best = e; });
+    if (best){
+      rec.status = best.status; rec.updatedAt = best.at; rec.updatedBy = best.by || "";
+      rec.history = statusEvents.slice().sort(function(a, b){
+        return (a.at || "") < (b.at || "") ? -1 : (a.at || "") > (b.at || "") ? 1 : 0;
+      }).map(function(e){ return { status: e.status, at: e.at, by: e.by || "" }; });
+    } else {
+      rec.status = ""; rec.updatedAt = ""; rec.updatedBy = ""; rec.history = [];
+    }
+    var latestJobNote = null;
+    jobNoteEvents.forEach(function(e){ if (!latestJobNote || (e.at || "") > (latestJobNote.at || "")) latestJobNote = e; });
+    if (latestJobNote){ rec.jobNote = true; rec.jobNoteAt = latestJobNote.at; rec.jobNoteBy = latestJobNote.by || ""; }
+    return rec;
+  }
+  // The OLD whole-file reader -- kept verbatim as a fallback for the
+  // Viewer (never has permission to migrate) and as the one-time source
+  // migrateLegacyJoineryStatusIfNeeded reads from. Never called as the
+  // primary path by anything else from here on.
+  function readLegacyJoineryStatusFile(projectHandle){
     return projectHandle.getFileHandle("joinery-status.json", { create: false }).then(function(fh){
       return fh.getFile();
     }).then(function(file){
       return file.text();
     }).then(function(text){
       try{ var arr = JSON.parse(text); return Array.isArray(arr) ? arr : []; }catch(e){ return []; }
-    }, function(){ return []; }); // no file yet -- not an error, every item just reads as unset
+    }, function(){ return []; });
+  }
+  // Idempotent, safe under concurrent double-migration (see this section's
+  // own top comment) -- a no-op the moment the new folder already exists,
+  // regardless of which app or device created it.
+  function migrateLegacyJoineryStatusIfNeeded(projectHandle){
+    if (VIEW_ONLY_MODE) return Promise.resolve(false); // never has write permission
+    return getJoineryStatusEventsRootDir(projectHandle, false).then(function(){
+      return false; // already migrated (or already a brand-new, event-only project)
+    }, function(){
+      return getJoineryStatusEventsRootDir(projectHandle, true).then(function(){
+        return readLegacyJoineryStatusFile(projectHandle);
+      }).then(function(list){
+        var writes = [];
+        list.forEach(function(rec){
+          if (!rec) return;
+          var key = joineryItemPageKey(rec.level, rec.room, rec.joineryId);
+          var history = Array.isArray(rec.history) ? rec.history :
+            (rec.status && rec.updatedAt) ? [{ status: rec.status, at: rec.updatedAt, by: rec.updatedBy || "" }] : [];
+          history.forEach(function(h){
+            if (!h || !h.status || !h.at) return;
+            var payload = { kind: "status", level: rec.level || "", room: rec.room || "", joineryId: rec.joineryId || "", status: h.status, by: h.by || "", at: h.at };
+            var stamp = statusEventStampFromIso(h.at);
+            writes.push(getJoineryStatusItemDir(projectHandle, key, true).then(function(dirH){
+              return dirH.getFileHandle(statusEventFileName(h.by, stamp, "status"), { create: true });
+            }).then(function(fh){
+              return verifiedHandleWrite(fh, new Blob([JSON.stringify(payload)], { type: "application/json" }));
+            }).catch(function(){}));
+          });
+          if (rec.jobNote){
+            var jnAt = rec.jobNoteAt || rec.updatedAt || new Date(0).toISOString();
+            var jnBy = rec.jobNoteBy || rec.updatedBy || "";
+            var jnPayload = { kind: "jobNote", level: rec.level || "", room: rec.room || "", joineryId: rec.joineryId || "", by: jnBy, at: jnAt };
+            var jnStamp = statusEventStampFromIso(jnAt);
+            writes.push(getJoineryStatusItemDir(projectHandle, key, true).then(function(dirH){
+              return dirH.getFileHandle(statusEventFileName(jnBy, jnStamp, "jobnote"), { create: true });
+            }).then(function(fh){
+              return verifiedHandleWrite(fh, new Blob([JSON.stringify(jnPayload)], { type: "application/json" }));
+            }).catch(function(){}));
+          }
+        });
+        return Promise.all(writes);
+      }).then(function(){ return true; }).catch(function(){ return false; });
+    });
+  }
+  // Patches one already-known record straight into the in-memory cache
+  // after this device's own write, without a full re-scan of every item's
+  // event folder -- keeps the old design's "instant on-plan icon update,
+  // no waiting on a fresh read" property, while the actual disk write next
+  // to it is always a pure, race-proof append regardless of cache state.
+  function mergeFoldedRecordIntoCache(rec){
+    if (!Array.isArray(joineryStatusCache) || !rec) return;
+    var idx = -1;
+    for (var i = 0; i < joineryStatusCache.length; i++){
+      var r = joineryStatusCache[i];
+      if (r && r.level === rec.level && (r.room || "") === (rec.room || "") && (r.joineryId || "") === (rec.joineryId || "")){ idx = i; break; }
+    }
+    if (idx >= 0) joineryStatusCache[idx] = rec; else joineryStatusCache.push(rec);
+  }
+  // Drop-in replacement for the old whole-file reader -- same return shape
+  // (an array of records with the exact same fields), now assembled by
+  // enumerating every item's own event folder and folding each one's
+  // events, rather than trusting one shared mutable file.
+  function readJoineryStatuses(projectHandle){
+    if (!projectHandle) return Promise.resolve([]);
+    return migrateLegacyJoineryStatusIfNeeded(projectHandle).then(function(){
+      return getJoineryStatusEventsRootDir(projectHandle, false).then(function(rootH){
+        var keys = [];
+        var iter = rootH.values();
+        function step(){
+          return iter.next().then(function(res){
+            if (res.done) return keys;
+            if (res.value && res.value.kind === "directory") keys.push(res.value.name);
+            return step();
+          });
+        }
+        return step();
+      }, function(){ return null; }); // still doesn't exist -- Viewer, or migration failed -- fall back below
+    }).then(function(keys){
+      if (keys === null) return readLegacyJoineryStatusFile(projectHandle);
+      return Promise.all(keys.map(function(key){
+        return listJoineryStatusEventsForItem(projectHandle, key).then(foldJoineryStatusEvents);
+      })).then(function(list){ return list.filter(Boolean); });
+    });
   }
   function findJoineryStatus(list, level, room, joineryId){
     for (var i = 0; i < list.length; i++){
@@ -6239,46 +6476,45 @@
     }
     return null;
   }
-  // Read-modify-write with the forward-only guard baked in -- resolves to
-  // whatever status ends up on record (which may be unchanged from before
-  // this call, if newStatus wasn't actually an advance). Every caller
-  // funnels through this one function rather than writing the file
-  // directly, so the forward-only rule can never accidentally be bypassed
-  // from just one call site. Updates joineryStatusCache in place too, so a
-  // caller that then calls renderAll() sees the change immediately without
-  // waiting on a fresh read.
+  // Appends a brand-new, permanent, never-overwritten status-change EVENT --
+  // the only place a status transition is ever recorded now. The
+  // forward-only guard is evaluated by folding this item's own event
+  // folder fresh every time (never a stale shared array), so an item's
+  // effective status can never regress no matter how many people/apps
+  // write to it concurrently, or how late a delayed Dropbox sync lands --
+  // whichever event has the highest rank always wins the fold, regardless
+  // of write order or arrival order. Every caller still funnels through
+  // this one function, so the forward-only rule can never be bypassed from
+  // just one call site. Patches joineryStatusCache in place too (via
+  // mergeFoldedRecordIntoCache), so a caller that then calls renderAll()
+  // sees the change immediately without waiting on a fresh read.
   function setJoineryStatusForward(projectHandle, level, room, joineryId, newStatus, updatedBy){
     if (!projectHandle) return Promise.resolve(null);
-    return readJoineryStatuses(projectHandle).then(function(list){
-      var rec = findJoineryStatus(list, level, room, joineryId);
+    var key = joineryItemPageKey(level, room, joineryId);
+    return migrateLegacyJoineryStatusIfNeeded(projectHandle).then(function(){
+      return listJoineryStatusEventsForItem(projectHandle, key);
+    }).then(function(events){
+      var rec = foldJoineryStatusEvents(events);
       var curRank = rec ? joineryStatusRank(rec.status) : 0;
       var newRank = joineryStatusRank(newStatus);
-      if (newRank <= curRank){ joineryStatusCache = list; return rec ? rec.status : null; }
-      var stamp = new Date().toISOString();
-      var histEntry = { status: newStatus, at: stamp, by: updatedBy || "" };
-      if (rec){
-        // Backfill (2026-09-23): a record written before the `history` field
-        // existed only ever kept its single most recent transition's
-        // updatedAt/updatedBy -- seed history with that one known entry
-        // (rather than starting completely empty) so a record already past
-        // "measured" before this shipped still shows one real row instead of
-        // nothing at all. Every OTHER app writing this same file (Install
-        // ITP, Manufacture ITP) does the identical backfill, so whichever
-        // one happens to write next is the one that seeds it -- harmless if
-        // it never comes up (a record already carrying `history` is left
-        // exactly as-is).
-        if (!Array.isArray(rec.history)){
-          rec.history = (rec.status && rec.updatedAt) ? [{ status: rec.status, at: rec.updatedAt, by: rec.updatedBy || "" }] : [];
-        }
-        rec.status = newStatus; rec.updatedAt = stamp; rec.updatedBy = updatedBy || "";
-        rec.history.push(histEntry);
-      } else {
-        list.push({ level: level, room: room || "", joineryId: joineryId || "", status: newStatus, updatedAt: stamp, updatedBy: updatedBy || "", history: [histEntry] });
+      if (newRank <= curRank){
+        mergeFoldedRecordIntoCache(rec || { level: level, room: room || "", joineryId: joineryId || "", status: "", history: [] });
+        return rec ? rec.status : null;
       }
-      var payload = JSON.stringify(list);
-      return projectHandle.getFileHandle("joinery-status.json", { create: true }).then(function(fh){
-        return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
-      }).then(function(){ joineryStatusCache = list; return newStatus; });
+      var atIso = new Date().toISOString();
+      var stamp = statusEventStamp();
+      var payload = { kind: "status", level: level, room: room || "", joineryId: joineryId || "", status: newStatus, by: updatedBy || "", at: atIso };
+      return getJoineryStatusItemDir(projectHandle, key, true).then(function(dirH){
+        return dirH.getFileHandle(statusEventFileName(updatedBy, stamp, "status"), { create: true });
+      }).then(function(fh){
+        return verifiedHandleWrite(fh, new Blob([JSON.stringify(payload)], { type: "application/json" }));
+      }).then(function(){
+        var updatedRec = rec ? Object.assign({}, rec) : { level: level, room: room || "", joineryId: joineryId || "" };
+        updatedRec.status = newStatus; updatedRec.updatedAt = atIso; updatedRec.updatedBy = updatedBy || "";
+        updatedRec.history = (rec && Array.isArray(rec.history) ? rec.history.slice() : []).concat([{ status: newStatus, at: atIso, by: updatedBy || "" }]);
+        mergeFoldedRecordIntoCache(updatedRec);
+        return newStatus;
+      });
     });
   }
   // Re-reads the whole file and re-renders once it lands -- called right
@@ -6307,29 +6543,36 @@
     var rec = findJoineryStatus(joineryStatusCache, activeLevelName, obj.roomName, obj.joineryCode || "");
     return joineryDisplayIcon(rec);
   }
-  // Read-modify-write for the independent "has a job note" flag -- a sibling
-  // of setJoineryStatusForward's own status field, on the exact same record
-  // (see that function's own comment for why the two are now decoupled).
-  // Never demotes: once true, stays true; a second/third job note just
-  // updates the timestamp/who. Adding the very first job note to an item
-  // that has no status record at all yet creates one with an empty status
-  // (rank 0, unset) plus jobNote:true, so the pipeline itself is completely
-  // untouched by this.
+  // Appends a brand-new, permanent "a job note got added" EVENT -- the
+  // independent sibling of setJoineryStatusForward's own status events, on
+  // the exact same item folder (see that function's own comment for why
+  // the two are decoupled). Never demotes: once any jobNote event exists,
+  // the folded jobNote flag stays true forever; a second/third job note
+  // just becomes another event, with the latest one's timestamp/who
+  // winning the fold. Adding the very first job note to an item with no
+  // status event at all yet is still perfectly safe -- foldJoineryStatusEvents
+  // returns a record with an empty status (rank 0, unset) plus jobNote:true,
+  // so the status pipeline itself is completely untouched by this.
   function markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy){
     if (!projectHandle) return Promise.resolve(null);
-    return readJoineryStatuses(projectHandle).then(function(list){
-      var rec = findJoineryStatus(list, level, room, joineryId);
-      var stamp = new Date().toISOString();
-      if (rec){
-        rec.jobNote = true; rec.jobNoteAt = stamp; rec.jobNoteBy = updatedBy || "";
-      } else {
-        rec = { level: level, room: room || "", joineryId: joineryId || "", status: "", updatedAt: stamp, updatedBy: updatedBy || "", jobNote: true, jobNoteAt: stamp, jobNoteBy: updatedBy || "" };
-        list.push(rec);
-      }
-      var payload = JSON.stringify(list);
-      return projectHandle.getFileHandle("joinery-status.json", { create: true }).then(function(fh){
-        return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
-      }).then(function(){ joineryStatusCache = list; return rec; });
+    var key = joineryItemPageKey(level, room, joineryId);
+    return migrateLegacyJoineryStatusIfNeeded(projectHandle).then(function(){
+      return listJoineryStatusEventsForItem(projectHandle, key);
+    }).then(function(events){
+      var rec = foldJoineryStatusEvents(events);
+      var atIso = new Date().toISOString();
+      var stamp = statusEventStamp();
+      var payload = { kind: "jobNote", level: level, room: room || "", joineryId: joineryId || "", by: updatedBy || "", at: atIso };
+      return getJoineryStatusItemDir(projectHandle, key, true).then(function(dirH){
+        return dirH.getFileHandle(statusEventFileName(updatedBy, stamp, "jobnote"), { create: true });
+      }).then(function(fh){
+        return verifiedHandleWrite(fh, new Blob([JSON.stringify(payload)], { type: "application/json" }));
+      }).then(function(){
+        var updatedRec = rec ? Object.assign({}, rec) : { level: level, room: room || "", joineryId: joineryId || "", status: "", updatedAt: "", updatedBy: "", history: [] };
+        updatedRec.jobNote = true; updatedRec.jobNoteAt = atIso; updatedRec.jobNoteBy = updatedBy || "";
+        mergeFoldedRecordIntoCache(updatedRec);
+        return updatedRec;
+      });
     });
   }
 
