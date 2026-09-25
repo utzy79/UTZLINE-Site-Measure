@@ -1,10 +1,164 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v45.13** (bump this line, and add a dated changelog
+**Current version: v46** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v46 (2026-09-25):** Andrew's "full check of the site measure app" round, plus
+two follow-ups sent while it was in progress. Verbatim: "See how speed can be
+improved. Fix the top menu bars that dont work on android properly. Fix the
+device back button closing the app. Icon caching like we just did. When
+returning to plan it goes back to the last view. When opening joinery item
+for the very first time make it import a snapshot of the current screen
+that's croppable But without the indicator icons or indicator text on it so
+we can write measures straight onto that snapshot. Also sometimes when a
+snapshot is imported the crop markers can't be adjusted across the entire
+import" / "And only show view shop drawing or view job notes button if there
+is one applied also lock all on save and exit" / asked what the toolbar did
+wrong on the tablet: "Wrong function. Back goes to new page as does home."
+
+- **Back/Home → "new page" (the toolbar report).** Root cause found in the
+  level-file read: `readFlatLevelFileByName` returned `null` for ANY failure,
+  and `openFlatLevel` took `null` to mean "brand-new level" → `startBlankPlan`.
+  A level file that exists but momentarily can't be read/parsed on the tablet
+  (Dropbox still syncing it in, a truncated SAF read) therefore reopened as a
+  blank white sheet — exactly "Back goes to a new page" — and its blank
+  autosave could then have been written over the real plan. Now: missing and
+  failed reads are told apart (`{code:"level_read_failed"}`), a failed read is
+  retried once, and if it still fails the app lands on the level list with a
+  clear "may still be syncing — try again" toast, never a blank canvas; the
+  legacy (folder) shape gets the same rule; `saveFlatLevelFile` refuses to
+  write a blank canvas over a level whose file holds a real plan
+  (`blank_over_real_level`). Home also always goes to the project list
+  whenever any project context exists (the "start a new file" branch is now
+  strictly the no-Projects-folder single-file mode).
+- **Return to plan = the last view, instantly.** Leaving the level plan for an
+  item (or a legacy room) remembers exactly what was on screen — base image,
+  every object incl. markers, and the pan/zoom (`rememberLevelPlanForReturn`,
+  keyed project+level, 10-minute freshness). Back reuses it with no file read
+  at all (`openLevel(name, {preferRemembered:true})`) and `fitOrRestoreLevelView`
+  puts the view back where it was; a plain re-open from the level list still
+  reads the file fresh but also restores the remembered view.
+- **Device Back button walks back through the app** (same design as Install
+  ITP v35): `navRecord` keeps one history entry per screen — setup/reconnect/
+  project list replace (base), levels → level → room/item push. `popstate`
+  first closes whatever dialog/panel/popover is open (`closeAnyOpenOverlay`),
+  otherwise steps back one screen via the existing navigations (item → plan,
+  room → plan, plan → level list, rooms list → level list, level list →
+  project list), honouring the unsaved-changes confirm (cancel puts the entry
+  back). NB `history` inside source.html is the undo stack, so this uses
+  `window.history` explicitly. The Exit button unwinds its own entries before
+  `window.close()`. `switchProject`/`goHome` stay fire-and-forget; the Back
+  handler uses new `switchProjectP`/`goHomeP` to know when they settle.
+- **Icon (status badge) caching.** `joineryStatusCache` is kept for the whole
+  project across level opens and Back, re-scanned in the background only when
+  older than 3 minutes (a fresh open from the level list always re-scans in
+  the background; badges paint from the cache first); a device-local
+  IndexedDB snapshot (`joineryStatusSnapshot\0<project>`) paints them
+  instantly on a project's first level; `joineryStatusIndex` makes the
+  per-marker lookup a hash lookup instead of a linear scan per render.
+- **First-open snapshot for a joinery item.** `renderPlanViewSnapshotForItem`
+  renders what is in the viewport (clipped to the plan) at real on-screen
+  density (1600–2600 px long edge, JPEG 0.9) with every roomlink marker — dot,
+  code label, status badge — and any other-person overlay layer stripped, no
+  title block. On an item's very first open (nothing saved by anyone) it is
+  offered in the crop dialog ("Crop the plan snapshot for … / Use full view")
+  and the result becomes the page's base image; the page is left clean until
+  something is drawn (no save prompt / draft for an untouched page). Editor
+  only; the Viewer is unchanged. Test harness default is the old blank page
+  (`setFirstOpenSnapshotModeForTest`).
+- **Crop handles couldn't reach the whole image:** `renderCropRect` positioned
+  the rectangle from the stage's top-left while `cropRect` is measured from the
+  displayed image's top-left; any image narrower/shorter than the stage (a
+  portrait photo capped by max-height and centred) drew the rect offset, so the
+  clamps stopped it short on one side. The image's own offset is added, the
+  stage has 12px padding so an edge handle isn't clipped, and a resize
+  re-clamps.
+- **View shop drawing / View job note only when one exists:** the popover's
+  "View shop drawing" row is gated on `shopDrawingKeySet` (item keys with at
+  least one drawing folder, refreshed with the status scan and snapshotted
+  with it); unknown-yet reads as "show". "View job note" was already gated.
+- **Save & exit + lock all:** on a joinery item page the Save button reads
+  "Save & exit": every object is locked (the v31 auto-lock rule), the overlay
+  + PDF are written, and it returns to the level plan at the remembered view.
+  A mid-work Save on a level's own plan still stays put and locks nothing
+  (deliberate, unchanged — see run_multi_room_save.js).
+- **Speed:** one reused IndexedDB connection per database (the same leak fixed
+  in Install ITP v35); no per-edit IndexedDB "current" copy while a project
+  level/room/item is open (only the single-file fallback reads it); drag
+  re-renders coalesced to one per animation frame (`requestRenderAll`); other
+  people's overlay layers re-rendered only when the visible-layer set changes;
+  `listFlatLevelNames` stats files in parallel and caches name↔size/mtime per
+  project in IndexedDB instead of reading every level's full JSON to list
+  names; rolling backup PNGs capped at 6000 px (`BACKUP_PNG_MAX_DIM`) instead
+  of up to 16000; a plain tap on an object (a marker) no longer counts as an
+  edit (no phantom "Save changes?" prompts, no needless level rewrites).
+- **Real bug found on the way:** every `<img>`-based SVG rasterisation
+  (rolling PNG backups, Share "current view", the PNG fallback) had been
+  failing since the `#world` markup gained comments containing "--" — legal
+  HTML, not legal inside an XML comment, so the serialised SVG was malformed.
+  `cloneWorldForExport` now strips comment nodes. Four suite tests that had
+  been failing in the sandbox for this reason pass again.
+- Also: double-tap on a marker falls back to a hit-test at the tap position
+  when the first tap's re-render detached the tapped element; toolbar rows
+  declare `touch-action:pan-x` and their controls `manipulation`.
+
+Tests: new `pdftest-projects/run_v46_site_measure_round.js` (17 checks: level
+read failure never blanks, remembered plan + view, history Back through
+dialogs/item/plan/levels/list, first-open snapshot has no marker + crop dialog
+wording + crop rect offset + crop applied + clean, Save & exit locks/saves/
+returns, one IDB connection, tap not dirty, blank-over-real save guard);
+`run_shop_drawings.js` / `run_joinery_status_and_job_notes.js` updated for the
+gated View row; full Site Measure suite green apart from the two pre-existing
+failures that target other apps' harness. `service-worker.js` cache →
+`utzline-sitemeasure-cache-v46`.
+
+**v45.14 (2026-09-24):** Two fixes from the same round, Andrew, sending two
+screenshots (a Joinery Item page and a plan view with a pink/magenta tint)
+together with a large multi-part request; these are the two parts of it
+that land in this app. First: "get rid of the horrible light red background
+hue." Root cause was `renderOverlayLayers()`'s per-layer CSS `filter:
+sepia(1) saturate(6) hue-rotate(Ndeg)`, meant to color-code each other
+person's saved reference layer — every stroked shape/label here draws a
+three-pass white-ring/black-ring/color halo (see `haloOuterW`'s own
+comment) for legibility on any background, and that filter chain turns
+white into a highly saturated color BEFORE hue-rotating it (plain
+hue-rotate alone leaves true white/black untouched — it's the sepia() step
+that injects the color). With the halo being the single largest painted
+area on a busy plan, or a full-size reference photo, that read as a solid
+magenta wash over the whole canvas rather than a subtle per-layer tint.
+Fixed by dropping the filter entirely: a new `tintOverlayObjectGroup()`
+walks each rendered reference object's own SVG elements directly, drops
+every element that's purely the white/black halo (or a text/callout box's
+white background, which rode along with the halo on the same element —
+reference layers don't need any-background legibility the way your own
+live drawing does), and recolors whatever's left to a flat, calm accent
+color from a small palette (first slot still purple, per Andrew's own
+"purples layers" naming). A photo layer gets a fixed, modest
+grayscale+dim instead of any hue shift, since a raster image can't be
+recolored element-by-element the way vector shapes can, and a flat dim
+can never produce a solid colored block the way the old filter could.
+Second: "the joinery status page needs finishing... it currently does not
+show the site measure overlay. this should come from joinery item
+(image)." A permanent overlay file has always stored its objects as
+vector data — showing that faithfully needs this app's own `renderObject`,
+which nothing outside Site Measure/Viewer has. Rather than have UTZLINE
+Projects (and eventually Scheduler/Machine Schedule) reimplement a vector
+renderer just to show a static picture, every explicit Save now also
+flattens the same base photo + objects being saved into one ordinary
+raster image (`renderJoineryOverlaySnapshot`, capped to a modest preview
+size) and stores it right alongside the vector data, as
+`overlaySnapshotDataURL`, in the same overlay JSON file — any app can then
+just show it as a plain `<img>`. UTZLINE Projects' own "Site Measure
+overlays" card (previously a placeholder) now reads and shows it — see
+that app's own README. Covered by the existing full overlay-layers test
+suite (all passing, confirming the tint fix didn't change WHICH layers
+render, only how) plus a new `run_site_measure_overlay_card.js` in
+`pdftest-projects/` for the snapshot capture. `service-worker.js` cache
+bumped to `utzline-sitemeasure-cache-v45.14` (and the Viewer's own
+`utzline-viewer-cache-v45.14`, since both share this source).
 
 **v45.13 (2026-09-24):** joinery-status.json v2 — Andrew, verbatim, describing the scale this whole app family now needs to handle: "we will have 30 people using this app in different stages, all coming back to the same database. there would be for instance upto 5 different machinist, 5 site managers (installers) 5 delivery drivers, etc. needs to be foolproof and nevel lose data. some of this will be done via dropbox upload after the fact. it then needs to all tie together without deleting." The shared `joinery-status.json` (read/written by this app, the Viewer, and every ITP/Schedule app in the family) used to be one JSON array file, read-modified-and-rewritten-whole on every save — no lock, no version check, and with up to five writer apps and 15+ people all saving into the same file, some via a Dropbox sync that could land minutes or hours late, a genuine risk of one save silently overwriting another's history. Rebuilt as an event-sourced store: every status change or job-note signal now writes its own small immutable file under `Project Saves/Joinery Status/<Level> - <Room> - <Code>/`, named `<user> - <timestamp> - <kind>.json` — the current status is always computed by folding an item's own event files together, so two writers can never collide (they're never touching the same file) and nothing can ever be lost regardless of write order or how late a sync lands. The old file is migrated automatically, losslessly, and idempotently the first time any app in the family opens a project after this update (concurrent double-migration produces no duplicates), and is left on disk afterward, untouched. Every existing render/display call site across every app in the family is completely unchanged — `readJoineryStatuses`/`setJoineryStatusForward`/`markJobNoteAdded` still return and accept the exact same shapes as before. The Viewer's own read path is unaffected beyond the same migration. Covered by a new dedicated test, `repro_status_event_sourcing.js` (`pdftest-projects/`), plus every existing joinery-status test across the family updated to read the new event files. This is the first of several planned rounds — Andrew asked for the shared status pipeline first since it's used by the most apps; Scheduler's own schedule file, Machine Schedule's cut-flags file, and Solid Surface Schedule's file are next. `service-worker.js` cache bumped to `utzline-sitemeasure-cache-v45.13`.
 

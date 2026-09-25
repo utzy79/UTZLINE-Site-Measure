@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v45.13">
+<link rel="manifest" href="./manifest.json?v=v46">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v45.13">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v45.13">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v46">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v46">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -189,6 +189,11 @@
     scrollbar-color:var(--border-strong) transparent;
   }
   .toolbar-row > *{flex:none;}
+  /* (2026-09-25) Explicit touch behaviour for the toolbar on Android: the
+     rows may be finger-scrolled sideways, and the controls themselves are
+     plain tap targets (no double-tap-zoom / long-press gestures). */
+  .toolbar-row{ touch-action:pan-x; }
+  .toolbar-row .tbtn, .toolbar-row .tselect, .toolbar-row .ibtn{ touch-action:manipulation; }
   /* Restyled scrollbar (2026-09-17, reported by Andrew: "i dont like the
      slider on the menu bar") -- Chrome/Edge/Safari otherwise draw the
      platform's stock grey scrollbar here, a chunky mismatched bar that
@@ -605,8 +610,9 @@
     position:relative; display:flex; align-items:center; justify-content:center;
     max-height:60vh; margin-bottom:16px; background:#000; border-radius:6px; overflow:hidden;
     touch-action:none; user-select:none;
+    padding:12px; /* room for a corner handle sitting right on the image edge -- see renderCropRect */
   }
-  .crop-stage img{ display:block; max-width:100%; max-height:60vh; width:auto; height:auto; }
+  .crop-stage img{ display:block; max-width:100%; max-height:calc(60vh - 24px); width:auto; height:auto; }
   .crop-rect{
     position:absolute; border:2px dashed #fff; box-sizing:border-box; cursor:move;
     box-shadow:0 0 0 2000px rgba(0,0,0,.5);
@@ -1842,7 +1848,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v45.13";
+  var APP_VERSION = "v46";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2423,15 +2429,28 @@
   }
 
   /* ============================== persistence ============================== */
+  // One reused connection per database (2026-09-25, speed) -- this used to
+  // open a brand-new IndexedDB connection on EVERY get/set and never close
+  // it, so a long session leaked connections steadily (the same "slows down
+  // after a little use" leak fixed in Install ITP v35). Reopened
+  // automatically if the browser closes it from under us.
+  var idbConnP = null;
   function idbOpen(){
-    return new Promise(function(res, rej){
+    if (idbConnP) return idbConnP;
+    idbConnP = new Promise(function(res, rej){
       try{
         var r = indexedDB.open(DB_NAME, 1);
         r.onupgradeneeded = function(){ r.result.createObjectStore(STORE); };
-        r.onsuccess = function(){ res(r.result); };
-        r.onerror = function(){ rej(r.error); };
-      }catch(e){ rej(e); }
+        r.onsuccess = function(){
+          var db = r.result;
+          db.onversionchange = function(){ try{ db.close(); }catch(e){} idbConnP = null; };
+          db.onclose = function(){ idbConnP = null; };
+          res(db);
+        };
+        r.onerror = function(){ idbConnP = null; rej(r.error); };
+      }catch(e){ idbConnP = null; rej(e); }
     });
+    return idbConnP;
   }
   function idbSet(key, val){
     return idbOpen().then(function(db){
@@ -2468,15 +2487,23 @@
   // same block for the other side of the pairing.
   var IDENTITY_DB_NAME = "utzline-identity", IDENTITY_STORE = "kv", IDENTITY_KEY = "deviceUserName";
   var deviceUserName = ""; // cached in memory once loaded -- see loadDeviceUserName()
+  var identityConnP = null; // one reused connection, same as idbOpen (2026-09-25)
   function identityDbOpen(){
-    return new Promise(function(res, rej){
+    if (identityConnP) return identityConnP;
+    identityConnP = new Promise(function(res, rej){
       try{
         var r = indexedDB.open(IDENTITY_DB_NAME, 1);
         r.onupgradeneeded = function(){ r.result.createObjectStore(IDENTITY_STORE); };
-        r.onsuccess = function(){ res(r.result); };
-        r.onerror = function(){ rej(r.error); };
-      }catch(e){ rej(e); }
+        r.onsuccess = function(){
+          var db = r.result;
+          db.onversionchange = function(){ try{ db.close(); }catch(e){} identityConnP = null; };
+          db.onclose = function(){ identityConnP = null; };
+          res(db);
+        };
+        r.onerror = function(){ identityConnP = null; rej(r.error); };
+      }catch(e){ identityConnP = null; rej(e); }
     });
+    return identityConnP;
   }
   function getDeviceUserName(){
     return identityDbOpen().then(function(db){
@@ -2648,6 +2675,7 @@
   // anything to back up at all -- so option 1 above always intercepted
   // first and that folder was never actually written to anymore.)
   var AUTOBACKUP_MIN_INTERVAL_MIN = 5, AUTOBACKUP_MAX_INTERVAL_MIN = 60, AUTOBACKUP_STEP_MIN = 5;
+  var BACKUP_PNG_MAX_DIM = 6000; // see renderExportBlob's opts.maxDim comment (2026-09-25)
   var autoBackupIntervalMin = 5;
   try{ var storedInt = parseInt(localStorage.getItem("redline_autobackup_interval"), 10); if (storedInt) autoBackupIntervalMin = clamp(storedInt, AUTOBACKUP_MIN_INTERVAL_MIN, AUTOBACKUP_MAX_INTERVAL_MIN); }catch(e){}
   var backupDirty = false;
@@ -2730,7 +2758,15 @@
     // window.close() only actually works when this page is the sole entry
     // in its own history (true for an app opened fresh from its icon), so
     // try that first...
-    try{ window.close(); }catch(e){}
+    // (2026-09-25) The in-app screens now leave entries in the history
+    // (see navRecord), which is exactly what stops window.close() from
+    // working -- so step back past all of them first, then close. The
+    // popstate handler ignores this because navScreenName is cleared.
+    var depth = 0;
+    try{ depth = Math.max(0, (window.history.length || 1) - 1); }catch(e){}
+    navScreenName = null;
+    if (depth > 0){ try{ window.history.go(-depth); }catch(e){} }
+    setTimeout(function(){ try{ window.close(); }catch(e){} }, depth > 0 ? 120 : 0);
     // ...and if we're still here a moment later, it didn't take (some
     // Android builds block it even then), so fall back to telling the
     // person how to close it themselves instead of doing nothing silently.
@@ -2821,7 +2857,7 @@
       return;
     }
     if (canDownloadsApi){
-      renderExportBlob().then(function(blob){
+      renderExportBlob({ maxDim: BACKUP_PNG_MAX_DIM }).then(function(blob){
         return downloadsApi.save({ filename: autoBackupFilename(), data: blob });
       }).then(function(res){
         if (res && res.status === "saved"){ showToast("Backed up."); autoBackupFailWarned = false; markBackupSucceeded(); }
@@ -2848,7 +2884,7 @@
       backupDirty = true;
       return;
     }
-    renderExportBlob().then(function(pngBlob){
+    renderExportBlob({ maxDim: BACKUP_PNG_MAX_DIM }).then(function(pngBlob){
       browserDownloadBlob(pngBlob, autoBackupFilename());
       browserDownloadBlob(jsonBlob2, autoBackupProjectFilename());
       showToast("Backed up.");
@@ -2949,7 +2985,7 @@
     var jsonBlob;
     try{ jsonBlob = new Blob([JSON.stringify(projectPayload())], { type: "application/json" }); }
     catch(e){ return Promise.reject(e); }
-    return renderExportBlob().then(function(pngBlob){
+    return renderExportBlob({ maxDim: BACKUP_PNG_MAX_DIM }).then(function(pngBlob){
       return backupsHandle.getFileHandle(stem + ".png", { create: true }).then(function(fh){
         return verifiedHandleWrite(fh, pngBlob);
       });
@@ -3166,17 +3202,29 @@
     if (!projectHandle) return Promise.resolve(false);
     return getFloorPlansDir(projectHandle, false).then(function(){ return true; }, function(){ return false; });
   }
+  // Resolves the parsed level, or null ONLY when the file genuinely isn't
+  // there (no Floor Plans folder yet / no such file -- a brand-new level).
+  // A file that EXISTS but can't be read or parsed (a Dropbox placeholder
+  // still syncing in, a truncated read on an Android SAF folder, a
+  // half-written file) REJECTS with {code:"level_read_failed"} instead of
+  // quietly reading as "nothing there". (2026-09-25) Before this, every
+  // failure collapsed to null, and openFlatLevel took null to mean "new
+  // level" -- so a transient read failure on Andrew's tablet landed Back/
+  // Home on a blank white "new page" for a level that very much exists,
+  // and saveFlatLevelFile's own pre-read returning null could then have
+  // written that blank canvas (rooms: [], no markers) straight over the
+  // real level file. Both callers now tell the two cases apart.
   function readFlatLevelFileByName(projectHandle, fname){
+    function isNotFound(err){ return !!(err && (err.name === "NotFoundError" || err.name === "TypeMismatchError")); }
+    function readFailed(err){ var e = new Error("Couldn't read level file " + fname); e.code = "level_read_failed"; e.cause = err; return Promise.reject(e); }
     return getFloorPlansDir(projectHandle, false).then(function(dirH){
-      return dirH.getFileHandle(fname);
-    }).then(function(fh){
-      return fh.getFile();
-    }).then(function(file){
-      return file.text();
-    }).then(function(text){
-      try{
-        var parsed = JSON.parse(text);
-        if (!parsed || typeof parsed !== "object" || !parsed.name) return null;
+      return dirH.getFileHandle(fname).then(null, function(err){ if (isNotFound(err)) return null; return readFailed(err); });
+    }, function(err){ if (isNotFound(err)) return null; return readFailed(err); }).then(function(fh){
+      if (!fh) return null;
+      return fh.getFile().then(function(file){ return file.text(); }).then(function(text){
+        var parsed = null;
+        try{ parsed = JSON.parse(text); }catch(e){ return readFailed(e); }
+        if (!parsed || typeof parsed !== "object" || !parsed.name) return readFailed(new Error("level file has no name field"));
         return {
           name: parsed.name,
           imageDataURL: parsed.imageDataURL || null,
@@ -3186,10 +3234,22 @@
           rooms: Array.isArray(parsed.rooms) ? parsed.rooms : [],
           markers: Array.isArray(parsed.markers) ? parsed.markers : [],
           objects: Array.isArray(parsed.objects) ? parsed.objects : [],
-          savedBy: typeof parsed.savedBy === "string" ? parsed.savedBy : ""
+          savedBy: typeof parsed.savedBy === "string" ? parsed.savedBy : "",
+          fileSize: 0, fileModified: 0
         };
-      }catch(e){ return null; }
-    }, function(){ return null; });
+      }, function(err){ return err && err.code === "level_read_failed" ? Promise.reject(err) : readFailed(err); });
+    });
+  }
+  // One retry after a short pause -- the failures seen in the field are
+  // transient (a sync in progress), so a second attempt usually succeeds
+  // where a permanent "this level is blank" never would.
+  function readFlatLevelFileWithRetry(projectHandle, projectName, levelName){
+    return readFlatLevelFile(projectHandle, projectName, levelName).catch(function(err){
+      if (!(err && err.code === "level_read_failed")) return Promise.reject(err);
+      return new Promise(function(r){ setTimeout(r, 600); }).then(function(){
+        return readFlatLevelFile(projectHandle, projectName, levelName);
+      });
+    });
   }
   function readFlatLevelFile(projectHandle, projectName, levelName){
     return readFlatLevelFileByName(projectHandle, flatLevelFileName(projectName, levelName));
@@ -3221,27 +3281,55 @@
   // means reading "Floor Plans" and pulling each file's own `name` field
   // (never parsed back out of the filename), same as Projects' own
   // listLevelFiles.
+  // (2026-09-25, speed) Used to read and JSON.parse EVERY level file in the
+  // project -- each one carrying its full base64 floor plan, often several
+  // MB -- one after another, just to pull out each file's `name` field,
+  // every single time the level list was shown (opening a project, Home,
+  // Back out of a level...). On Andrew's tablet that alone was seconds of
+  // waiting per visit. Now: the files are stat'ed in parallel (getFile()
+  // gives size + lastModified without reading the body), and a per-project
+  // IndexedDB note of "<file> -> name @ size/lastModified" answers every
+  // file that hasn't changed since last time; only a new or changed file
+  // is actually read. An unreadable file (mid-sync) is skipped for this
+  // listing rather than failing the whole list.
   function listFlatLevelNames(projectHandle){
+    var cacheKey = "flatLevelNames\u0000" + ((projectHandle && projectHandle.name) || "");
     return getFloorPlansDir(projectHandle, false).then(function(dirH){
-      var fnames = [];
+      var handles = [];
       var iter = dirH.values();
       function step(){
         return iter.next().then(function(res){
-          if (res.done) return fnames;
-          if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) fnames.push(res.value.name);
+          if (res.done) return handles;
+          if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) handles.push(res.value);
           return step();
         });
       }
       return step();
-    }, function(){ return []; }).then(function(fnames){
-      return fnames.reduce(function(chain, fname){
-        return chain.then(function(acc){
-          return readFlatLevelFileByName(projectHandle, fname).then(function(level){
-            if (level && level.name) acc.push(level.name);
-            return acc;
-          });
+    }, function(){ return []; }).then(function(handles){
+      if (!handles.length) return [];
+      return idbGet(cacheKey).catch(function(){ return null; }).then(function(cached){
+        cached = (cached && typeof cached === "object") ? cached : {};
+        var next = {};
+        return Promise.all(handles.map(function(fh){
+          return fh.getFile().then(function(file){
+            var hit = cached[fh.name];
+            if (hit && hit.name && hit.size === file.size && hit.lastModified === file.lastModified){
+              next[fh.name] = hit;
+              return hit.name;
+            }
+            return file.text().then(function(text){
+              var parsed = null;
+              try{ parsed = JSON.parse(text); }catch(e){ parsed = null; }
+              var name = (parsed && typeof parsed === "object" && parsed.name) ? parsed.name : null;
+              if (name) next[fh.name] = { name: name, size: file.size, lastModified: file.lastModified };
+              return name;
+            });
+          }).catch(function(){ return null; });
+        })).then(function(names){
+          idbSet(cacheKey, next).catch(function(){});
+          return names.filter(Boolean);
         });
-      }, Promise.resolve([]));
+      });
     }).then(function(names){
       return names.sort(function(a, b){ return a.localeCompare(b, undefined, { sensitivity: "base" }); });
     });
@@ -4080,6 +4168,66 @@
     applyLoadedImage(blank.dataURL, blank.w, blank.h, name);
   }
 
+  /* ---- "Return to plan" memory (2026-09-25) ----
+     Andrew: "when returning to plan it goes back to the last view" -- and,
+     from the same round, Back from a joinery item was landing on a blank
+     "new page" on the tablet (a re-read of the level file that failed).
+     Both are answered by the same thing: the moment the level's own plan
+     is left for a joinery item (or a legacy room), what's on screen --
+     base image, every object including the markers, and the exact pan/
+     zoom -- is remembered in memory, keyed by project + level. Coming
+     Back reuses it directly: no file read at all (instant, and immune to
+     a mid-sync read failure), and the view is put back exactly where it
+     was instead of re-fitting to the whole floor. Entries expire after
+     LEVEL_RETURN_FRESH_MS so a level list -> level open (which always
+     reads the file fresh) still picks up markers UTZLINE Projects added
+     meanwhile; only the explicit Back path (openLevel with
+     {preferRemembered:true}) uses the memory at all. The remembered VIEW
+     alone is kept indefinitely for the session and also honoured on a
+     plain re-open of the same level. */
+  var levelReturnMemory = {}; // key -> { imageDataURL, imageTiles, imageW, imageH, objects, view, at }
+  var levelViewMemory = {};   // key -> { scale, tx, ty }
+  var LEVEL_RETURN_FRESH_MS = 10 * 60 * 1000;
+  function levelMemoryKey(projectName, levelName){ return (projectName || "") + "\u0000" + (levelName || ""); }
+  function onLevelPlanNow(){ return !!(activeLevelName && !activeRoomName && !activeJoineryItemPage && state.imageW); }
+  function rememberLevelPlanForReturn(){
+    if (!onLevelPlanNow()) return;
+    var key = levelMemoryKey(activeProjectName, activeLevelName);
+    levelViewMemory[key] = { scale: state.view.scale, tx: state.view.tx, ty: state.view.ty };
+    levelReturnMemory[key] = {
+      imageDataURL: state.imageDataURL, imageTiles: state.imageTiles || null,
+      imageW: state.imageW, imageH: state.imageH,
+      objects: deepClone(state.objects),
+      at: Date.now()
+    };
+  }
+  function rememberLevelViewOnly(){
+    if (!onLevelPlanNow()) return;
+    levelViewMemory[levelMemoryKey(activeProjectName, activeLevelName)] = { scale: state.view.scale, tx: state.view.tx, ty: state.view.ty };
+  }
+  function takeRememberedLevelPlan(projectName, levelName){
+    var key = levelMemoryKey(projectName, levelName);
+    var m = levelReturnMemory[key];
+    if (!m) return null;
+    if (Date.now() - m.at > LEVEL_RETURN_FRESH_MS){ delete levelReturnMemory[key]; return null; }
+    return m;
+  }
+  // fitToView() unless this level's last view is remembered, in which case
+  // that view is restored instead.
+  function fitOrRestoreLevelView(projectName, levelName){
+    var v = levelViewMemory[levelMemoryKey(projectName, levelName)];
+    if (v && isFinite(v.scale) && v.scale > 0){
+      state.view.scale = clamp(v.scale, MIN_SCALE, MAX_SCALE); state.view.tx = v.tx; state.view.ty = v.ty;
+      applyView();
+      return;
+    }
+    fitToView();
+  }
+  function forgetLevelMemory(projectName, levelName){
+    var key = levelMemoryKey(projectName, levelName);
+    delete levelReturnMemory[key]; delete levelViewMemory[key];
+  }
+
   // Resolves the named project's own folder (by name, from the known
   // projects root) and lands on its level picker -- this is what clicking
   // an existing project row in the list actually calls (via
@@ -4116,7 +4264,11 @@
   // the currently open project) and its saves/pdfs subfolders, restores its
   // existing save file if there is one, and leaves activeLevel* pointing at
   // it for every subsequent Save/PDF/auto-backup.
-  function openLevel(name){
+  // opts.preferRemembered (2026-09-25): the Back-from-an-item path -- reuse
+  // the level plan exactly as it was left (see rememberLevelPlanForReturn)
+  // instead of re-reading the file. Same remembered-view restore either way.
+  function openLevel(name, opts){
+    opts = opts || {};
     // Auto-save whatever's currently active (a different level, or a room
     // of this same level -- see saveActiveWorkBeforeLeaving's own comment)
     // before any of its state gets cleared below.
@@ -4130,9 +4282,29 @@
       activeJoineryItemPage = null;
       return isFlatProject(activeProjectHandle);
     }).then(function(flat){
-      if (flat) return openFlatLevel(name);
+      if (flat) return openFlatLevel(name, opts);
       return activeProjectHandle.getDirectoryHandle(name, { create: !VIEW_ONLY_MODE }).then(function(dirH){
-        return openLevelFromHandle(dirH, name);
+        return openLevelFromHandle(dirH, name, opts);
+      });
+    }).catch(function(err){
+      if (!(err && err.code === "level_read_failed")) return Promise.reject(err);
+      // The level file exists but couldn't be read (twice) -- (2026-09-25)
+      // NEVER show a blank "new page" for it. Fall back to the level list
+      // with a clear message so the person can simply try again once the
+      // file has finished syncing, and nothing blank can ever be saved
+      // over the real level.
+      console.error("Level read failed:", err);
+      activeLevelName = ""; activeLevelHandle = null; activeLevelIsFlat = false;
+      activeLevelSavesHandle = null; activeLevelPdfsHandle = null; activeLevelBackupsHandle = null;
+      clearActiveWorkInMemory();
+      refreshBrandSubtitle();
+      state.fileBase = "plan";
+      updateFileNameBtn();
+      updateBackBtnVisibility();
+      var p = activeProjectHandle ? populateLevelList().then(function(){ showGateState("levels"); }) : Promise.resolve();
+      return p.then(function(){
+        showToast("Couldn’t read the plan file for “" + name + "” just now (it may still be syncing) — nothing was changed. Try opening it again in a moment.", 9000);
+        return Promise.reject({ code: "nav_cancelled" });
       });
     });
   }
@@ -4146,15 +4318,20 @@
   // openLevelFromHandle can be -- a flat level has no folder to hand a
   // caller like the viewer's own shape-detection picker in the first
   // place.
-  function openFlatLevel(name){
+  function openFlatLevel(name, opts){
+    opts = opts || {};
     activeLevelIsFlat = true;
     activeLevelHandle = null;
     activeLevelSavesHandle = null; // flat saves bypass this entirely -- see saveActiveLevelFile
     var create = !VIEW_ONLY_MODE;
+    var remembered = opts.preferRemembered ? takeRememberedLevelPlan(activeProjectName, name) : null;
     return Promise.all([
       getFlatPdfsDir(activeProjectHandle, create).catch(function(){ return null; }),
       getFlatBackupsDirForLevel(activeProjectHandle, name, create).catch(function(){ return null; }),
-      readFlatLevelFile(activeProjectHandle, activeProjectName, name)
+      // Back from an item: the plan as it was left, no read at all (see
+      // rememberLevelPlanForReturn). Otherwise a real read, retried once.
+      remembered ? Promise.resolve({ name: name, imageDataURL: remembered.imageDataURL, imageTiles: remembered.imageTiles, imageW: remembered.imageW, imageH: remembered.imageH, objects: remembered.objects, markers: [], rooms: [] })
+                 : readFlatLevelFileWithRetry(activeProjectHandle, activeProjectName, name)
     ]).then(function(results){
       activeLevelPdfsHandle = results[0];
       activeLevelBackupsHandle = results[1];
@@ -4181,14 +4358,17 @@
       updateFileNameBtn();
       refreshBrandSubtitle();
       history = [deepClone(state.objects)]; historyIndex = 0;
-      fitToView();
+      fitOrRestoreLevelView(activeProjectName, name);
       renderAll();
       // Fire-and-forget -- re-renders a second time once the shared status
       // file lands, so a level's markers pick up their 📏/📦/🏆 icon as
       // soon as it's known rather than needing a manual refresh.
-      refreshJoineryStatusCache();
+      // A fresh open re-scans in the background (badges paint from the
+      // cache first); Back from an item reuses the cache within its TTL.
+      refreshJoineryStatusCache(!opts.preferRemembered);
       updateUndoRedoButtons();
       hideProjectGate();
+      navRecord("level"); // device Back button (2026-09-25)
       if (switchProjectBtn) switchProjectBtn.style.display = activeProjectHandle ? "" : "none";
       // Rooms have no plan/canvas of their own to browse to in the flat
       // shape (they're pure navigation now, see the interop block's own
@@ -4212,30 +4392,48 @@
   // (see openViewerPickedLevel) so state.fileBase/refreshBrandSubtitle/the
   // "Opened ..." toast all fall back to the level's own bare name instead
   // of a stale or missing project name.
-  function openLevelFromHandle(dirH, name){
+  function openLevelFromHandle(dirH, name, opts){
+    opts = opts || {};
     activeLevelIsFlat = false;
     activeLevelHandle = dirH;
+    var remembered = opts.preferRemembered ? takeRememberedLevelPlan(activeProjectName, name) : null;
     return ensureWorkFolders(dirH).then(function(subs){
       activeLevelName = name;
       activeLevelSavesHandle = subs.savesHandle;
       activeLevelPdfsHandle = subs.pdfsHandle;
       activeLevelBackupsHandle = subs.backupsHandle;
+      if (remembered){
+        // Back from an item/room: the plan exactly as it was left, no read
+        // (see rememberLevelPlanForReturn).
+        applyRestoredState({ utzlineProject: 1, imageDataURL: remembered.imageDataURL, imageTiles: remembered.imageTiles, imageW: remembered.imageW, imageH: remembered.imageH, fileBase: name, objects: remembered.objects });
+        return;
+      }
       return activeLevelSavesHandle.getFileHandle(projectSaveFilename(name)).then(function(fh){
-        return fh.getFile();
-      }).then(function(file){
-        return file.text();
-      }).then(function(text){
-        var saved = null;
-        try{ saved = JSON.parse(text); }catch(e){ saved = null; }
-        if (saved && (saved.utzlineProject || saved.redlineProject) && savedHasImage(saved)){
-          applyRestoredState(saved);
-        } else {
-          startBlankPlan(name);
-        }
-      }, function(){
+        return fh.getFile().then(function(file){ return file.text(); }).then(function(text){
+          var saved = null;
+          try{ saved = JSON.parse(text); }catch(e){ saved = null; }
+          if (saved && (saved.utzlineProject || saved.redlineProject) && savedHasImage(saved)){
+            applyRestoredState(saved);
+          } else if (saved === null && text && text.length > 64){
+            // The file is there and has content but isn't parseable --
+            // a partial sync/write. Never a blank page over it
+            // (2026-09-25, same rule as the flat shape).
+            var e = new Error("Couldn't parse level save file"); e.code = "level_read_failed"; throw e;
+          } else {
+            startBlankPlan(name);
+          }
+        }, function(err){
+          if (err && err.code === "level_read_failed") throw err;
+          var e2 = new Error("Couldn't read level save file"); e2.code = "level_read_failed"; e2.cause = err; throw e2;
+        });
+      }, function(err){
         // No save file yet for this level (a brand-new folder, or one
         // created outside this app) -- start it blank rather than treating
-        // a missing file as an error.
+        // a missing file as an error. Anything OTHER than "not there" is a
+        // real read failure and must not become a blank page either.
+        if (err && err.name && err.name !== "NotFoundError" && err.name !== "TypeMismatchError"){
+          var e3 = new Error("Couldn't open level save file"); e3.code = "level_read_failed"; e3.cause = err; throw e3;
+        }
         startBlankPlan(name);
       });
     }).then(function(){
@@ -4249,14 +4447,17 @@
       updateFileNameBtn();
       refreshBrandSubtitle();
       history = [deepClone(state.objects)]; historyIndex = 0;
-      fitToView();
+      fitOrRestoreLevelView(activeProjectName, name);
       renderAll();
       // Fire-and-forget -- re-renders a second time once the shared status
       // file lands, so a level's markers pick up their 📏/📦/🏆 icon as
       // soon as it's known rather than needing a manual refresh.
-      refreshJoineryStatusCache();
+      // A fresh open re-scans in the background (badges paint from the
+      // cache first); Back from an item reuses the cache within its TTL.
+      refreshJoineryStatusCache(!opts.preferRemembered);
       updateUndoRedoButtons();
       hideProjectGate();
+      navRecord("level"); // device Back button (2026-09-25)
       // "Switch project / level" has nowhere useful to go back to without a
       // known project handle (see switchProject()'s own level-list reload) --
       // hidden rather than shown broken/confusing in that case. Rooms works
@@ -4304,7 +4505,11 @@
       showToast("Can't open a joinery item's own page without a known project — open this level from its project instead.");
       return Promise.resolve();
     }
+    // Captured BEFORE anything changes on screen (2026-09-25) -- only used
+    // if this turns out to be the item's very first open; see below.
+    var firstOpenSnapshotP = (!VIEW_ONLY_MODE && onLevelPlanNow()) ? renderPlanViewSnapshotForItem() : Promise.resolve(null);
     return saveActiveWorkBeforeLeaving().then(function(){
+      rememberLevelPlanForReturn(); // (2026-09-25) so Back lands on this exact view
       // Opening an item's page always means leaving any room behind too --
       // a room and a joinery item page are mutually exclusive, same as a
       // room and the level's own plan already are (see openLevel).
@@ -4419,9 +4624,31 @@
           var saved = ownDraft || res[1];
           if (savedHasImage(saved)){
             applyRestoredState(saved);
-          } else {
-            startBlankPlan(displayName);
+            return;
           }
+          // Very first open of this item (nothing saved by anyone yet):
+          // the plan as it was on screen a moment ago, markers stripped,
+          // offered for cropping, becomes this page's base image -- so the
+          // measures go straight onto the real plan rather than a blank
+          // white sheet. Cancelling/"Use full view" keeps the whole view.
+          // Left CLEAN (not dirty) until something is actually drawn, so
+          // an untouched page never prompts to save or writes a draft.
+          return firstOpenSnapshotP.then(function(snap){
+            if (!snap || firstOpenSnapshotMode === "off"){ startBlankPlan(displayName); unsavedSinceLastSave = false; backupDirty = false; return; }
+            if (firstOpenSnapshotMode === "full"){
+              applyLoadedImage(snap.dataUrl, snap.w, snap.h, displayName);
+              unsavedSinceLastSave = false; backupDirty = false;
+              return;
+            }
+            return showCropDialog(snap.dataUrl, snap.w, snap.h, {
+              label: "Crop the plan snapshot for “" + displayName + "” — drag the corners, then Crop, or keep the whole view:",
+              skipLabel: "Use full view"
+            }).then(function(res){
+              var pick = res && res.dataUrl ? res : snap;
+              applyLoadedImage(pick.dataUrl, pick.w, pick.h, displayName);
+              unsavedSinceLastSave = false; backupDirty = false;
+            });
+          });
         });
       });
     }).then(function(){
@@ -4436,6 +4663,7 @@
       renderAll();
       updateUndoRedoButtons();
       hideProjectGate();
+      navRecord("item"); // device Back button (2026-09-25)
       // A joinery item page has no rooms of its own to browse to (same
       // reasoning openFlatLevel already hides these for) -- and no further
       // project/level switching makes sense mid-item either, since Back
@@ -4498,6 +4726,7 @@
     // or a different room of this same level -- see
     // saveActiveWorkBeforeLeaving's own comment.
     return saveActiveWorkBeforeLeaving().then(function(){
+      rememberLevelPlanForReturn(); // (2026-09-25) so Back lands on this exact view
       // A room and a joinery item page are mutually exclusive, same as a
       // room and the level's own plan.
       activeJoineryItemPage = null;
@@ -4541,6 +4770,7 @@
       renderAll();
       updateUndoRedoButtons();
       hideProjectGate();
+      navRecord("room"); // device Back button (2026-09-25)
       if (switchProjectBtn) switchProjectBtn.style.display = "";
       if (roomsBtn) roomsBtn.style.display = "";
       updateBackBtnVisibility();
@@ -5023,9 +5253,22 @@
   // keeps seeing exactly the shape it expects.
   function saveFlatLevelFile(){
     if (!activeProjectHandle || !activeLevelName) return Promise.reject({ code: "no_level" });
+    // A pre-read that FAILS (as opposed to "no file yet") now rejects, so
+    // this save fails loudly rather than rewriting the level from a
+    // half-known state -- see readFlatLevelFileByName's own comment.
     return readFlatLevelFile(activeProjectHandle, activeProjectName, activeLevelName).then(function(existing){
       var markers = state.objects.filter(function(o){ return o && o.type === "roomlink"; });
       var objects = state.objects.filter(function(o){ return !(o && o.type === "roomlink"); });
+      // Never let a blank white canvas overwrite a level that has a real
+      // floor plan on disk (2026-09-25) -- the only way this app can be
+      // holding a blank canvas for an existing level is a read that went
+      // wrong on the way in, and the file on disk is the copy to keep.
+      var existingHasImage = !!(existing && (existing.imageDataURL || (existing.imageTiles && existing.imageTiles.length)));
+      if (existingHasImage && isBlankCanvasState() && !markers.length){
+        var guardErr = new Error("Refusing to overwrite “" + activeLevelName + "” with a blank canvas");
+        guardErr.code = "blank_over_real_level";
+        return Promise.reject(guardErr);
+      }
       return writeFlatLevelFile(activeProjectHandle, activeProjectName, activeLevelName, {
         imageDataURL: state.imageDataURL,
         imageTiles: state.imageTiles || null,
@@ -5060,6 +5303,77 @@
   //   this exact moment, and clears this device's own draft (now stale --
   //   the fresh overlay supersedes it).
   //
+  // Loads a URL (a plain dataURL, or a data:image/svg+xml;base64,... one
+  // built below) into a real <img> element -- the standard way to turn
+  // either into something a canvas can drawImage() from.
+  function loadImageEl(src){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      img.onload = function(){ resolve(img); };
+      img.onerror = function(){ reject(new Error("image load failed")); };
+      img.src = src;
+    });
+  }
+  // v45.14 -- Andrew: "the joinery status page needs finishing... it
+  // currently does not show the site measure overlay. this should come
+  // from joinery item (image)." A permanent overlay file has always stored
+  // its objects as vector data (see the "Site Measure overlay layers"
+  // comment above listJoineryOverlays) -- faithfully redrawing that requires
+  // this app's own renderObject(), which nothing outside Site Measure/
+  // Viewer has. Rather than have UTZLINE Projects (and eventually
+  // Scheduler/Machine Schedule) re-implement a whole vector renderer just
+  // to show a static picture, this flattens the same base photo + objects
+  // being saved into one ordinary raster image at Save time and stores
+  // it right alongside the vector data in the same overlay file -- any app
+  // can then just show it as a plain <img>.
+  //
+  // Composites entirely via one throwaway SVG document (base photo/tiles,
+  // then every object via the same renderObject(obj, true) preview-mode
+  // draw the overlay-layers feature already reuses) rather than hand-
+  // rolling per-tile/per-object-type canvas drawing -- one Image load of
+  // that SVG, then one canvas drawImage, does the whole flatten/scale-down
+  // in a single step, and stays correct automatically if renderObject ever
+  // grows a new object type. Capped to maxDim on the long edge (default a
+  // modest preview size, not the original photo's full resolution) so this
+  // doesn't meaningfully add to how much an overlay file already embeds
+  // (the full-resolution base photo, unchanged, in imageDataURL/imageTiles).
+  // Resolves null (never rejects) for anything without a base image to
+  // composite onto -- a Save is never blocked by a snapshot failing.
+  function renderJoineryOverlaySnapshot(payload, maxDim){
+    maxDim = maxDim || 1000;
+    var w = payload && payload.imageW, h = payload && payload.imageH;
+    var hasBase = !!(payload && (payload.imageDataURL || (payload.imageTiles && payload.imageTiles.length)));
+    if (!hasBase || !w || !h) return Promise.resolve(null);
+    try{
+      var svg = document.createElementNS(SVG_NS, "svg");
+      svg.setAttribute("xmlns", SVG_NS);
+      svg.setAttribute("width", w);
+      svg.setAttribute("height", h);
+      svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+      if (payload.imageTiles && payload.imageTiles.length){
+        payload.imageTiles.forEach(function(t){
+          svg.appendChild(el("image", { href: t.dataUrl, x: t.x, y: t.y, width: t.w, height: t.h }));
+        });
+      } else {
+        svg.appendChild(el("image", { href: payload.imageDataURL, x: 0, y: 0, width: w, height: h }));
+      }
+      (payload.objects || []).forEach(function(o){
+        if (o.hidden) return;
+        try{ svg.appendChild(renderObject(o, true)); }catch(e){ /* one malformed object should never block the whole snapshot */ }
+      });
+      var svgText = new XMLSerializer().serializeToString(svg);
+      var svgDataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgText)));
+      return loadImageEl(svgDataUrl).then(function(img){
+        var scale = Math.min(1, maxDim / Math.max(w, h));
+        var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+        var canvas = document.createElement("canvas");
+        canvas.width = cw; canvas.height = ch;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, cw, ch);
+        return canvas.toDataURL("image/jpeg", 0.82);
+      });
+    }catch(e){ return Promise.resolve(null); }
+  }
   // Stamps the item's own identity onto the payload either way (never read
   // back by this app -- applyRestoredState only ever looks at the fields it
   // already knows about -- but worth having in the raw file itself for
@@ -5079,7 +5393,10 @@
     }
     return ensureDeviceUserNameForSave().then(function(name){
       payload.savedBy = name;
-      return writeJoineryOverlay(activeProjectHandle, key, name, payload);
+      return renderJoineryOverlaySnapshot(payload).catch(function(){ return null; }).then(function(snapshotDataUrl){
+        if (snapshotDataUrl) payload.overlaySnapshotDataURL = snapshotDataUrl;
+        return writeJoineryOverlay(activeProjectHandle, key, name, payload);
+      });
     }).then(function(){
       activeJoineryItemPage.ownHasDraft = false;
       unsavedSinceLastSave = false;
@@ -5470,6 +5787,21 @@
     if (!state.imageW){ showToast("Open a plan or photo first."); return; }
     var workName = activeWorkName();
     var jsonOK = false, pdfOK = false, pdfFilename = "", jsonErr = null, pdfErr = null;
+    // (2026-09-25) Andrew: "lock all on save and exit". On a joinery item's
+    // own page Save is "Save & exit": every object is locked (the same
+    // auto-lock choosing Save in the leaving-this-page confirm already
+    // does -- v31, "when exiting / saving it needs to auto lock all
+    // dimensions etc."), the save lands, and it returns to the level plan
+    // exactly where it was left (see rememberLevelPlanForReturn). A
+    // mid-work Save on a level's own plan still stays put and locks
+    // nothing, deliberately, as before -- see run_multi_room_save.js.
+    var exitToPlanAfter = !!activeJoineryItemPage;
+    if (exitToPlanAfter && hasUnlockedObject()){
+      state.objects.forEach(function(o){ o.locked = true; });
+      if (state.selectedId){ var selS = findObj(state.selectedId); if (selS && selS.locked) state.selectedId = null; }
+      hideLockPopover();
+      pushHistory(); renderAll(); updateLockAllButton();
+    }
     // explicit=true (v45) -- this IS the Save button; see
     // saveJoineryItemPageFile's own comment for what that means for a
     // joinery item page specifically (a new permanent overlay layer,
@@ -5496,6 +5828,11 @@
         showToast("Exported " + pdfFilename + ", but saving the plan file failed (" + describeError(jsonErr) + ") — try Save again.", 8000);
       } else {
         showToast("Couldn't save to this level's folder (" + describeError(jsonErr) + ") — try again.", 8000);
+      }
+      // Save & exit (see above): only once the plan file itself is safely
+      // written -- a failed save stays put so nothing is walked away from.
+      if (exitToPlanAfter && jsonOK && activeJoineryItemPage){
+        return backFromJoineryItemPage();
       }
     });
   }
@@ -5694,6 +6031,13 @@
   var autosaveWarned = false;
   function scheduleAutosave(){
     clearTimeout(autosaveTimer);
+    // (2026-09-25, speed) The IndexedDB "current" copy is only ever read
+    // back by the plain single-file fallback boot -- with a project level/
+    // room/item open it's dead weight: a structured clone of the whole
+    // base64 floor plan on every edit, 700ms after each pen stroke. The
+    // real safety nets in project mode are the on-disk draft/autosave
+    // (periodicLevelAutosaveTick) and the rolling backups.
+    if (hasActiveWork()) return;
     autosaveTimer = setTimeout(function(){
       try{
         idbSet("current", {
@@ -6183,6 +6527,51 @@
      with the shared enum so its on-plan icon/rank display stays correct;
      no new write path was added on this side. */
   var joineryStatusCache = null; // null until the first read resolves; [] once loaded with no records
+  // (2026-09-25, "icon caching like we just did") -- the marker badges no
+  // longer wait on a full re-scan of every item's status folder on EVERY
+  // level open (and again on every Back from an item). The folded records
+  // are kept for the whole project (joineryStatusCacheProject) and only
+  // re-scanned in the background once they're older than
+  // STATUS_CACHE_FRESH_MS; a device-local IndexedDB snapshot of the last
+  // scan paints the badges instantly on the first level of a project, the
+  // same last-known-state-first pattern the ITP apps' marker snapshots
+  // use. joineryStatusIndex is a lookup map over the same records, so the
+  // per-marker, per-render findJoineryStatus is a hash lookup instead of a
+  // linear scan of the whole project. shopDrawingKeySet is refreshed with
+  // it: the set of item keys that actually have a shop drawing on file,
+  // which gates the "View shop drawing" row (Andrew: "only show view shop
+  // drawing or view job notes button if there is one applied").
+  var joineryStatusIndex = null, joineryStatusCacheProject = "", joineryStatusCacheAt = 0, joineryStatusRefreshP = null;
+  var shopDrawingKeySet = null; // null = not known yet (fail open), else a Set of item keys
+  var STATUS_CACHE_FRESH_MS = 3 * 60 * 1000;
+  function joineryStatusIndexKey(level, room, joineryId){ return (level || "") + "\u0000" + (room || "") + "\u0000" + (joineryId || ""); }
+  function setJoineryStatusCache(list){
+    joineryStatusCache = Array.isArray(list) ? list : [];
+    joineryStatusIndex = {};
+    for (var i = 0; i < joineryStatusCache.length; i++){
+      var rec = joineryStatusCache[i];
+      if (rec) joineryStatusIndex[joineryStatusIndexKey(rec.level, rec.room, rec.joineryId)] = rec;
+    }
+  }
+  function joineryStatusSnapshotKey(projectName){ return "joineryStatusSnapshot\u0000" + (projectName || ""); }
+  function listShopDrawingKeys(projectHandle){
+    if (!projectHandle) return Promise.resolve([]);
+    return projectHandle.getDirectoryHandle(projectSavesDirName()).then(function(psH){
+      return psH.getDirectoryHandle(shopDrawingsBranchName());
+    }).then(function(sdH){
+      return listSubdirNames(sdH).then(function(keys){
+        // A key folder with no drawing folders inside (everything removed)
+        // doesn't count as "one applied".
+        return Promise.all(keys.map(function(key){
+          return sdH.getDirectoryHandle(key).then(listSubdirNames).then(function(subs){ return subs.length ? key : null; }, function(){ return null; });
+        }));
+      });
+    }).then(function(keys){ return keys.filter(Boolean); }, function(){ return []; });
+  }
+  function itemHasShopDrawing(key){
+    if (!shopDrawingKeySet) return true; // not known yet -- don't hide what might be there
+    return shopDrawingKeySet.has(key);
+  }
   function joineryStatusRank(status){
     switch (status){
       case "installed": return 6;
@@ -6442,6 +6831,7 @@
       if (r && r.level === rec.level && (r.room || "") === (rec.room || "") && (r.joineryId || "") === (rec.joineryId || "")){ idx = i; break; }
     }
     if (idx >= 0) joineryStatusCache[idx] = rec; else joineryStatusCache.push(rec);
+    if (joineryStatusIndex) joineryStatusIndex[joineryStatusIndexKey(rec.level, rec.room, rec.joineryId)] = rec;
   }
   // Drop-in replacement for the old whole-file reader -- same return shape
   // (an array of records with the exact same fields), now assembled by
@@ -6470,6 +6860,9 @@
     });
   }
   function findJoineryStatus(list, level, room, joineryId){
+    if (list === joineryStatusCache && joineryStatusIndex){
+      return joineryStatusIndex[joineryStatusIndexKey(level, room, joineryId)] || null;
+    }
     for (var i = 0; i < list.length; i++){
       var rec = list[i];
       if (rec && rec.level === level && (rec.room || "") === (room || "") && (rec.joineryId || "") === (joineryId || "")) return rec;
@@ -6524,10 +6917,36 @@
   // switch. Never blocks anything else on the read -- renderAll already ran
   // once (with whatever joineryStatusCache happened to hold, often null ->
   // no icons yet) by the time this resolves.
-  function refreshJoineryStatusCache(){
-    if (!activeProjectHandle){ joineryStatusCache = []; updateBackBtnVisibility(); return Promise.resolve(); }
-    return readJoineryStatuses(activeProjectHandle).then(function(list){
-      joineryStatusCache = list;
+  function refreshJoineryStatusCache(force){
+    if (!activeProjectHandle){ setJoineryStatusCache([]); shopDrawingKeySet = null; joineryStatusCacheProject = ""; joineryStatusCacheAt = 0; updateBackBtnVisibility(); return Promise.resolve(); }
+    var projectName = activeProjectName || activeProjectHandle.name || "";
+    var sameProject = joineryStatusCacheProject === projectName && Array.isArray(joineryStatusCache);
+    if (!sameProject){
+      joineryStatusCache = null; joineryStatusIndex = null; shopDrawingKeySet = null;
+      joineryStatusCacheProject = projectName; joineryStatusCacheAt = 0; joineryStatusRefreshP = null;
+      // Instant paint from the last scan of this project on this device --
+      // replaced the moment the real scan below lands.
+      idbGet(joineryStatusSnapshotKey(projectName)).then(function(snap){
+        if (joineryStatusCacheProject !== projectName || joineryStatusCacheAt) return;
+        if (!snap || !Array.isArray(snap.list)) return;
+        setJoineryStatusCache(snap.list);
+        shopDrawingKeySet = Array.isArray(snap.shopKeys) ? new Set(snap.shopKeys) : null;
+        renderAll();
+        updateBackBtnVisibility();
+      }).catch(function(){});
+    } else if (!force && (Date.now() - joineryStatusCacheAt) < STATUS_CACHE_FRESH_MS){
+      updateBackBtnVisibility();
+      return Promise.resolve();
+    }
+    if (joineryStatusRefreshP) return joineryStatusRefreshP;
+    joineryStatusRefreshP = Promise.all([
+      readJoineryStatuses(activeProjectHandle),
+      listShopDrawingKeys(activeProjectHandle)
+    ]).then(function(res){
+      if (joineryStatusCacheProject !== projectName) return; // project changed under us
+      setJoineryStatusCache(res[0]);
+      shopDrawingKeySet = new Set(res[1]);
+      joineryStatusCacheAt = Date.now();
       renderAll();
       // Also re-checks the "View job note" toolbar button's own visibility
       // (2026-09-23, gated on the cache's own jobNote flag) -- this always
@@ -6536,7 +6955,9 @@
       // so without this the button would stay hidden until some OTHER
       // screen transition happened to re-check it.
       updateBackBtnVisibility();
-    });
+      idbSet(joineryStatusSnapshotKey(projectName), { list: res[0], shopKeys: res[1], at: Date.now() }).catch(function(){});
+    }).then(function(){ joineryStatusRefreshP = null; }, function(err){ joineryStatusRefreshP = null; throw err; });
+    return joineryStatusRefreshP;
   }
   function joineryStatusIconFor(obj){
     if (!joineryStatusCache) return "";
@@ -6930,7 +7351,18 @@
     return g;
   }
 
+  // Coalesces the per-pointermove re-renders of a drag into one per
+  // animation frame (2026-09-25, speed) -- a tablet delivers pointermove
+  // far faster than it can rebuild every object, so rendering each one
+  // just queued work and made the drag feel behind the finger.
+  var renderQueued = false;
+  function requestRenderAll(){
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function(){ renderQueued = false; renderAll(); });
+  }
   function renderAll(){
+    renderQueued = false;
     objectsLayer.innerHTML = "";
     state.objects.forEach(function(o){ if (o.hidden) return; objectsLayer.appendChild(renderObject(o, false)); });
     renderHandles();
@@ -7552,7 +7984,10 @@
         if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0;
       }
       applyMove(o, dragMode.start, dx, dy);
-      renderAll();
+      // A fingertip jitters a pixel or so during a plain tap -- that isn't
+      // a move (see onPointerUp's own comment).
+      if (Math.abs(dx) * state.view.scale >= 2 || Math.abs(dy) * state.view.scale >= 2) dragMode.moved = true;
+      requestRenderAll();
       return;
     }
     if (dragMode.kind === "dimOffset"){
@@ -7568,12 +8003,14 @@
       var proj = dxo * perpx + dyo * perpy;
       od.lineOffset = (dragMode.start.lineOffset || 0) + proj;
       if (od.label.autoPos) repositionDimensionLabel(od);
-      renderAll();
+      dragMode.moved = true;
+      requestRenderAll();
       return;
     }
     if (dragMode.kind === "handle"){
       applyHandleDrag(dragMode, wp, e.shiftKey);
-      renderAll();
+      dragMode.moved = true;
+      requestRenderAll();
       return;
     }
   }
@@ -7614,7 +8051,13 @@
       }
       finalizeDrawing();
     } else if (dragMode.kind === "move" || dragMode.kind === "handle" || dragMode.kind === "dimOffset"){
-      pushHistory();
+      // (2026-09-25) Only when something actually moved. A plain tap on an
+      // object (a marker, most often) used to count as an edit: it marked
+      // the plan unsaved, so the very next Back/Home asked "Save changes?"
+      // for a plan nobody had changed -- and on the level plan that save
+      // rewrote the whole level file for nothing.
+      if (dragMode.moved) pushHistory();
+      else if (dragMode.kind === "move"){ var oTap = findObj(dragMode.id); if (oTap) applyMove(oTap, dragMode.start, 0, 0); }
     }
     dragMode = null;
     updateCursor();
@@ -8020,10 +8463,24 @@
     }
     renderAll();
   }
+  function dblclickTargetObject(e){
+    var g = e.target && e.target.closest ? e.target.closest("g[data-id]") : null;
+    if (g){ var byId = findObj(g.getAttribute("data-id")); if (byId) return byId; }
+    // (2026-09-25) On a touch double-tap the first tap's own pointerdown
+    // re-renders the objects layer (renderAll rebuilds every group), so the
+    // second tap can land on a node that's no longer in the document and
+    // the id lookup finds nothing -- the double-tap silently did nothing on
+    // the tablet. Fall back to a plain hit-test at the tap position.
+    var wp = screenToWorld(e.clientX, e.clientY);
+    return hitObject(wp, true) || null;
+  }
+  svgRoot.addEventListener("dblclick", function(e){
+    if (e.target && e.target.closest && e.target.closest("#objectsLayer")) return; // objectsLayer's own handler below has it
+    var obj = dblclickTargetObject(e);
+    if (obj && obj.type === "roomlink") openRoomFromMarker(obj);
+  });
   objectsLayer.addEventListener("dblclick", function(e){
-    var g = e.target.closest("g[data-id]");
-    if (!g) return;
-    var obj = findObj(g.getAttribute("data-id"));
+    var obj = dblclickTargetObject(e);
     if (!obj) return;
     // Checked BEFORE the locked-branch below, deliberately: a room marker's
     // whole point is navigation, so double-clicking it always jumps to that
@@ -8451,7 +8908,11 @@
     // is now something that has to happen another way (outside this app,
     // or a future feature); viewing an already-added one here is
     // unaffected.
-    if (isRealObject && obj.type === "roomlink"){
+    // (2026-09-25) Andrew: "only show view shop drawing or view job notes
+    // button if there is one applied" -- gated on shopDrawingKeySet (see
+    // its comment), the same way the job-note row above is gated on the
+    // record's jobNote flag. Unknown-yet reads as "show", never as "hide".
+    if (isRealObject && obj.type === "roomlink" && itemHasShopDrawing(shopDrawingKeyFor(obj))){
       popoverRow(wrap, SHOPDRAWING_ICON + "<span>View shop drawing</span>", function(){
         hideLockPopover();
         openViewShopDrawingDialog(obj);
@@ -9061,6 +9522,76 @@
     if (!m) return stamp || "";
     return m[1] + " " + m[2] + ":" + m[3];
   }
+  // Recolors a just-rendered object group (from renderObject(obj, true))
+  // in place, for display as someone else's reference layer. v45.14 fix --
+  // Andrew, verbatim: "get rid of the horrible light red background hue."
+  // The ORIGINAL approach (kept below in history/blame only) applied a CSS
+  // `filter: sepia(1) saturate(6) hue-rotate(Ndeg)` to the whole rendered
+  // group, to turn each layer's black-on-white line art into one flat
+  // accent hue in one step. That's exactly what broke it: every stroked
+  // shape/label here is drawn as a THREE-PASS halo (see haloOuterW's own
+  // comment) -- a wide white ring, then a black ring, then the real color
+  // on top -- so the white ring is the single largest thing being colored,
+  // and sepia()+saturate() turn white into a highly saturated color before
+  // hue-rotate() ever runs (a plain hue-rotate() alone leaves true
+  // white/black/gray completely untouched -- it's the sepia() first step
+  // that injects the color for it to rotate). On a densely-annotated plan
+  // with dozens of overlapping halos, or a saved reference photo
+  // (obj.type "image") spanning a large area, that reads as a solid
+  // magenta wash over the whole plan rather than a subtle per-layer tint.
+  //
+  // Fixed by not using a filter at all: walk the rendered object's own
+  // SVG elements directly and (a) drop every element that's purely part
+  // of the white-ring/black-ring halo (or a text/callout box's white
+  // background, which rode along with the halo on the same element) --
+  // reference layers don't need the halo's any-background legibility
+  // trick, since they're already faded/thin by design -- and (b) recolor
+  // whatever's left (the actual line/fill/text -- previously obj.color)
+  // to this layer's own flat accent color. A photo (<image>) can't be
+  // recolored element-by-element like a vector shape, so it just gets a
+  // fixed, modest desaturate+dim instead of any hue shift, which can never
+  // produce a solid colored block the way the old filter chain could.
+  function tintOverlayObjectGroup(g, tintColor){
+    var nodes = g.querySelectorAll("*");
+    for (var i = 0; i < nodes.length; i++){
+      var node = nodes[i];
+      var tag = node.tagName ? node.tagName.toLowerCase() : "";
+      var stroke = node.getAttribute("stroke");
+      var fill = node.getAttribute("fill");
+      if (tag === "image"){
+        node.setAttribute("style", "filter: grayscale(0.5); opacity: 0.55;");
+        continue;
+      }
+      if (tag === "text"){
+        // The white/black halo passes behind a label's real text share the
+        // exact same stroke+fill pairing (see renderLabelGroup/textPass) --
+        // both white, or both black -- so that pairing alone identifies a
+        // halo pass here (the real pass below never sets fill to white or
+        // black on purpose for ordinary text/labels).
+        if ((stroke === "#ffffff" && fill === "#ffffff") || (stroke === "#000000" && fill === "#000000")){
+          if (node.parentNode) node.parentNode.removeChild(node);
+          continue;
+        }
+        if (fill && fill !== "none") node.setAttribute("fill", tintColor);
+        // A status-badge glyph's own thin white outline (roomlink icons)
+        // is small and never the wash problem -- left alone rather than
+        // recolored, so the emoji glyph itself still reads normally.
+        continue;
+      }
+      // Every other shape (line/rect/path/circle): the white ring and the
+      // black ring are always drawn as their own dedicated elements (never
+      // sharing one element with the real color pass), so either color
+      // alone -- on either attribute -- reliably identifies a halo pass
+      // (including a text/callout box's white background rect, which
+      // carries the black ring's stroke on that same element).
+      if (stroke === "#ffffff" || fill === "#ffffff" || stroke === "#000000" || fill === "#000000"){
+        if (node.parentNode) node.parentNode.removeChild(node);
+        continue;
+      }
+      if (stroke && stroke !== "none") node.setAttribute("stroke", tintColor);
+      if (fill && fill !== "none") node.setAttribute("fill", tintColor);
+    }
+  }
   // Draws every currently-visible OTHER layer's objects, tinted and
   // composited into overlayLayersGroup -- which sits (see the SVG markup)
   // behind objectsLayer but above the base photo, so a person's own
@@ -9076,12 +9607,25 @@
   // object can never be selected, dragged, or deleted no matter how it's
   // drawn here -- reusing renderObject(obj, true) (the same function an
   // in-progress drawing PREVIEW already uses) for the actual per-object
-  // SVG is what gets that "definitely not a real, interactive object"
-  // behaviour (no data-id class the way a live object has) for free.
-  function renderOverlayLayers(){
+  // SVG, then recoloring the returned group with tintOverlayObjectGroup
+  // (above), is what gets that "definitely not a real, interactive
+  // object" behaviour (no data-id class the way a live object has) for
+  // free, while still never touching the original object data.
+  // (2026-09-25, speed) Other people's layers never change while you draw,
+  // so re-rendering all of them -- image objects with full base64 hrefs
+  // included -- on EVERY renderAll (every drag frame) was pure waste. A
+  // signature of "which item + which layers are visible" decides whether
+  // the group is rebuilt; toggling a layer or opening another item changes
+  // it, a pen stroke doesn't.
+  var overlayLayersRenderedSig = null;
+  function renderOverlayLayers(force){
+    var layersNow = (activeJoineryItemPage && activeJoineryItemPage.layers) || [];
+    var sig = (activeJoineryItemPage ? activeJoineryItemPage.key : "") + "|" + layersNow.length + "|" + layersNow.map(function(l){ return l.visible ? "1" : "0"; }).join("");
+    if (!force && sig === overlayLayersRenderedSig && (layersNow.length === 0 || overlayLayersGroup.childNodes.length)) return;
+    overlayLayersRenderedSig = sig;
     overlayLayersGroup.innerHTML = "";
     var btn = document.getElementById("overlayLayersBtn");
-    var layers = (activeJoineryItemPage && activeJoineryItemPage.layers) || [];
+    var layers = layersNow;
     if (btn) btn.style.display = layers.length ? "" : "none";
     // (v45.10) See the .ibtn-badge CSS comment -- a plain count, always in
     // sync with the button's own visibility above, is the whole fix: no
@@ -9096,26 +9640,28 @@
       if (overlayLayersPanelOpen) setOverlayLayersPanelOpen(false);
       return;
     }
-    // A small rotating palette rather than one fixed tint -- with more
-    // than one other contributor on the same item, each one's layer needs
-    // to read as visually distinct from the others, not just distinct
-    // from your own current (untinted) work. First slot is a purple tint,
-    // matching what Andrew's own request already called it ("purples
-    // layers") -- likely just autocorrect for "different", but a
-    // reasonable default to lead with regardless.
-    var palette = [
-      "sepia(1) saturate(6) hue-rotate(235deg) brightness(0.85)",
-      "sepia(1) saturate(6) hue-rotate(130deg) brightness(0.85)",
-      "sepia(1) saturate(6) hue-rotate(15deg) brightness(0.95)",
-      "sepia(1) saturate(6) hue-rotate(320deg) brightness(0.9)",
-      "sepia(1) saturate(6) hue-rotate(60deg) brightness(0.9)"
-    ];
+    // A small rotating palette of flat, moderate-saturation accent colors
+    // rather than one fixed tint -- with more than one other contributor
+    // on the same item, each one's layer still needs to read as visually
+    // distinct from the others, not just distinct from your own untinted
+    // work. First slot is purple, matching what Andrew's own request
+    // already called it ("purples layers") -- likely just autocorrect for
+    // "different", but a reasonable default to lead with regardless.
+    // (v45.14: flat hex colors applied directly to each object's own
+    // paint via tintOverlayObjectGroup, replacing the old CSS filter
+    // chain -- see that function's comment for why.)
+    var palette = ["#7c3aed", "#2563eb", "#ea580c", "#db2777", "#059669"];
     layers.forEach(function(layer, i){
       if (!layer.visible || !layer.objects || !layer.objects.length) return;
-      var g = el("g", { style: "opacity:0.6; pointer-events:none; filter:" + palette[i % palette.length] + ";" });
+      var tint = palette[i % palette.length];
+      var g = el("g", { style: "opacity:0.75; pointer-events:none;" });
       layer.objects.forEach(function(o){
         if (o.hidden) return;
-        try{ g.appendChild(renderObject(o, true)); }catch(e){ /* a malformed foreign object should never break rendering of everything else */ }
+        try{
+          var og = renderObject(o, true);
+          tintOverlayObjectGroup(og, tint);
+          g.appendChild(og);
+        }catch(e){ /* a malformed foreign object should never break rendering of everything else */ }
       });
       overlayLayersGroup.appendChild(g);
     });
@@ -9327,6 +9873,97 @@
     });
   }
 
+  /* ---- Device / browser Back button (2026-09-25) ----
+     Andrew: "Fix the device back button closing the app." Same design as
+     the ITP apps (Install ITP v35): every screen change leaves one entry in
+     the browser's own history -- the startup/reconnect/project-list screens
+     REPLACE (they're the base: Back from there leaves the app, as before),
+     everything deeper PUSHES. A popstate (the phone's Back button, or the
+     browser's) closes whatever dialog/panel/popover is open first, and
+     otherwise steps back one screen through the app's own existing,
+     already-tested navigations (item -> level plan, room -> level plan,
+     level -> level list, rooms list -> level list, level list -> project
+     list). The unsaved-changes confirm is honoured exactly as it is for
+     the toolbar's own Back: cancelling puts the history entry back so the
+     next press asks again.
+     NOTE: `history` inside this file is the UNDO stack (declared near the
+     top), so everything here goes through window.history explicitly. */
+  var navScreenName = null, navPopInProgress = false;
+  var NAV_BASE = { setup: 1, reconnect: 1, list: 1 };
+  function navRecord(name){
+    if (!name || name === navScreenName){ navPopInProgress = false; return; }
+    try{
+      if (navPopInProgress || NAV_BASE[name] || !navScreenName) window.history.replaceState({ utz: name }, "");
+      else window.history.pushState({ utz: name }, "");
+    }catch(e){}
+    navScreenName = name;
+    navPopInProgress = false;
+  }
+  function navRestoreEntry(){
+    if (!navScreenName) return;
+    try{ window.history.pushState({ utz: navScreenName }, ""); }catch(e){}
+  }
+  // Closes the topmost open dialog/panel/popover, if any -- true when it
+  // did (the Back press is then "spent" on that, not on a screen change).
+  // Every dialog is dismissed through its own existing Cancel/Close
+  // control so whatever promise it holds settles the same way a tap on
+  // that button would.
+  function closeAnyOpenOverlay(){
+    var pairs = [
+      ["leaveConfirmBackdrop", "leaveConfirmCancel"], ["confirmBackdrop", "confirmCancel"],
+      ["cropBackdrop", null], ["renameBackdrop", "renameCancel"], ["numberpadBackdrop", "numberpadCancel"],
+      ["identityAppChecksBackdrop", "identityAppChecksCancel"], ["shareChoiceBackdrop", "shareChoiceCancel"],
+      ["pdfPickerBackdrop", "pdfPickerCancel"], ["insertSourceBackdrop", "insertSourceCancelBtn"],
+      ["cameraBackdrop", "cameraCancelBtn"], ["joineryItemBackdrop", "joineryItemCloseBtn"],
+      ["jobNoteAddBackdrop", "jobNoteAddCancel"], ["jobNoteViewBackdrop", "jobNoteViewCancel"],
+      ["shopDrawingViewBackdrop", "shopDrawingViewCancel"]
+    ];
+    for (var i = 0; i < pairs.length; i++){
+      var bd = document.getElementById(pairs[i][0]);
+      if (!bd || bd.hidden) continue;
+      if (pairs[i][0] === "cropBackdrop"){ closeCropDialog(null); return true; }
+      var btn = pairs[i][1] ? document.getElementById(pairs[i][1]) : null;
+      if (btn) btn.click(); else bd.hidden = true;
+      return true;
+    }
+    if (typeof lockPopoverEl !== "undefined" && lockPopoverEl){ hideLockPopover(); return true; }
+    if (typeof overlayLayersPanelOpen !== "undefined" && overlayLayersPanelOpen){ setOverlayLayersPanelOpen(false); return true; }
+    if (typeof layersPanelOpen !== "undefined" && layersPanelOpen){ setLayersPanelOpen(false); return true; }
+    if (typeof editingId !== "undefined" && editingId){ commitInlineEdit(); return true; }
+    return false;
+  }
+  function appBackFromDeviceButton(){
+    var from = navScreenName;
+    var p = null;
+    switch (from){
+      case "item": p = backFromJoineryItemPage(); break;
+      case "room": p = backToLevelPlan(); break;
+      case "level": p = activeProjectHandle ? switchProjectP() : goHomeP(); break;
+      case "rooms": backToLevelsFromRoomsBtn.click(); break;
+      case "levels": if (backToProjectsBtn) backToProjectsBtn.click(); break;
+      default: break;
+    }
+    return Promise.resolve(p).then(function(){
+      // Give a click-driven destination a moment to record itself, then
+      // check: still on the same screen means the step back didn't happen
+      // (the unsaved-changes confirm was cancelled, or it failed) -- put
+      // the popped entry back so the next Back press asks again.
+      return new Promise(function(r){ setTimeout(r, 250); });
+    }).then(function(){
+      if (navScreenName === from && !NAV_BASE[from]) navRestoreEntry();
+      navPopInProgress = false;
+    }, function(){
+      if (navScreenName === from && !NAV_BASE[from]) navRestoreEntry();
+      navPopInProgress = false;
+    });
+  }
+  window.addEventListener("popstate", function(){
+    if (!navScreenName) return; // single-file mode: nothing of ours in the history
+    if (closeAnyOpenOverlay()){ navRestoreEntry(); return; }
+    if (NAV_BASE[navScreenName]) return; // base screen: the browser is leaving, as before
+    navPopInProgress = true;
+    appBackFromDeviceButton();
+  });
   function hideProjectGate(){ projectGate.hidden = true; }
   function showGateState(which){
     gateSetup.hidden = which !== "setup";
@@ -9342,6 +9979,7 @@
     // (see populateIdentitySelector's own "CSV not readable yet" catch).
     populateIdentitySelector();
     projectGate.hidden = false;
+    navRecord(which); // device Back button (2026-09-25) -- see navRecord
   }
   // Shows "Project — Level" (or, with a room open, "Project — Level — Room")
   // in place of the generic "plan markup" subtitle -- purely cosmetic, but a
@@ -9982,7 +10620,11 @@
   // project's levels, not all the way out to the project list -- "All
   // projects" in the level gate covers going further out, without forcing
   // every level switch through two screens.
-  function switchProject(){
+  // switchProject() deliberately returns nothing (its chain can block on
+  // the leave-confirm, and callers/tests fire-and-forget it); the device
+  // Back handler uses switchProjectP() to know when it has settled.
+  function switchProject(){ switchProjectP(); }
+  function switchProjectP(){
     function goToGate(){
       activeLevelName = ""; activeLevelHandle = null; activeLevelIsFlat = false;
       activeLevelSavesHandle = null; activeLevelPdfsHandle = null; activeLevelBackupsHandle = null;
@@ -10010,7 +10652,7 @@
         showGateState("levels");
       });
     }
-    saveActiveWorkBeforeLeaving().then(goToGate).catch(function(err){
+    return saveActiveWorkBeforeLeaving().then(goToGate).catch(function(err){
       if (err && err.code === "nav_cancelled") return; // declined the confirm -- just stay put
       console.error("Auto-save before switching failed:", err);
       showToast("Couldn't save “" + activeWorkName() + "” before switching (" + describeError(err) + ") — try Save first, then switch again.", 8000);
@@ -10032,7 +10674,8 @@
   // affordance is ever added there too (see next-version-notes.md's own
   // still-open item on that), so there is deliberately only one "go home"
   // function to keep them from ever drifting apart.
-  function goHome(){
+  function goHome(){ goHomeP(); }
+  function goHomeP(){
     function afterSave(){
       activeProjectName = ""; activeProjectHandle = null;
       activeLevelName = ""; activeLevelHandle = null; activeLevelIsFlat = false;
@@ -10060,7 +10703,7 @@
         showGateState("setup");
       }
     }
-    saveActiveWorkBeforeLeaving().then(afterSave).catch(function(err){
+    return saveActiveWorkBeforeLeaving().then(afterSave).catch(function(err){
       if (err && err.code === "nav_cancelled") return; // declined the confirm -- just stay put
       console.error("Auto-save before going home failed:", err);
       showToast("Couldn't save “" + activeWorkName() + "” before going home (" + describeError(err) + ") — try Save first, then try Home again.", 8000);
@@ -10106,10 +10749,10 @@
   // currently open first, same chokepoint every other navigation route
   // already shares.
   function backToLevelPlan(){
-    saveActiveWorkBeforeLeaving().then(function(){
+    return saveActiveWorkBeforeLeaving().then(function(){
       activeRoomName = ""; activeRoomHandle = null;
       activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
-      return openLevelFromHandle(activeLevelHandle, activeLevelName);
+      return openLevelFromHandle(activeLevelHandle, activeLevelName, { preferRemembered: true });
     }).catch(function(err){
       if (err && err.code === "nav_cancelled") return; // declined the confirm -- just stay put
       console.error("Auto-save before going back failed:", err);
@@ -10131,7 +10774,9 @@
   // thing for a legacy one too.
   function backFromJoineryItemPage(){
     var levelName = activeJoineryItemPage ? activeJoineryItemPage.levelName : activeLevelName;
-    openLevel(levelName).catch(function(err){
+    // {preferRemembered:true} (2026-09-25): the plan exactly as it was left,
+    // same pan/zoom, no file read -- see rememberLevelPlanForReturn.
+    return openLevel(levelName, { preferRemembered: true }).catch(function(err){
       if (err && err.code === "nav_cancelled") return; // declined the confirm -- just stay put
       console.error("Auto-save before going back failed:", err);
       showToast("Couldn't save “" + activeWorkName() + "” before going back (" + describeError(err) + ") — try Save first, then try again.", 8000);
@@ -10163,6 +10808,14 @@
   function updateBackBtnVisibility(){
     if (!backBtn) return;
     backBtn.style.display = (activeLevelName && (activeJoineryItemPage || activeRoomName || activeProjectHandle)) ? "" : "none";
+    // The Save button reads "Save & exit" on a joinery item page (2026-09-25,
+    // see saveAllProjectAware) -- plain "Save" everywhere else.
+    var saveBtnEl = document.getElementById("saveBtn");
+    if (saveBtnEl){
+      var saveLabelNode = saveBtnEl.lastChild;
+      while (saveLabelNode && saveLabelNode.nodeType !== 3) saveLabelNode = saveLabelNode.previousSibling;
+      if (saveLabelNode) saveLabelNode.nodeValue = activeJoineryItemPage ? "\n      Save & exit\n    " : "\n      Save\n    ";
+    }
     // "View job note" toolbar button (2026-09-23, per Andrew) -- only ever
     // shown on a joinery item's own dedicated page, never on a level's or
     // room's own plan (those already have the popover's own "View job
@@ -10765,7 +11418,12 @@
     showToast(toastMsg);
   }
   homeBtnEl.addEventListener("click", function(){
-    if (activeLevelName){ goHome(); return; }
+    // (2026-09-25) Any project context at all means Home is the project
+    // list -- the "start a new file" branch below is ONLY for the plain
+    // single-file mode (no Projects folder chosen), never for a state the
+    // project flow happened to leave without a level name. Andrew's
+    // tablet: "Back goes to new page as does home".
+    if (activeLevelName || activeProjectHandle || projectsRootHandle){ goHome(); return; }
     // No project/level system in play (the plain single-file fallback mode
     // this app also supports, for browsers with no File System Access API)
     // -- there's no startup/project-gate screen to go "home" TO in this
@@ -11163,6 +11821,74 @@
   // happened at all. Deliberately only offered for actual photo files
   // (readImageFile's callers), never for a PDF page -- an architectural
   // sheet being opened/inserted as a plan isn't "a photo that came in".
+  /* ---- First-open plan snapshot for a joinery item (2026-09-25) ----
+     Andrew: "When opening joinery item for the very first time make it
+     import a snapshot of the current screen that's croppable but without
+     the indicator icons or indicator text on it so we can write measures
+     straight onto that snapshot." Renders exactly what's in the viewport
+     right now (clipped to the plan itself) from the live plan: base image
+     and this level's own drawn marks, with every roomlink marker -- its
+     dot, code label and status badge -- and any other-person overlay
+     layers left out, no footer/title block. Real on-screen density (like
+     the Share "current view" snapshot), floored/capped so it's legible but
+     doesn't bloat the item's overlay file. Resolves null when there's no
+     plan under the viewport at all, and the caller falls back to the old
+     blank canvas. */
+  var ITEM_SNAPSHOT_MIN_LONG_EDGE = 1600, ITEM_SNAPSHOT_MAX_LONG_EDGE = 2600;
+  // "crop" (the real behaviour: offer the crop dialog), "full" (take the
+  // whole view without asking), or "off" (the old blank white canvas) --
+  // the test harness switches this so existing item-page tests aren't
+  // parked behind a modal.
+  var firstOpenSnapshotMode = "crop";
+  function renderPlanViewSnapshotForItem(){
+    if (!state.imageW || !state.imageH) return Promise.resolve(null);
+    var vb = computeViewportWorldBounds();
+    var x0 = Math.max(vb.x0, 0), y0 = Math.max(vb.y0, 0);
+    var x1 = Math.min(vb.x1, state.imageW), y1 = Math.min(vb.y1, state.imageH);
+    if (x1 - x0 < 10 || y1 - y0 < 10){ x0 = 0; y0 = 0; x1 = state.imageW; y1 = state.imageH; } // plan panned out of view: use the whole plan
+    var contentW = x1 - x0, contentH = y1 - y0;
+    var r = svgRoot.getBoundingClientRect();
+    var dpr = clamp(window.devicePixelRatio || 1, 1, 3);
+    var viewW = vb.x1 - vb.x0;
+    var density = viewW > 0 ? (r.width * dpr) / viewW : dpr;
+    var outW = Math.max(1, Math.round(contentW * density)), outH = Math.max(1, Math.round(contentH * density));
+    var longEdge = Math.max(outW, outH);
+    var f = 1;
+    if (longEdge < ITEM_SNAPSHOT_MIN_LONG_EDGE) f = ITEM_SNAPSHOT_MIN_LONG_EDGE / longEdge;
+    else if (longEdge > ITEM_SNAPSHOT_MAX_LONG_EDGE) f = ITEM_SNAPSHOT_MAX_LONG_EDGE / longEdge;
+    outW = Math.max(1, Math.round(outW * f)); outH = Math.max(1, Math.round(outH * f));
+    var clone = cloneWorldForExport();
+    Array.prototype.forEach.call(clone.querySelectorAll("g[data-id]"), function(g){
+      var o = findObj(g.getAttribute("data-id"));
+      if (!o || o.type === "roomlink") g.remove(); // no indicator icons / indicator text
+    });
+    var ol = clone.querySelector("#overlayLayersGroup");
+    if (ol) ol.remove();
+    var outSvg = document.createElementNS(SVG_NS, "svg");
+    outSvg.setAttribute("xmlns", SVG_NS);
+    outSvg.setAttribute("width", outW);
+    outSvg.setAttribute("height", outH);
+    outSvg.setAttribute("viewBox", x0 + " " + y0 + " " + contentW + " " + contentH);
+    outSvg.appendChild(embeddedFontStyleEl());
+    outSvg.appendChild(clone);
+    var xml = new XMLSerializer().serializeToString(outSvg);
+    var dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(xml)));
+    return loadImageEl(dataUrl).then(function(img){
+      var canvas = document.createElement("canvas");
+      canvas.width = outW; canvas.height = outH;
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, outW, outH);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, outW, outH);
+      return { dataUrl: canvas.toDataURL("image/jpeg", 0.9), w: outW, h: outH };
+    }).catch(function(err){
+      console.error("Plan snapshot for item failed:", err);
+      return null;
+    });
+  }
+
   var cropBackdrop = document.getElementById("cropBackdrop");
   var cropStage = document.getElementById("cropStage");
   var cropImg = document.getElementById("cropImg");
@@ -11172,10 +11898,18 @@
   var cropResolve = null;
   var cropSrc = null; // { dataUrl, w, h } -- the ORIGINAL, uncropped photo
   var cropRect = null; // current crop rect in DISPLAYED image-relative px (0,0 at the displayed image's own top-left)
-  function showCropDialog(dataUrl, naturalW, naturalH){
+  var CROP_DEFAULT_LABEL = "Crop this photo before it's added — drag the corners or edges, or skip to use it as-is:";
+  var CROP_DEFAULT_SKIP = "Use full photo";
+  // opts.label / opts.skipLabel (2026-09-25): the first-open plan snapshot
+  // reuses this exact dialog with its own wording -- see
+  // renderPlanViewSnapshotForItem.
+  function showCropDialog(dataUrl, naturalW, naturalH, opts){
+    opts = opts || {};
     return new Promise(function(resolve){
       cropResolve = resolve;
       cropSrc = { dataUrl: dataUrl, w: naturalW, h: naturalH };
+      document.getElementById("cropLabel").textContent = opts.label || CROP_DEFAULT_LABEL;
+      cropSkipBtn.textContent = opts.skipLabel || CROP_DEFAULT_SKIP;
       cropImg.src = dataUrl;
       cropBackdrop.hidden = false;
       // Wait for the image to actually lay out at its CSS-constrained
@@ -11195,12 +11929,36 @@
       else cropImg.onload = function(){ requestAnimationFrame(place); };
     });
   }
+  // (2026-09-25) Andrew: "sometimes when a snapshot is imported the crop
+  // markers can't be adjusted across the entire import." cropRect is
+  // measured from the displayed IMAGE's top-left, but the rectangle was
+  // being positioned from the STAGE's top-left -- the two only coincide
+  // when the image fills the stage exactly. A portrait photo (capped by
+  // max-height and centred by the flex stage), or any image narrower than
+  // the dialog, sat inset from the stage edge, so the rectangle drew
+  // offset from the picture and its clamps (0..image width) stopped the
+  // handles short of the image's real right/bottom edge on one side while
+  // letting them float over black on the other. The image's own offset
+  // inside the stage is added here, and the stage now carries padding so
+  // a corner handle sitting exactly on the image edge isn't clipped by
+  // overflow:hidden either.
   function renderCropRect(){
-    cropRectEl.style.left = cropRect.x + "px";
-    cropRectEl.style.top = cropRect.y + "px";
+    var ox = cropImg.offsetLeft || 0, oy = cropImg.offsetTop || 0;
+    cropRectEl.style.left = (ox + cropRect.x) + "px";
+    cropRectEl.style.top = (oy + cropRect.y) + "px";
     cropRectEl.style.width = cropRect.w + "px";
     cropRectEl.style.height = cropRect.h + "px";
   }
+  // Keep the rect inside the image if the dialog re-lays out (rotation,
+  // keyboard, window resize) while it's open.
+  window.addEventListener("resize", function(){
+    if (cropBackdrop.hidden || !cropRect) return;
+    var dw = cropImg.offsetWidth, dh = cropImg.offsetHeight;
+    if (!dw || !dh) return;
+    cropRect.w = Math.min(cropRect.w, dw); cropRect.h = Math.min(cropRect.h, dh);
+    cropRect.x = clamp(cropRect.x, 0, dw - cropRect.w); cropRect.y = clamp(cropRect.y, 0, dh - cropRect.h);
+    renderCropRect();
+  });
   function closeCropDialog(result){
     cropBackdrop.hidden = true;
     cropImg.onload = null;
@@ -12216,6 +12974,17 @@
   function cloneWorldForExport(){
     var clone = world.cloneNode(true);
     clone.removeAttribute("transform");
+    // (2026-09-25) Strip every HTML comment inside #world before the clone
+    // is serialised into an SVG data URL. The page's own markup comments
+    // there contain "--" (e.g. "-- see renderOverlayLayers()"), which is
+    // legal in HTML but NOT inside an XML comment -- so the serialised SVG
+    // was not well-formed and every <img>-based rasterisation of it
+    // (rolling PNG backups, Share "current view", the PNG fallback, and now
+    // the first-open plan snapshot) failed with "svg rasterize failed".
+    var walker = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT, null);
+    var comments = [];
+    while (walker.nextNode()) comments.push(walker.currentNode);
+    comments.forEach(function(c){ if (c.parentNode) c.parentNode.removeChild(c); });
     var kill = clone.querySelectorAll(".ui-handle, .ui-preview, .ui-preview-node");
     kill.forEach(function(n){ n.remove(); });
     // The snap-to-grid overlay is a drawing aid, not a mark on the plan --
@@ -12395,7 +13164,13 @@
       fontSize: wmSize, family: "sans", color: "#c8391c", anchor: "end"
     }, "export-watermark"));
   }
-  function renderExportBlob(){
+  // opts.maxDim (2026-09-25, speed): the rolling backups pass a smaller
+  // ceiling -- a backup is a safety copy, and rasterizing every one at up
+  // to 16000px (a blank 1400x980 item page becomes ~8400x5900) every few
+  // minutes on a tablet is most of the "why does it stutter every so
+  // often" cost. Save PNG / Share keep the full ceiling.
+  function renderExportBlob(opts){
+    var maxDimTarget = (opts && opts.maxDim) || 16000;
     var clone = cloneWorldForExport();
     // Rasterize at a supersampled resolution, not 1px-per-plan-pixel — the
     // dimension text and lines are vector (drawn from the SVG), so exporting
@@ -12429,7 +13204,7 @@
     addExportOverlays(clone, cb);
     var contentW = cb.x1 - cb.x0, contentH = cb.y1 - cb.y0;
     var maxDim = Math.max(contentW, contentH);
-    var scale = clamp(16000 / maxDim, 1, 6);
+    var scale = clamp(maxDimTarget / maxDim, 1, 6);
     var outW = Math.round(contentW * scale), outH = Math.round(contentH * scale);
     var outSvg = document.createElementNS(SVG_NS, "svg");
     outSvg.setAttribute("xmlns", SVG_NS);
