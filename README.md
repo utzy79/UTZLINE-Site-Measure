@@ -1,10 +1,16 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v46** (bump this line, and add a dated changelog
+**Current version: v47** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v47 (2026-09-26):** Status icon change — Andrew, verbatim: "change in
+manufacture to this 🔨 and machined to this 🪚." `joineryStatusIcon` and
+the plan-marker `joineryDisplayIcon` both updated (`in_manufacture`: 🏭 →
+🔨; `machined`: ⚙️ → 🪚); no other status icon changed. `service-worker.js`
+cache bumped to `utzline-sitemeasure-cache-v47`.
 
 **v46 (2026-09-25):** Andrew's "full check of the site measure app" round, plus
 two follow-ups sent while it was in progress. Verbatim: "See how speed can be
