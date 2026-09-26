@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v47">
+<link rel="manifest" href="./manifest.json?v=v48">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v47">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v47">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v48">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v48">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1673,7 +1673,7 @@
         <div class="modal-actions">
           <button class="mbtn" id="joineryItemOpenRoomBtn" style="display:none;">Open this room's own plan</button>
           <button class="mbtn" id="joineryItemCloseBtn">Close</button>
-          <button class="mbtn mbtn-accent" id="joineryItemOpenPageBtn">Open joinery item</button>
+          <button class="mbtn mbtn-accent" id="joineryItemOpenPageBtn">Open check measure</button>
         </div>
       </div>
     </div>
@@ -1848,7 +1848,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v47";
+  var APP_VERSION = "v48";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -2368,8 +2368,9 @@
   // onPointerDown select-tool branch's own comment for the full bug report
   // and reasoning (it silently broke the intended background/images/
   // annotations tiering and wasn't needed for anything visual). z-order now
-  // only ever changes via the deliberate "Bring to front"/"Send to back"
-  // popover actions (see showLockPopover).
+  // only ever changes via the deliberate "Send to back" popover action (see
+  // showLockPopover) -- its own former "Bring to front" counterpart was
+  // removed 2026-09-26, per Andrew.
   // durationMs lets a rarer, longer, more important message (a save that
   // may have silently gone wrong, say) stay up long enough to actually
   // read -- every existing call just omits it and keeps the same 2400ms
@@ -5478,7 +5479,9 @@
     return showLeaveConfirm("Save changes to “" + leavingName + "” before leaving? Saving writes them straight into “" + leavingName + "”’s own folder. Choose Cancel to stay here instead, if you want to check something first, or Leave without saving to discard them.").then(function(choice){
       if (choice === "cancel") return Promise.reject({ code: "nav_cancelled" });
       if (choice === "discard") return Promise.resolve();
-      state.objects.forEach(function(o){ o.locked = true; });
+      // roomlink markers excluded (2026-09-26) -- see hasUnlockedObject's
+      // own comment; there's no lock concept left for them to opt into.
+      state.objects.forEach(function(o){ if (o.type !== "roomlink") o.locked = true; });
       // explicit=true (v45) -- choosing "Save" here is a deliberate,
       // in-the-moment user decision (not a silent timer), so for a
       // joinery item page this is one of the two places (alongside the
@@ -5785,6 +5788,22 @@
     if (VIEW_ONLY_MODE) return;
     if (!(hasActiveWork() && activeWorkPdfsHandle())){ saveAll(); return; }
     if (!state.imageW){ showToast("Open a plan or photo first."); return; }
+    var exitToPlanAfter = !!activeJoineryItemPage;
+    // "Is this check measure complete?" (2026-09-26, Andrew, verbatim: "in
+    // the individual check measure page, when you click save and exit, have
+    // a popup come up that asks is this check measure complete. if yes it
+    // will mark the item as check measured.") -- asked up front, the moment
+    // Save & exit is tapped on a joinery item's own page, before the save
+    // itself runs. Reuses the same generic yes/no showConfirm() primitive
+    // every other yes/no question in this app already uses (Confirm = yes,
+    // Cancel = no) rather than a bespoke dialog. Never asked for a plain
+    // mid-work Save on a level's own plan -- exitToPlanAfter is exactly the
+    // same "is this actually a joinery item page" gate the lock-all-on-exit
+    // logic just below already uses, so the two stay in sync automatically.
+    var askComplete = exitToPlanAfter ? showConfirm("Is this check measure complete?") : Promise.resolve(false);
+    askComplete.then(function(markComplete){ runSaveAllProjectAware(exitToPlanAfter, markComplete); });
+  }
+  function runSaveAllProjectAware(exitToPlanAfter, markComplete){
     var workName = activeWorkName();
     var jsonOK = false, pdfOK = false, pdfFilename = "", jsonErr = null, pdfErr = null;
     // (2026-09-25) Andrew: "lock all on save and exit". On a joinery item's
@@ -5795,9 +5814,10 @@
     // exactly where it was left (see rememberLevelPlanForReturn). A
     // mid-work Save on a level's own plan still stays put and locks
     // nothing, deliberately, as before -- see run_multi_room_save.js.
-    var exitToPlanAfter = !!activeJoineryItemPage;
     if (exitToPlanAfter && hasUnlockedObject()){
-      state.objects.forEach(function(o){ o.locked = true; });
+      // roomlink markers excluded (2026-09-26) -- see hasUnlockedObject's
+      // own comment; there's no lock concept left for them to opt into.
+      state.objects.forEach(function(o){ if (o.type !== "roomlink") o.locked = true; });
       if (state.selectedId){ var selS = findObj(state.selectedId); if (selS && selS.locked) state.selectedId = null; }
       hideLockPopover();
       pushHistory(); renderAll(); updateLockAllButton();
@@ -5820,15 +5840,39 @@
         console.error("Level PDF export failed:", err);
       });
     }).then(function(){
-      if (jsonOK && pdfOK){
-        showToast("Saved “" + workName + "” and exported " + pdfFilename + ".");
-      } else if (jsonOK && !pdfOK){
-        showToast("Saved the plan file, but the PDF export failed (" + describeError(pdfErr) + ") — try Save again.", 8000);
-      } else if (!jsonOK && pdfOK){
-        showToast("Exported " + pdfFilename + ", but saving the plan file failed (" + describeError(jsonErr) + ") — try Save again.", 8000);
-      } else {
-        showToast("Couldn't save to this level's folder (" + describeError(jsonErr) + ") — try again.", 8000);
+      // Only actually mark it once the plan file itself is safely written,
+      // same "don't claim something happened that didn't" reasoning as the
+      // exit-after-save gate just below -- and only when the user actually
+      // answered yes above. Forward-only (setJoineryStatusForward itself
+      // never lets this go backwards), so calling it again on an item
+      // that's already measured/manufactured/installed is always a safe
+      // no-op, same as the right-click popover's own "Mark as check
+      // measured" row this reuses.
+      if (jsonOK && markComplete && activeJoineryItemPage){
+        var p = activeJoineryItemPage;
+        return setJoineryStatusForward(activeProjectHandle, p.levelName, p.roomName, p.joineryCode || "", "measured", deviceUserName || "Site Measure").then(function(status){
+          return { ok: true, status: status };
+        }).catch(function(err){
+          console.error("Mark as check measured failed:", err);
+          return { ok: false, err: err };
+        });
       }
+      return null;
+    }).then(function(markResult){
+      var msg;
+      if (jsonOK && pdfOK){
+        msg = "Saved “" + workName + "” and exported " + pdfFilename + ".";
+      } else if (jsonOK && !pdfOK){
+        msg = "Saved the plan file, but the PDF export failed (" + describeError(pdfErr) + ") — try Save again.";
+      } else if (!jsonOK && pdfOK){
+        msg = "Exported " + pdfFilename + ", but saving the plan file failed (" + describeError(jsonErr) + ") — try Save again.";
+      } else {
+        msg = "Couldn't save to this level's folder (" + describeError(jsonErr) + ") — try again.";
+      }
+      var markFailed = markResult && !markResult.ok;
+      if (markResult && markResult.ok) msg += " Marked as check measured.";
+      else if (markFailed) msg += " Couldn't mark it as check measured — try the right-click menu instead.";
+      showToast(msg, (jsonOK && pdfOK && !markFailed) ? 2400 : 8000);
       // Save & exit (see above): only once the plan file itself is safely
       // written -- a failed save stays put so nothing is walked away from.
       if (exitToPlanAfter && jsonOK && activeJoineryItemPage){
@@ -7826,7 +7870,17 @@
         // Same as the handle-drag guard above -- selecting/tapping an
         // object still works in viewer mode, only the subsequent drag
         // that would reposition it is skipped.
-        if (!VIEW_ONLY_MODE){
+        // A roomlink (indicator) marker never starts a drag either, tap-
+        // selectable or not (2026-09-26), Andrew, verbatim: "remove the
+        // ability to move the indicators (circles / icons)." Tapping one
+        // still selects it (harmless, and keeps the properties panel/
+        // delete working same as before) -- only the drag that would
+        // reposition it is skipped, same shape as the viewer-mode guard
+        // just above. This is independent of obj.locked (an indicator
+        // that's still unlocked in older saved data is just as immovable
+        // as one that's been through lockAll()) -- see hasUnlockedObject's
+        // own comment for why the .locked field itself is left alone here.
+        if (!VIEW_ONLY_MODE && hitO.type !== "roomlink"){
           if (hitO.type === "dimension"){
             dragMode = { kind: "dimOffset", id: hitO.id, start: deepClone(hitO), startWorld: dragWp };
           } else {
@@ -8595,13 +8649,22 @@
   // Unlock), never a side effect of clicking the same toolbar button
   // twice. So the button just disables itself once there's nothing left
   // to lock, the same way Undo disables once there's nothing to undo.
+  // roomlink (indicator) markers are excluded from all of this (2026-09-26,
+  // Andrew: remove the ability to move indicators, and the unlock button on
+  // them) -- they're never draggable regardless of .locked (see the
+  // onPointerDown select-branch's own comment) and no longer offer a Lock/
+  // Unlock control anywhere (showLockPopover's own generic Lock/Unlock row,
+  // and the layers panel's own lock button, both skip roomlink now) -- so
+  // there's no real "locked" concept left for one to opt into or out of.
+  // Excluding them here just keeps "Lock all"'s own enabled state, and this
+  // sweep's writes, meaningful for the objects that still have one.
   function hasUnlockedObject(){
-    return state.objects.some(function(o){ return !o.locked; });
+    return state.objects.some(function(o){ return !o.locked && o.type !== "roomlink"; });
   }
   function lockAll(){
     if (VIEW_ONLY_MODE) return; // defensive -- the toolbar's Lock-all button is hidden in viewer mode
     if (!hasUnlockedObject()) return; // button should already be disabled
-    state.objects.forEach(function(o){ o.locked = true; });
+    state.objects.forEach(function(o){ if (o.type !== "roomlink") o.locked = true; });
     if (state.selectedId){
       var sel = findObj(state.selectedId);
       if (sel && sel.locked) state.selectedId = null;
@@ -8698,11 +8761,13 @@
   // button has always had its own separate, inline copy of this icon and is
   // unaffected.
   var MIRROR_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5v15" stroke-dasharray="1.6 1.8"/><path d="M7 6.5L3.8 9l3.2 2.5"/><path d="M13 6.5L16.2 9l-3.2 2.5"/></svg>';
-  var BRING_FRONT_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="9" height="9" rx="1"/><path d="M5.5 12.5H4A1 1 0 0 1 3 11.5V4A1 1 0 0 1 4 3h7.5a1 1 0 0 1 1 1v1.5"/></svg>';
-  // Same two-rectangle language as Bring to front, mirrored: the BACK
-  // rectangle (where the object is going) is the solid/foreground one here,
-  // the front one it's ducking behind is the outline -- the reverse of
-  // Bring to front's own composition.
+  // BRING_FRONT_ICON removed (2026-09-26) along with the popover's own
+  // "Bring to front" row -- Andrew, verbatim: "remove the bring to front
+  // button." Send to back (below) is untouched -- not mentioned, and it's
+  // the image-only, separate action it's always been.
+  // Two-rectangle language, mirrored from Bring to front's own former icon:
+  // the BACK rectangle (where the object is going) is the solid/foreground
+  // one here, the front one it's ducking behind is the outline.
   var SEND_BACK_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="9" height="9" rx="1"/><path d="M14.5 7.5H16A1 1 0 0 1 17 8.5V16A1 1 0 0 1 16 17H8.5A1 1 0 0 1 7.5 16V14.5"/></svg>';
   var ROOM_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17V4.5a1 1 0 0 1 1-1h4l4 2v11.5"/><path d="M5 17h9"/><circle cx="11.3" cy="10.5" r="0.7" fill="currentColor" stroke="none"/></svg>';
   // A little tape measure -- "Mark as check measured" (📏 once set).
@@ -8821,8 +8886,13 @@
     // just double-click) as a second, more discoverable way in, same
     // reasoning as Edit text above. Works even while locked (see the
     // dblclick handler's own comment on this).
+    // Label changed to "Open check measure" (2026-09-26), Andrew, verbatim:
+    // "change the open joinery item on right click button to say open check
+    // measure" -- same row, same openRoomFromMarker destination, wording
+    // only (the matching button on the Joinery Item dialog this opens was
+    // renamed to match, see joineryItemOpenPageBtn).
     if (isRealObject && obj.type === "roomlink"){
-      popoverRow(wrap, ROOM_ICON + "<span>Open joinery item</span>", function(){
+      popoverRow(wrap, ROOM_ICON + "<span>Open check measure</span>", function(){
         hideLockPopover();
         openRoomFromMarker(obj);
       });
@@ -8940,43 +9010,15 @@
     // canvas at all now that there's nothing left for that case to show
     // (only overBaseImage still opens it, for Mirror).
 
-    // Real report: inserted photos/PDF pages should default to sitting
-    // BELOW every measurement/text/callout/etc. (see placeInsertedImage),
-    // since a photo is a backdrop reference, not something meant to cover
-    // up the markup made on top of it -- but every so often one genuinely
-    // does need to sit above everything else (a close-up detail photo
-    // that's the whole point of that part of the plan), hence this escape
-    // hatch. Only offered while there's actually somewhere higher to go --
-    // an object already at the very top of the stack gets no row at all,
-    // rather than a "Bring to front" that would visibly do nothing.
-    //
-    // BUG FIXED (v30, 2026-09-17, reported by Andrew: "at the moment there
-    // is no way to get a dimension back to the front layer if an image
-    // covers it"). Bring to front used to be offered for image objects
-    // only -- a reasonable-looking restriction back when it shipped in v17,
-    // since at the time nothing else could ever legitimately end up above
-    // an annotation. That stopped being true the moment an image actually
-    // DOES get raised above the plan's annotations via this same action (a
-    // deliberate, legitimate use of it) -- there was then no way back for
-    // whichever dimension/text/etc. it now covers, since this row simply
-    // didn't exist for anything but an image. It's the same underlying
-    // mechanism (move to the very end of state.objects, the array whose
-    // order IS z-order) regardless of object type, so the type restriction
-    // is gone -- every real, unlocked object type can now be brought to
-    // front, including a dimension buried under an image.
-    if (isRealObject && !obj.locked && !VIEW_ONLY_MODE && state.objects[state.objects.length - 1] !== obj){
-      popoverRow(wrap, BRING_FRONT_ICON + "<span>Bring to front</span>", function(){
-        hideLockPopover();
-        var idx = state.objects.indexOf(obj);
-        if (idx >= 0){
-          state.objects.splice(idx, 1);
-          state.objects.push(obj);
-          pushHistory(); renderAll();
-          showToast("Brought to front.");
-        }
-      });
-    }
-    // Send to back -- the reverse, and (unlike Bring to front) still
+    // "Bring to front" -- REMOVED (2026-09-26), Andrew, verbatim: "remove
+    // the bring to front button." Used to be offered here for every real,
+    // unlocked object type (moved to the very end of state.objects, the
+    // array whose order IS z-order) whenever something higher was actually
+    // there to go to -- see the removed BRING_FRONT_ICON's own comment for
+    // the full history (image-only in v17, opened up to every type in v30
+    // to fix a dimension-stuck-under-an-image bug). No replacement offered;
+    // Send to back below is untouched.
+    // Send to back -- the reverse, and (unlike the old Bring to front)
     // offered for images only: images are meant to sit in their own middle
     // tier (background photo < images < annotations, per Andrew's own
     // description of the intended layering), so "back" for an image always
@@ -8984,8 +9026,9 @@
     // other images -- which is a sensible, unambiguous place to send one.
     // "Back" for an annotation is a fuzzier idea (there's no single
     // obviously-correct tier boundary below which it should land, the way
-    // there is for an image), so this is deliberately NOT offered for every
-    // type the way Bring to front now is. Also doubles as the one-tap fix
+    // there is for an image), so this is deliberately image-only, unlike the
+    // now-removed Bring to front (which briefly covered every type). Also
+    // doubles as the one-tap fix
     // for a project file saved before this version, where an image may
     // already be sitting above the plan's annotations because of the
     // selection-side bug described above -- no need to manually bring every
@@ -9003,12 +9046,12 @@
       });
     }
 
-    // Rotate CW/CCW -- same gating as Bring to front (a real, unlocked
-    // image object, never in viewer mode): turns the image 90° in place
-    // about its own center, any number of times, in either direction.
-    // Always offered regardless of the current angle -- unlike Bring to
-    // front there's no "already there" state that would make a row do
-    // nothing, a rotated image can always rotate further.
+    // Rotate CW/CCW -- gated the same way the now-removed Bring to front
+    // was (a real, unlocked image object, never in viewer mode): turns the
+    // image 90° in place about its own center, any number of times, in
+    // either direction. Always offered regardless of the current angle --
+    // there's no "already there" state that would make a row do nothing, a
+    // rotated image can always rotate further.
     if (isRealObject && obj.type === "image" && !obj.locked && !VIEW_ONLY_MODE){
       popoverRow(wrap, ROTATE_CW_ICON + "<span>Rotate CW</span>", function(){
         hideLockPopover();
@@ -9023,7 +9066,14 @@
     // Icon+label reflect the CURRENT state (closed lock = currently
     // locked) and the label names the action a click performs, same as
     // the toolbar's own lock button.
-    if (isRealObject && !VIEW_ONLY_MODE){
+    // Excludes roomlink (indicators) -- (2026-09-26), Andrew, verbatim:
+    // "remove the unlock button on indicators, only images and dimensions,
+    // callouts etc should be movable." An indicator is never draggable
+    // regardless of this flag (see the onPointerDown select-branch's own
+    // comment), so a Lock/Unlock toggle for one would only ever mislead --
+    // it simply isn't offered at all now, the same way Edit text already
+    // wasn't for this type.
+    if (isRealObject && obj.type !== "roomlink" && !VIEW_ONLY_MODE){
       popoverRow(wrap, (obj.locked ? LOCK_ICON_CLOSED : LOCK_ICON_OPEN) + "<span>" + (obj.locked ? "Unlock" : "Lock") + "</span>", function(){
         obj.locked = !obj.locked;
         if (obj.locked){
@@ -9469,15 +9519,23 @@
           pushHistory(); renderAll();
         });
         row.appendChild(eyeBtn);
-        var lockBtn = document.createElement("button");
-        lockBtn.className = "lbtn" + (o.locked ? " on" : ""); lockBtn.title = o.locked ? "Unlock" : "Lock";
-        lockBtn.innerHTML = o.locked ? LOCK_ICON_CLOSED : LOCK_ICON_OPEN;
-        lockBtn.addEventListener("click", function(){
-          o.locked = !o.locked;
-          if (o.locked && state.selectedId === o.id) state.selectedId = null;
-          pushHistory(); renderAll(); updateLockAllButton();
-        });
-        row.appendChild(lockBtn);
+        // No lock/unlock button for a roomlink (indicator) row (2026-09-26),
+        // Andrew, verbatim: "remove the unlock button on indicators, only
+        // images and dimensions, callouts etc should be movable." Same
+        // reasoning as showLockPopover's own matching row -- an indicator is
+        // never draggable regardless of .locked, so a toggle here would
+        // only mislead.
+        if (o.type !== "roomlink"){
+          var lockBtn = document.createElement("button");
+          lockBtn.className = "lbtn" + (o.locked ? " on" : ""); lockBtn.title = o.locked ? "Unlock" : "Lock";
+          lockBtn.innerHTML = o.locked ? LOCK_ICON_CLOSED : LOCK_ICON_OPEN;
+          lockBtn.addEventListener("click", function(){
+            o.locked = !o.locked;
+            if (o.locked && state.selectedId === o.id) state.selectedId = null;
+            pushHistory(); renderAll(); updateLockAllButton();
+          });
+          row.appendChild(lockBtn);
+        }
         // Real report: no per-row delete here -- too risky/easy to hit by
         // accident once a plan has enough objects that this list is long
         // and rows are packed close together (that's the whole reason this
@@ -12679,14 +12737,17 @@
     // Real report: a newly-inserted reference photo should default to
     // sitting BELOW every measurement/text/callout/etc already on the plan
     // (a photo is backdrop reference, not something that should cover up
-    // markup that's already there) -- with "Bring to front" in its own
-    // right-click/long-press popover (see showLockPopover) as the escape
-    // hatch for the rarer photo that genuinely needs to sit on top. Object
-    // order in state.objects IS z-order (later = drawn on top, same as any
-    // other object), so this lands the new image just before the first
-    // non-image object instead of state.objects.push()'ing it straight to
-    // the very top -- still above any EARLIER inserted image, only ever
-    // below annotations.
+    // markup that's already there). Used to also mention the popover's own
+    // "Bring to front" as the escape hatch for the rarer photo that
+    // genuinely needs to sit on top -- that row was removed 2026-09-26, per
+    // Andrew, so there's no escape hatch back to the top any more; a photo
+    // that needs to sit above an annotation has to be placed after it, or
+    // the annotation moved, rather than reordered afterward. Object order in
+    // state.objects IS z-order (later = drawn on top, same as any other
+    // object), so this lands the new image just before the first non-image
+    // object instead of state.objects.push()'ing it straight to the very
+    // top -- still above any EARLIER inserted image, only ever below
+    // annotations.
     var firstAnnotationIdx = state.objects.findIndex(function(o){ return o.type !== "image"; });
     if (firstAnnotationIdx === -1) state.objects.push(obj);
     else state.objects.splice(firstAnnotationIdx, 0, obj);

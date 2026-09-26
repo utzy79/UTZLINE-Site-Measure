@@ -1,10 +1,48 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v47** (bump this line, and add a dated changelog
+**Current version: v48** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v48 (2026-09-26):** Andrew's dictated punch-list, verbatim: "change the
+open joinery item on right click button to say open check measure" /
+"remove the bring to front button" / "in the individual check measure
+page, when you click save and exit, have a popup come up that asks is
+this check measure complete. if yes it will mark the item as check
+measured" / "remove the ability to move the indicators (circles /
+icons)" / "remove the unlock button on indicators, only images and
+dimensions, callouts etc should be movable. lock all on save / save and
+exit."
+
+- **"Open joinery item" → "Open check measure".** Both places this shows up
+  — the right-click/long-press popover's own row on a roomlink marker, and
+  the matching accent button on the Joinery Item dialog it opens — relabeled.
+  Same destination (`openJoineryItemPage`), wording only.
+- **"Bring to front" removed.** The popover row (offered for every real,
+  unlocked object type since the v30 layering fix) is gone entirely, along
+  with its now-unused icon. "Send to back" (image-only) is untouched — not
+  mentioned, and it's a separate action. There is no longer any in-app way
+  to reorder an object back above whatever is currently covering it.
+- **"Is this check measure complete?" on Save & exit.** Clicking Save &
+  exit on a joinery item's own page now asks this first (the same generic
+  yes/no dialog every other confirm in this app already uses). Answering
+  yes marks the item "measured" in the shared `joinery-status.json` once
+  the save actually lands — the same forward-only write the popover's own
+  "Mark as check measured" row already makes, so it's always safe even if
+  the item is already further along (manufactured/installed). Answering no
+  just saves & exits as before, with no status change.
+- **Indicators (roomlink markers) can no longer be moved.** A plain tap
+  still selects one (so the properties panel/delete still work), but the
+  drag that would reposition it never starts, regardless of its own
+  `.locked` flag. No Lock/Unlock control is offered for one any more either
+  — not in the right-click popover, not in the layers panel — since there's
+  no longer a "locked" state for one to opt into or out of. "Lock all" and
+  the auto-lock-on-exit sweep both leave indicators alone now (they were
+  never truly draggable to begin with, and are no longer part of that
+  bookkeeping).
+- `service-worker.js` cache bumped to `utzline-sitemeasure-cache-v48`.
 
 **v47 (2026-09-26):** Status icon change — Andrew, verbatim: "change in
 manufacture to this 🔨 and machined to this 🪚." `joineryStatusIcon` and
