@@ -1149,7 +1149,43 @@
 // against both real production bundles (Site Measure + Viewer); full
 // pre-existing regression suite for both apps re-run clean, no page
 // errors.
-var CACHE_NAME = "utzline-sitemeasure-cache-v52";
+// v53 (2026-09-27, same day): "Sub orders" summary + write-back on the
+// joinery item dialog. Andrew, verbatim: "ok now we need all joinery
+// summary pages to show the associated orders. with the option to mark
+// them as recieved. the main schedule also needs a mark as received
+// button for orders. on the schedule." (this app's own slice -- the
+// Scheduler app's own schedule-table button is a separate build). A new
+// always-shown "Sub orders" button on the joinery item dialog opens a
+// list dialog reading every order the standalone UTZLINE Sub Orders app
+// has attached to that item straight from its own Project Saves/UTZLINE
+// Sub Orders/Orders/<Level> - <Room> - <Code>.json, grouped by type (the
+// four base types first with fixed colour chips, any custom type
+// alphabetically after with its own real typeLabel and a neutral chip),
+// each with an Open button and, new for this app family, a "mark as
+// received" checkbox+date that WRITES back into that same file --
+// read-modify-write, and a SHALLOW COPY of the existing record
+// (Object.assign({}, o, {...}), never an explicit field list), for the
+// exact reason Sub Orders' own setOrderReceived hit and fixed as its own
+// v5 the same day (an allowlist predating a later field silently drops
+// it). The Viewer gets the identical read+write access here (Andrew's
+// request said "ALL joinery summary pages," and marking an order received
+// is a procurement/status update, not a measurement edit) via the same
+// ensureProjectWritePermission() upgrade "Add job note" already
+// established, not a new gate -- every other write in the file stays
+// exactly as Viewer-blocked as before. New
+// pdftest-projects/run_sub_orders_received.js covers grouping, the custom-
+// type chip/label, the empty state, the received write-through preserving
+// every other field on the touched record (shallow-copy, not an
+// allowlist), and that Sub Orders' own Inbox/ folder is never touched --
+// against both real production bundles. Full pre-existing regression suite
+// re-run clean (the only failures were pre-existing and in unrelated
+// ITP apps, confirmed by isolated re-runs).
+// v53 speed fix (same build, 2026-09-27): "site measure app is really
+// slow again" -- v52's View rework gate walked Install ITP's rework folder
+// on every joinery item dialog open (uncached misses on Android). Now one
+// background listing per status scan decides whether an item has a
+// rework file; a dialog open reads nothing otherwise.
+var CACHE_NAME = "utzline-sitemeasure-cache-v53";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
