@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v55">
+<link rel="manifest" href="./manifest.json?v=v56">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v55">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v55">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v56">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v56">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1539,6 +1539,8 @@
           <div class="project-list" id="projectListItems"></div>
           <div class="project-gate-actions">
             <button class="mbtn" id="switchProjectsRootBtn">Use a Different Projects Folder</button>
+            <!-- (v56) On-device timings for "Open check measure" -- see cmPerfStart. -->
+            <button class="mbtn" id="cmTimingsBtn">⏱ Timings</button>
           </div>
         </div>
 
@@ -1766,6 +1768,19 @@
          job; this is purely a read-only viewer, reusing the shared rework
          file both those apps already read/write. See readItemReworkEntries/
          listAllProjectOpenReworks further down. -->
+    <!-- (v56) "⏱ Timings": how long each recent Open check measure took on
+         THIS device, step by step -- so a slow open on the tablet can be
+         screenshotted and pinned to the exact step, not guessed at. -->
+    <div class="modal-backdrop" id="cmTimingsBackdrop" hidden>
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="cmTimingsTitle">
+        <p id="cmTimingsTitle" class="joinery-item-title">Open check measure — timings on this device</p>
+        <div class="rework-view-list" id="cmTimingsList"></div>
+        <div class="modal-actions">
+          <button class="mbtn" id="cmTimingsCloseBtn">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="reworkViewBackdrop" hidden>
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="reworkViewTitle">
         <p id="reworkViewTitle" class="joinery-item-title">Rework</p>
@@ -1959,7 +1974,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v55";
+  var APP_VERSION = "v56";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -4940,18 +4955,74 @@
   // page uses), only the one-tap "exactly where I left off" convenience --
   // a deliberately smaller gap than building full boot-restore support for
   // item pages too, which Andrew hasn't asked for.
+  /* (v56) Andrew: "open check measure still took upto a minute to open on
+     tablet. this was super fast last night." Desk-side, with Android's
+     one-at-a-time storage simulated, this build and last night's (v49)
+     make the same folder calls and open in the same time -- so the next
+     step is real numbers from the tablet itself. Every Open check measure
+     records how long each step took; "⏱ Timings" on the Projects screen
+     lists the last 10 (kept on this device only). */
+  var cmTimings = [];
+  try{ cmTimings = JSON.parse(localStorage.getItem("utzline-sm:cmTimings") || "[]") || []; }catch(e){ cmTimings = []; }
+  function cmPerfStart(label){
+    var rec = { label: label, at: new Date().toISOString(), t0: performance.now(), steps: [] };
+    rec.mark = function(name){ rec.steps.push({ name: name, ms: Math.round(performance.now() - rec.t0) }); };
+    rec.finish = function(){
+      var plain = { label: rec.label, at: rec.at, steps: rec.steps.slice() };
+      cmTimings = [plain].concat(cmTimings.filter(function(r){ return r !== plain; })).slice(0, 10);
+      try{ localStorage.setItem("utzline-sm:cmTimings", JSON.stringify(cmTimings)); }catch(e){}
+      rec.saved = plain;
+    };
+    rec.addLate = function(name){ // a step that finishes after the page is shown
+      rec.mark(name);
+      if (rec.saved){ rec.saved.steps = rec.steps.slice(); try{ localStorage.setItem("utzline-sm:cmTimings", JSON.stringify(cmTimings)); }catch(e){} }
+    };
+    return rec;
+  }
+  function renderCmTimings(){
+    var list = document.getElementById("cmTimingsList");
+    list.innerHTML = "";
+    if (!cmTimings.length){ list.innerHTML = "<p class=\"jobnote-empty\">No check measures opened on this device yet.</p>"; return; }
+    cmTimings.forEach(function(r){
+      var row = document.createElement("div"); row.className = "rework-view-row"; row.style.borderColor = "var(--border)";
+      var head = document.createElement("div"); head.className = "rework-view-loc";
+      var total = r.steps.length ? r.steps[r.steps.length - 1].ms : 0;
+      var shown = r.steps.filter(function(x){ return x.name === "page shown"; })[0];
+      head.textContent = r.label + " — page shown after " + (shown ? (shown.ms / 1000).toFixed(1) + " s" : "?") + (total !== (shown && shown.ms) ? ", everything done " + (total / 1000).toFixed(1) + " s" : "");
+      row.appendChild(head);
+      var prev = 0;
+      r.steps.forEach(function(x){
+        var line = document.createElement("div"); line.className = "rework-view-meta";
+        line.textContent = x.name + ": +" + ((x.ms - prev) / 1000).toFixed(1) + " s (at " + (x.ms / 1000).toFixed(1) + " s)";
+        prev = x.ms;
+        row.appendChild(line);
+      });
+      var when = document.createElement("div"); when.className = "rework-view-meta";
+      try{ when.textContent = new Date(r.at).toLocaleString(); }catch(e){}
+      row.appendChild(when);
+      list.appendChild(row);
+    });
+  }
+  (function(){
+    var b = document.getElementById("cmTimingsBtn"), bd = document.getElementById("cmTimingsBackdrop");
+    if (b) b.addEventListener("click", function(){ renderCmTimings(); bd.hidden = false; });
+    document.getElementById("cmTimingsCloseBtn").addEventListener("click", function(){ bd.hidden = true; });
+    bd.addEventListener("click", function(e){ if (e.target === bd) bd.hidden = true; });
+  })();
+
   // (v54) Reads other people's saved layers for the item page that's open
   // NOW, one file at a time, adding each as it lands and redrawing. Drops
   // everything if the person has already left that page.
-  function loadOtherLayersInBackground(page, entries){
+  function loadOtherLayersInBackground(page, entries, perf){
     var i = 0;
     function next(){
-      if (activeJoineryItemPage !== page || i >= entries.length) return Promise.resolve();
+      if (activeJoineryItemPage !== page) return Promise.resolve();
+      if (i >= entries.length){ if (perf && entries.length) perf.addLate("other people's layers drawn (" + entries.length + ")"); return Promise.resolve(); }
       var entry = entries[i++];
       return readJsonFileHandle(entry.handle).then(function(data){
         if (activeJoineryItemPage !== page) return;
         page.layers.push({ user: entry.user, stamp: entry.stamp, fileName: entry.fileName, visible: true, objects: (data && data.objects) || [] });
-        renderOverlayLayers(true);
+        renderOverlayLayers(); // (v56) appends just this layer -- see renderOverlayLayers
         renderOverlayLayersPanel();
       }, function(err){
         console.warn("Couldn't read a saved layer (" + entry.fileName + "):", err);
@@ -4976,6 +5047,7 @@
     // only render the snapshot when there's genuinely nothing of mine saved
     // yet. It still has to be taken before leaving the plan, which is why
     // this runs ahead of saveActiveWorkBeforeLeaving.
+    var perf = cmPerfStart([activeLevelName, obj.roomName, obj.joineryCode].filter(Boolean).join(" · "));
     var preKey = resolveJoineryItemPageKey(activeLevelName, obj);
     var wantSnapshot = !VIEW_ONLY_MODE && onLevelPlanNow() && firstOpenSnapshotMode !== "off";
     var preloadP = Promise.all([
@@ -4983,13 +5055,18 @@
       VIEW_ONLY_MODE ? Promise.resolve(null) : readJoineryDraft(activeProjectHandle, preKey, deviceUserName)
     ]);
     var firstOpenSnapshotP = preloadP.then(function(pre){
+      perf.mark("read this item's saved layers list + your draft");
       if (!wantSnapshot || pre[1]) return null;
       var mySlug = overlayUserSlug(deviceUserName);
       var hasMine = pre[0].some(function(o){ return o.user === mySlug; });
       return hasMine ? null : safeRenderPlanViewSnapshotForItem();
     });
     showToast("Opening check measure…");
-    return firstOpenSnapshotP.then(function(){ return saveActiveWorkBeforeLeaving(); }).then(function(){
+    return firstOpenSnapshotP.then(function(snap){
+      perf.mark(snap ? "plan snapshot made (first open)" : "no plan snapshot needed");
+      return saveActiveWorkBeforeLeaving();
+    }).then(function(){
+      perf.mark("level plan checked/saved before leaving");
       rememberLevelPlanForReturn(); // (2026-09-25) so Back lands on this exact view
       // Opening an item's page always means leaving any room behind too --
       // a room and a joinery item page are mutually exclusive, same as a
@@ -5102,13 +5179,14 @@
         // applies to the Viewer, which has no draft at all (see above).
         var basePromise = ownDraft ? Promise.resolve(null) : (baseEntry ? readJsonFileHandle(baseEntry.handle) : Promise.resolve(null));
         return basePromise.then(function(baseData){
+          perf.mark("your own last save read");
           activeJoineryItemPage = {
             levelName: levelName, roomName: roomName, joineryCode: joineryCode,
             key: key, displayName: displayName,
             pdfsHandle: pdfsHandle, backupsHandle: backupsHandle,
             layers: [], pendingLayerCount: pendingLayerEntries.length, ownHasDraft: !!ownDraft
           };
-          loadOtherLayersInBackground(activeJoineryItemPage, pendingLayerEntries);
+          loadOtherLayersInBackground(activeJoineryItemPage, pendingLayerEntries, perf);
           var saved = ownDraft || baseData;
           if (savedHasImage(saved)){
             applyRestoredState(saved);
@@ -5179,6 +5257,8 @@
       // new count badge on the button itself (see the .ibtn-badge CSS
       // comment), are the fix: said out loud, every time, exactly when it
       // first matters, rather than left for someone to notice on their own.
+      perf.mark("page shown");
+      perf.finish();
       var otherLayerCount = activeJoineryItemPage.pendingLayerCount || (activeJoineryItemPage.layers || []).length;
       var layerNote = otherLayerCount
         ? " " + otherLayerCount + " other saved layer" + (otherLayerCount === 1 ? "" : "s") + " on this item — tap the layers-with-a-badge icon in the toolbar above to view/toggle."
@@ -10310,58 +10390,75 @@
   // signature of "which item + which layers are visible" decides whether
   // the group is rebuilt; toggling a layer or opening another item changes
   // it, a pen stroke doesn't.
-  var overlayLayersRenderedSig = null;
+  // (v56, speed on the tablet) Incremental, not rebuild-everything. Other
+  // people's layers now arrive one at a time after the page opens (v54),
+  // and every arrival used to change the signature below and rebuild EVERY
+  // layer drawn so far -- photos included, each one decoded again -- so an
+  // item with N saved layers drew N*(N+1)/2 layers' worth of photos while
+  // opening, all on the main thread. Now each layer's group is built once,
+  // the first time it's visible, tagged with its index, and kept; a new
+  // arrival appends one group; hiding/showing a layer just flips that
+  // group's display. Only a different item page (or force) clears it.
+  var overlayLayersRenderedPage = null;
+  var OVERLAY_TINT_PALETTE = ["#7c3aed", "#2563eb", "#ea580c", "#db2777", "#059669"];
+  function buildOverlayLayerGroup(layer, i){
+    var tint = OVERLAY_TINT_PALETTE[i % OVERLAY_TINT_PALETTE.length];
+    // 2026-09-27: no group-wide opacity dim on top of tintOverlayObjectGroup's
+    // own per-element treatment -- see that function's own comment on the
+    // "faded images" fix.
+    var g = el("g", { style: "pointer-events:none;" });
+    g.setAttribute("data-layer-idx", String(i));
+    (layer.objects || []).forEach(function(o){
+      if (o.hidden) return;
+      try{
+        var og = renderObject(o, true);
+        tintOverlayObjectGroup(og, tint);
+        g.appendChild(og);
+      }catch(e){ /* a malformed foreign object should never break rendering of everything else */ }
+    });
+    return g;
+  }
   function renderOverlayLayers(force){
-    var layersNow = (activeJoineryItemPage && activeJoineryItemPage.layers) || [];
-    var sig = (activeJoineryItemPage ? activeJoineryItemPage.key : "") + "|" + layersNow.length + "|" + layersNow.map(function(l){ return l.visible ? "1" : "0"; }).join("");
-    if (!force && sig === overlayLayersRenderedSig && (layersNow.length === 0 || overlayLayersGroup.childNodes.length)) return;
-    overlayLayersRenderedSig = sig;
-    overlayLayersGroup.innerHTML = "";
+    var page = activeJoineryItemPage;
+    var layers = (page && page.layers) || [];
+    if (force || page !== overlayLayersRenderedPage){
+      overlayLayersGroup.innerHTML = "";
+      overlayLayersRenderedPage = page;
+    }
     var btn = document.getElementById("overlayLayersBtn");
-    var layers = layersNow;
     if (btn) btn.style.display = layers.length ? "" : "none";
     // (v45.10) See the .ibtn-badge CSS comment -- a plain count, always in
-    // sync with the button's own visibility above, is the whole fix: no
-    // separate call sites to keep aligned, just this one already-existing
-    // chokepoint every layer-list change already renders through.
+    // sync with the button's own visibility above.
     var badge = document.getElementById("overlayLayersBadge");
     if (badge){
       badge.hidden = !layers.length;
       badge.textContent = String(layers.length);
     }
     if (!layers.length){
+      if (overlayLayersGroup.childNodes.length) overlayLayersGroup.innerHTML = "";
       if (overlayLayersPanelOpen) setOverlayLayersPanelOpen(false);
       return;
     }
-    // A small rotating palette of flat, moderate-saturation accent colors
-    // rather than one fixed tint -- with more than one other contributor
-    // on the same item, each one's layer still needs to read as visually
-    // distinct from the others, not just distinct from your own untinted
-    // work. First slot is purple, matching what Andrew's own request
-    // already called it ("purples layers") -- likely just autocorrect for
-    // "different", but a reasonable default to lead with regardless.
-    // (v45.14: flat hex colors applied directly to each object's own
-    // paint via tintOverlayObjectGroup, replacing the old CSS filter
-    // chain -- see that function's comment for why.)
-    var palette = ["#7c3aed", "#2563eb", "#ea580c", "#db2777", "#059669"];
+    var byIdx = {};
+    Array.prototype.forEach.call(overlayLayersGroup.childNodes, function(g){
+      if (g.getAttribute) byIdx[g.getAttribute("data-layer-idx")] = g;
+    });
     layers.forEach(function(layer, i){
-      if (!layer.visible || !layer.objects || !layer.objects.length) return;
-      var tint = palette[i % palette.length];
-      // 2026-09-27: no longer applying an extra group-wide opacity dim on
-      // top of tintOverlayObjectGroup's own per-element treatment (a photo
-      // gets its own opacity above; a recolored vector shape should show
-      // its assigned tint at full strength, not muted further) -- see that
-      // function's own comment on the "faded images" fix.
-      var g = el("g", { style: "pointer-events:none;" });
-      layer.objects.forEach(function(o){
-        if (o.hidden) return;
-        try{
-          var og = renderObject(o, true);
-          tintOverlayObjectGroup(og, tint);
-          g.appendChild(og);
-        }catch(e){ /* a malformed foreign object should never break rendering of everything else */ }
-      });
-      overlayLayersGroup.appendChild(g);
+      var g = byIdx[String(i)];
+      var show = layer.visible !== false && layer.objects && layer.objects.length;
+      if (!g){
+        if (!show) return; // built the first time it's actually shown
+        g = buildOverlayLayerGroup(layer, i);
+        // keep document order == layer order (a later layer draws on top)
+        var next = null;
+        Array.prototype.some.call(overlayLayersGroup.childNodes, function(c){
+          if (c.getAttribute && +c.getAttribute("data-layer-idx") > i){ next = c; return true; }
+          return false;
+        });
+        overlayLayersGroup.insertBefore(g, next);
+      }
+      g.style.display = show ? "" : "none";
+      g.setAttribute("display", show ? "inline" : "none"); // PDF/PNG export honours the attribute too
     });
   }
   function renderOverlayLayersPanel(){

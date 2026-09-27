@@ -1,10 +1,17 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v55** (bump this line, and add a dated changelog
+**Current version: v56** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v56 (2026-09-27, same day):** Andrew: *"open check measure still took upto a minute to open on tablet. this was super fast lastnight"*.
+
+- Simulated Android storage (every folder/file call queued one at a time, 40 ms each, CPU throttled 6×) shows this build and last night's v49 making the same storage calls and opening in the same time, so storage isn't the regression. The CPU-side suspect: other people's layers were torn down and redrawn from scratch, with every photo decoded again, each time one more layer arrived (v54's background loading made that N× per open) and on every plan redraw while you drew. On a 4 GB tablet with several photo layers, that's the kind of cost that turns seconds into a minute.
+- Fix: each layer's drawing is now built once and kept (`renderOverlayLayers` is incremental; groups are tagged `data-layer-idx`). A new layer appends just itself, and hide/show only toggles it. Everything is cleared when you leave the item.
+- New **⏱ Timings** button on the Projects screen shows the last 10 Open check measures on this device, step by step: reading the item's layer list and your draft, the plan snapshot, save-before-leaving, reading your last save, page shown, and other people's layers drawn. It's kept on this device only, so if it's still slow on the tablet a screenshot pins it to the exact step.
+- Tests: `run_v54_check_measure.js` gained v56 checks (existing layer drawings survive a new layer plus redraws, hide/show reuses the drawing, nothing is left drawn on the plan, and timings are recorded and listed). `gen_test.py`'s visible-object count ignores hidden layer groups. Site Measure/Viewer suite passes. (Three Install/Delivery ITP tests in the same folder time out on the new PIN sign-off flow. They test those apps, not this build, and are stale; fix them with those apps' next update.)
 
 **v55 (2026-09-27, same day):** Andrew, urgent: *"site measure and viewer still gets a second popup when pressing open check measure, it should go straight to the check measure. as it did before. pressing open job note takes ages also to bring up the job note selector need to remove the delete option from long press on the site measure app (project / level / room etc)"* (and: fine on Windows, the problem is the tablet).
 
