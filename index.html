@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v54">
+<link rel="manifest" href="./manifest.json?v=v55">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v54">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v54">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v55">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v55">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -600,6 +600,8 @@
      is needed here. */
   .lock-popover.lock-popover-accent{ background:var(--accent); border-color:var(--accent-ink); color:#fff; }
   .lock-popover.lock-popover-accent:hover{ background:var(--accent-ink); }
+  /* (v55) "View rework" moved onto this menu -- red text, same as the old button. */
+  .lock-popover .popover-rework-label{ color:var(--danger); font-weight:600; }
 
   /* ---------- confirm dialog (artifact sandboxes block window.confirm, so
      this is a real in-page dialog rather than the native one) ---------- */
@@ -1957,7 +1959,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v54";
+  var APP_VERSION = "v55";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3817,6 +3819,9 @@
     if (!projectHandle) return Promise.resolve([]);
     return getSiteMeasuresDir(projectHandle, false).then(listSubdirNames, function(){ return []; }).catch(function(){ return []; });
   }
+  function checkMeasureKnownMissing(obj){
+    return !!(checkMeasureKeySet && obj && !checkMeasureKeySet.has(resolveJoineryItemPageKey(activeLevelName, obj)));
+  }
   function checkMeasureActionLabel(obj){
     if (VIEW_ONLY_MODE || !checkMeasureKeySet || !obj) return "Open check measure";
     return checkMeasureKeySet.has(resolveJoineryItemPageKey(activeLevelName, obj)) ? "Open check measure" : "Add check measure";
@@ -4040,12 +4045,40 @@
      project-root folder regardless of shape (see getSiteMeasuresDir's own
      comment), nothing shape-specific here at all. */
   function jobNotesBranchName(){ return "Job Notes"; }
-  function getJobNotesDirForItem(projectHandle, key, create){
+  // (v55, speed) Andrew: "pressing open job note takes ages also to bring
+  // up the job note selector". The "Project Saves/Job Notes" folder handle
+  // is now remembered per project (a handle stays valid while the folder
+  // exists; dropped the moment anything through it fails), so opening the
+  // list is one lookup + one listing instead of three lookups + a listing.
+  var jobNotesBranchMemo = { project: null, handle: null };
+  function getJobNotesBranchDir(projectHandle, create){
+    if (jobNotesBranchMemo.project === projectHandle && jobNotesBranchMemo.handle) return Promise.resolve(jobNotesBranchMemo.handle);
     return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
       return psH.getDirectoryHandle(jobNotesBranchName(), { create: !!create });
     }).then(function(jnH){
-      return jnH.getDirectoryHandle(key, { create: !!create });
+      jobNotesBranchMemo = { project: projectHandle, handle: jnH };
+      return jnH;
     });
+  }
+  function getJobNotesDirForItem(projectHandle, key, create){
+    return getJobNotesBranchDir(projectHandle, create).then(function(jnH){
+      return jnH.getDirectoryHandle(key, { create: !!create });
+    }, function(err){ jobNotesBranchMemo = { project: null, handle: null }; throw err; });
+  }
+  // ...and the list itself is started the moment the long-press menu shows
+  // a "View job note" row, so it's usually ready by the time it's tapped.
+  var jobNotesPrefetch = { key: null, project: null, at: 0, promise: null };
+  function prefetchJobNotes(key){
+    jobNotesPrefetch = { key: key, project: activeProjectHandle, at: Date.now(), promise: listJobNotes(activeProjectHandle, key) };
+    jobNotesPrefetch.promise.catch(function(){});
+  }
+  function takeJobNotesList(key){
+    var p = jobNotesPrefetch;
+    if (p.promise && p.key === key && p.project === activeProjectHandle && (Date.now() - p.at) < 60000){
+      jobNotesPrefetch = { key: null, project: null, at: 0, promise: null };
+      return p.promise;
+    }
+    return listJobNotes(activeProjectHandle, key);
   }
   // Changed 2026-09-23: Andrew, verbatim, on browsing this folder in a file
   // manager: "dont want job notes to have this format at the start on the
@@ -5250,9 +5283,17 @@
   // either project shape -- "ability to open joinery item (NOT ROOM) on
   // right click, then add image and/or photo here." openJoineryItemDialog
   // below is that destination now; see its own comment for what it does.
+  // CHANGED AGAIN (v55, 2026-09-27) -- Andrew, urgent: "site measure and
+  // viewer still gets a second popup when pressing open check measure, it
+  // should go straight to the check measure. as it did before." Double-tap
+  // and the long-press "Open/Add check measure" row now open the item's
+  // page directly; the in-between Joinery Item dialog is no longer shown
+  // from here. Its two extra buttons moved onto the long-press menu itself
+  // (see showLockPopover): "View rework" (only when the item has a rework
+  // file) and, for a legacy project, "Open this room's own plan".
   function openRoomFromMarker(obj){
     if (!activeLevelName || activeRoomName) return;
-    openJoineryItemDialog(obj);
+    openJoineryItemPage(obj);
   }
 
   // For a LEGACY project only, the Room a marker points at still has a
@@ -5564,7 +5605,7 @@
     jobNoteViewSubtitleEl.textContent = subtitle;
     jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">Loading…</p>";
     jobNoteViewBackdrop.hidden = false;
-    listJobNotes(activeProjectHandle, key).then(function(notes){
+    takeJobNotesList(key).then(function(notes){
       jobNoteListEl.innerHTML = "";
       if (!notes.length){
         jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">No job notes yet for this item.</p>";
@@ -7502,7 +7543,7 @@
       readJoineryStatuses(activeProjectHandle),
       listShopDrawingKeys(activeProjectHandle),
       listReworkFileKeys(activeProjectHandle), // v53 speed -- see reworkFileKeySet
-      VIEW_ONLY_MODE ? Promise.resolve(null) : listCheckMeasureKeys(activeProjectHandle) // v54 -- see checkMeasureKeySet
+      listCheckMeasureKeys(activeProjectHandle) // v54 -- see checkMeasureKeySet (v55: the Viewer uses it too)
     ]).then(function(res){
       if (joineryStatusCacheProject !== projectName) return; // project changed under us
       setJoineryStatusCache(res[0]);
@@ -9444,10 +9485,29 @@
     // measure" -- same row, same openRoomFromMarker destination, wording
     // only (the matching button on the Joinery Item dialog this opens was
     // renamed to match, see joineryItemOpenPageBtn).
-    if (isRealObject && obj.type === "roomlink"){
+    // (v55) Viewer: no row at all when the background scan knows nobody
+    // has saved a check measure for this item yet (it would only open an
+    // empty page) -- the same rule the old in-between dialog applied.
+    if (isRealObject && obj.type === "roomlink" && !(VIEW_ONLY_MODE && checkMeasureKnownMissing(obj))){
       popoverRow(box, ROOM_ICON + "<span>" + checkMeasureActionLabel(obj) + "</span>", function(){
         hideLockPopover();
         openRoomFromMarker(obj);
+      });
+    }
+    // (v55) Moved here from the old in-between Joinery Item dialog.
+    if (isRealObject && obj.type === "roomlink" && obj.roomName && reworkFileKeySet && itemMayHaveReworkFile(activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat)){
+      popoverRow(box, JOBNOTE_ICON + "<span class=\"popover-rework-label\">View rework</span>", function(){
+        hideLockPopover();
+        var title = "Rework" + (obj.joineryCode ? " \u2014 " + obj.joineryCode : "") + (obj.roomName ? " (" + [activeLevelName, obj.roomName].filter(Boolean).join(" \u00b7 ") + ")" : "");
+        readItemReworkEntries(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat).then(function(entries){
+          openReworkViewForItem(title, entries);
+        }).catch(function(){ showToast("Couldn't read rework data \u2014 try again."); });
+      });
+    }
+    if (isRealObject && obj.type === "roomlink" && !activeLevelIsFlat && obj.roomName){
+      popoverRow(box, ROOM_ICON + "<span>Open this room's own plan</span>", function(){
+        hideLockPopover();
+        openLegacyRoomPlanFromJoineryItem(obj);
       });
     }
 
@@ -9507,6 +9567,7 @@
     if (isRealObject && obj.type === "roomlink"){
       var rlJobNoteRec = joineryStatusCache ? findJoineryStatus(joineryStatusCache, activeLevelName, obj.roomName, obj.joineryCode || "") : null;
       if (rlJobNoteRec && rlJobNoteRec.jobNote){
+        prefetchJobNotes(jobNoteKeyFor(obj)); // (v55) start reading now, not on tap
         popoverRow(box, JOBNOTE_ICON + "<span>View job note</span>", function(){
           hideLockPopover();
           openViewJobNoteDialog(obj);
@@ -10976,7 +11037,7 @@
         var row = document.createElement("button");
         row.type = "button";
         row.className = "project-row";
-        row.title = VIEW_ONLY_MODE ? "Tap to open — press and hold to remove from your list" : "Tap to open — press and hold to delete";
+        row.title = VIEW_ONLY_MODE ? "Tap to open — press and hold to remove from your list" : "Tap to open";
         var label = document.createElement("span");
         label.textContent = name;
         var arrow = document.createElement("span");
@@ -10991,9 +11052,16 @@
             showToast("Couldn't open “" + name + "” — try again.");
           });
         });
-        wireLongPress(row, function(){
-          confirmAndDeleteEntry(kind, name, refreshFn);
-        });
+        // (v55) Andrew: "need to remove the delete option from long press on
+        // the site measure app (project / level / room etc)". Site Measure
+        // no longer offers delete on a long-press at all; the Viewer keeps
+        // its own long-press, which only hides an entry from that device's
+        // list (never deletes anything).
+        if (VIEW_ONLY_MODE){
+          wireLongPress(row, function(){
+            confirmAndDeleteEntry(kind, name, refreshFn);
+          });
+        }
         listEl.appendChild(row);
       });
       if (split.hidden.length) appendHiddenToggle(listEl, kind, split.hidden, refreshFn);

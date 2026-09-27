@@ -1189,7 +1189,9 @@
 // measure no longer renders a whole-plan snapshot on every open (only for a
 // genuinely new item, lighter, failure-safe) and no longer waits for every
 // other person's layer before opening; "Add check measure" label.
-var CACHE_NAME = "utzline-sitemeasure-cache-v54";
+// v55 (2026-09-27): Open check measure goes straight to the page (no
+// second popup); job notes list faster; no long-press delete in Site Measure.
+var CACHE_NAME = "utzline-sitemeasure-cache-v55";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

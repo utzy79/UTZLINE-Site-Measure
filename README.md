@@ -1,10 +1,17 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v54** (bump this line, and add a dated changelog
+**Current version: v55** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v55 (2026-09-27, same day):** Andrew, urgent: *"site measure and viewer still gets a second popup when pressing open check measure, it should go straight to the check measure. as it did before. pressing open job note takes ages also to bring up the job note selector need to remove the delete option from long press on the site measure app (project / level / room etc)"* (and: fine on Windows, the problem is the tablet).
+
+- **Straight to the check measure.** The long-press "Open/Add check measure" row and a double-tap on a marker now open the item's page directly — no in-between Joinery Item popup. Its two extra buttons moved onto the long-press menu: **View rework** (red, only when the item has a rework file) and, for a legacy project only, **Open this room's own plan**. In the Viewer the check-measure row is left off when nobody has saved one for that item yet (it would only open an empty page) — the same rule the old popup applied; the Viewer now uses the same background check-measure listing as Site Measure to know that.
+- **Job notes open faster.** The "Project Saves/Job Notes" folder handle is remembered per project (one lookup + one listing instead of three lookups + a listing), and the list starts loading the moment the long-press menu shows a "View job note" row, so it's usually ready by the time it's tapped. (If the slow part is Android's own "open with" app picker after tapping Open on a note, that's the tablet, not the app.)
+- **No delete on long-press in Site Measure.** Press-and-hold on a project, level or room row does nothing now (row tooltip is just "Tap to open"). The Viewer's own long-press is unchanged — it only hides an entry from that device's list, never deletes.
+- Tests: `run_v54_check_measure.js` gained v55 checks (long-press row goes straight to the page; no delete on a project row). Updated for the new behaviour: `run_joinery_item_dialog.js`, `run_layers_discoverability_fix.js`, `run_flat_structure_interop.js`, `run_lock_popover_restyle.js`, `run_viewer_room_marker_popover.js`, `run_rooms_gate_and_delete.js` (now asserts a held room row offers no delete), `run_describe_error_fix.js` (delete-flow half removed). Retired (the feature they tested is gone): `run_delete_flow.js`, `run_delete_noop_bug.js`, `run_delete_timeout.js`, `run_removeentry_deep.js` → `retired_v55_*.js`. All 82 Site Measure/Viewer tests pass.
 
 **v54 (2026-09-27, same day):** Andrew, on the Android apps: *"when you select open check measure on the plan, it opens another pop up with sub orders / close / open check measure on it, when you press open check measure it is very slow. it also shows sub orders if there is none for that joinery item. on site measure app, pressing open check measure on the second popup does nothing. remove sub orders from these 2 apps"* — then *"in site measure app, if there is no check measure yet, the button should say add check measure"*.
 
