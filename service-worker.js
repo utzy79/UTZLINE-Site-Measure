@@ -1079,7 +1079,24 @@
 // on yes; indicator (roomlink) markers can no longer be dragged, and no
 // longer offer a Lock/Unlock control anywhere (popover or layers panel) --
 // they were never meant to be moved once placed.
-var CACHE_NAME = "utzline-sitemeasure-cache-v48";
+// v49 (2026-09-26, same day): family-wide status icon revert (schema §4) --
+// a full revert of both statuses to what they were before the icon-sweep
+// round touched them: machined: 🪚 -> ⚙️; in_manufacture: 🔨 -> 🏭. Both
+// joineryStatusIcon and joineryDisplayIcon (the plan-marker icon, a second
+// hardcoded copy) updated. No other file/format change; CACHE_NAME bumped.
+// v50 (2026-09-26, same day): NEXT_RUN_NOTES.md item 1 -- right-click/
+// long-press context menu (showLockPopover) restyled to match Install ITP's
+// own centered-modal look: full backdrop + centered box (was a small
+// floating popup anchored at the click point), a title line giving context
+// (joinery code / type label / "Site photo"), the first (most relevant) row
+// accented, and a new "Cancel" row always last, closing on either Cancel or
+// a backdrop click. Existing class names (.lock-popover-wrap, .lock-popover)
+// deliberately kept so all pre-existing regression tests querying them still
+// pass -- only the CSS changed. A new minimal window.__testHooks was added
+// (this app had zero live test-hook exposure before now) and a new
+// pdftest-projects/run_lock_popover_restyle.js covers the new structure for
+// both this app and the Viewer; all pre-existing tests re-run clean.
+var CACHE_NAME = "utzline-sitemeasure-cache-v50";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v48">
+<link rel="manifest" href="./manifest.json?v=v50">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v48">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v48">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v50">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v50">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -538,20 +538,52 @@
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
-  /* ---------- lock/unlock/edit popover (right-click / long-press on an item) ---------- */
+  /* ---------- lock/unlock/edit popover (right-click / long-press on an item) ----------
+     RESTYLED (2026-09-26, NEXT_RUN_NOTES.md item 1) to match Install ITP's
+     own #markerMenuBackdrop pattern: a centered modal with a dimmed
+     backdrop and full-width pill-shaped rows, instead of the old small
+     floating icon-row popup anchored right at the click point. Applies
+     generically to every object type's popover (roomlink, text, callout,
+     dimension, angle, image, base photo) -- this only changes the LOOK,
+     not showLockPopover's own row-building logic (popoverRow(), the row
+     list per object type) below, which is untouched.
+     Class names (.lock-popover-wrap, .lock-popover) are deliberately KEPT
+     UNCHANGED from the old floating-popup version -- only what they render
+     as changes -- so every existing regression test that finds a row via
+     `.lock-popover`/reads its label via `.lock-popover span` keeps working
+     unmodified. */
   .lock-popover-wrap{
-    position:absolute; z-index:35;
-    display:flex; flex-direction:column; gap:4px;
-    transform:translate(-50%, calc(-100% - 10px));
+    position:absolute; inset:0; z-index:35;
+    background:rgba(0,0,0,.38);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .lock-popover-box{
+    background:var(--surface-1); border:1px solid var(--border-strong); border-radius:10px;
+    box-shadow:var(--shadow); padding:18px 20px; max-width:300px; width:calc(100% - 40px);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .lock-popover-title{
+    font-weight:700; font-size:14px; text-align:center; margin:0 0 4px; color:var(--text-primary);
   }
   .lock-popover{
-    display:flex; align-items:center; gap:6px;
-    background:var(--text-primary); color:var(--surface-1);
-    padding:7px 12px; border-radius:7px; font-size:12.5px; font-weight:500;
-    box-shadow:var(--shadow); cursor:pointer; white-space:nowrap; user-select:none;
+    display:flex; align-items:center; gap:8px;
+    width:100%; box-sizing:border-box;
+    background:var(--surface-2); color:var(--text-primary);
+    border:1px solid var(--border-strong);
+    padding:10px 14px; border-radius:8px; font-size:13.5px; font-weight:500;
+    cursor:pointer; white-space:nowrap; user-select:none;
   }
-  .lock-popover:hover{ filter:brightness(0.85); }
-  .lock-popover svg{ width:13px; height:13px; flex:none; }
+  .lock-popover:hover{ background:var(--surface-0); }
+  .lock-popover svg{ width:15px; height:15px; flex:none; }
+  /* The single most relevant action for whatever's selected (the first row
+     showLockPopover builds) gets the same accent treatment as the app's
+     other primary buttons (.mbtn-accent) -- matching Install ITP's own
+     single green "Open ITP" row. Every other row, including Cancel, stays
+     the plain neutral pill above; there's no rework-style destructive row
+     left in this popover any more (removed 2026-09-24), so no red variant
+     is needed here. */
+  .lock-popover.lock-popover-accent{ background:var(--accent); border-color:var(--accent-ink); color:#fff; }
+  .lock-popover.lock-popover-accent:hover{ background:var(--accent-ink); }
 
   /* ---------- confirm dialog (artifact sandboxes block window.confirm, so
      this is a real in-page dialog rather than the native one) ---------- */
@@ -1848,7 +1880,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v48";
+  var APP_VERSION = "v50";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -6561,7 +6593,7 @@
      before this field did).
      SPLIT AGAIN 2026-09-23, later the same day (Andrew): "manufacture
      status" itself splits into two sequential stages -- a new "machined"
-     stage (🪚, rank 3), written by a brand-new sibling app, "Machine
+     stage (⚙️, rank 3), written by a brand-new sibling app, "Machine
      Schedule", now sitting BEFORE the existing "manufactured" stage in the
      pipeline. Every rank at or above the old "manufactured" (3) shifts up
      by one: manufactured -> 4, delivered -> 5, installed -> 6. Site Measure
@@ -6632,8 +6664,8 @@
       case "installed": return "🏆";
       case "delivered": return "🚚";
       case "manufactured": return "📦";
-      case "machined": return "🪚";
-      case "in_manufacture": return "🔨";
+      case "machined": return "⚙️";
+      case "in_manufacture": return "🏭";
       case "measured": return "📏";
       default: return "";
     }
@@ -6652,8 +6684,8 @@
     if (rec.status === "installed") return "🏆";
     if (rec.status === "delivered") return "🚚";
     if (rec.status === "manufactured") return "📦";
-    if (rec.status === "machined") return "🪚";
-    if (rec.status === "in_manufacture") return "🔨";
+    if (rec.status === "machined") return "⚙️";
+    if (rec.status === "in_manufacture") return "🏭";
     if (rec.jobNote) return "🛠️";
     if (rec.status === "measured") return "📏";
     return "";
@@ -8785,6 +8817,12 @@
   // with what those two buttons taught every user of this app already.
   var ROTATE_CCW_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8H4V3"/><path d="M4.3 13.5A7 7 0 1 0 6 6l-2 2"/></svg>';
   var ROTATE_CW_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 8h2V3"/><path d="M15.7 13.5A7 7 0 1 1 14 6l2 2"/></svg>';
+  // Plain X -- the new "Cancel" row (2026-09-26, item 1 restyle), matching
+  // Install ITP's own markerMenu Cancel button. The old floating popup
+  // never needed one (anywhere outside its small box already dismissed it),
+  // but the new centered-modal-with-backdrop look reads as needing an
+  // explicit dismiss action, same as every other modal in this app.
+  var CANCEL_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l10 10M15 5L5 15"/></svg>';
   function hideLockPopoverOnOutsideEvent(e){
     if (lockPopoverEl && !lockPopoverEl.contains(e.target)) hideLockPopover();
   }
@@ -8831,14 +8869,37 @@
   // right-click/long-press on anything else (a dimension, the base photo,
   // empty canvas, a locked non-roomlink object) still shows nothing, same
   // as the original v31 fix intended.
+  // Friendly title for the new modal's header (2026-09-26, item 1 restyle),
+  // matching Install ITP's own markerMenuTitle (which shows the joinery
+  // code). A roomlink gets the same treatment; every other object type
+  // gets a plain type label instead, since there's no equivalent "code" to
+  // show for a dimension, an image, etc.
+  var LOCK_POPOVER_TYPE_LABELS = { text: "Text", callout: "Callout", dimension: "Measurement", angle: "Angle", image: "Image" };
+  function lockPopoverTitleFor(obj, isBaseImage){
+    if (isBaseImage) return "Site photo";
+    if (obj.type === "roomlink") return obj.joineryCode || obj.roomName || "Room";
+    return LOCK_POPOVER_TYPE_LABELS[obj.type] || "Item";
+  }
   function showLockPopover(obj, clientX, clientY){
     if (VIEW_ONLY_MODE && !(obj && obj.type === "roomlink")) return;
     hideLockPopover();
-    var r = stage.getBoundingClientRect();
+    // (2026-09-26, item 1 restyle) Now a centered backdrop modal, matching
+    // Install ITP's own #markerMenuBackdrop -- clientX/clientY are kept as
+    // parameters (existing callers and test hooks still pass them) but are
+    // no longer used to position anything; the old near-click floating
+    // popup positioning they drove is gone.
     var wrap = document.createElement("div");
     wrap.className = "lock-popover-wrap";
-    wrap.style.left = (clientX - r.left) + "px";
-    wrap.style.top = (clientY - r.top) + "px";
+    var box = document.createElement("div");
+    box.className = "lock-popover-box";
+    wrap.appendChild(box);
+    // Clicking the dimmed backdrop itself (not the box or a row inside it)
+    // closes the menu -- matching Install ITP's own markerMenuBackdrop
+    // click-to-close. The pre-existing outside-pointerdown window listener
+    // below (hideLockPopoverOnOutsideEvent) no longer fires for this case
+    // now that the backdrop covers the whole stage (it "contains" every
+    // click within it), so this is a new, separate handler for it.
+    wrap.addEventListener("pointerdown", function(e){ if (e.target === wrap) hideLockPopover(); });
 
     // The base site photo (see BASE_IMAGE_SELECT_ID) is a pseudo-selection,
     // never a real object -- it can't be deleted, locked, or edited like
@@ -8851,6 +8912,11 @@
     var isBaseImage = !!obj.__isBaseImage;
     var isEmptyCanvas = !!obj.__isEmptyCanvas;
     var isRealObject = !isBaseImage && !isEmptyCanvas;
+
+    var titleEl = document.createElement("p");
+    titleEl.className = "lock-popover-title";
+    titleEl.textContent = lockPopoverTitleFor(obj, isBaseImage);
+    box.appendChild(titleEl);
 
     // "Delete on right click" -- REMOVED (2026-09-24), Andrew, verbatim:
     // "remove the following buttons from the site measure app. delete on
@@ -8875,7 +8941,7 @@
     // its label is the linked room's own name, not free text (see
     // makeRoomLink/renderPanel's labelObj).
     if (isRealObject && !obj.locked && !VIEW_ONLY_MODE && (obj.type === "text" || obj.type === "callout" || obj.type === "dimension" || obj.type === "angle")){
-      popoverRow(wrap, EDIT_ICON + "<span>Edit text</span>", function(){
+      popoverRow(box, EDIT_ICON + "<span>Edit text</span>", function(){
         hideLockPopover();
         state.selectedId = obj.id; setTool("select"); renderAll();
         beginInlineEdit(obj.id);
@@ -8892,7 +8958,7 @@
     // only (the matching button on the Joinery Item dialog this opens was
     // renamed to match, see joineryItemOpenPageBtn).
     if (isRealObject && obj.type === "roomlink"){
-      popoverRow(wrap, ROOM_ICON + "<span>Open check measure</span>", function(){
+      popoverRow(box, ROOM_ICON + "<span>Open check measure</span>", function(){
         hideLockPopover();
         openRoomFromMarker(obj);
       });
@@ -8916,7 +8982,7 @@
       var rlCurStatusRec = joineryStatusCache ? findJoineryStatus(joineryStatusCache, activeLevelName, obj.roomName, obj.joineryCode || "") : null;
       var rlCurRank = rlCurStatusRec ? joineryStatusRank(rlCurStatusRec.status) : 0;
       if (rlCurRank < joineryStatusRank("measured")){
-        popoverRow(wrap, MEASURE_ICON + "<span>Mark as check measured</span>", function(){
+        popoverRow(box, MEASURE_ICON + "<span>Mark as check measured</span>", function(){
           hideLockPopover();
           setJoineryStatusForward(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode || "", "measured", deviceUserName || "Site Measure").then(function(status){
             renderAll();
@@ -8937,7 +9003,7 @@
     // ability to add one; the Viewer is now the only place a job note can
     // be attached from at all.
     if (isRealObject && obj.type === "roomlink" && VIEW_ONLY_MODE){
-      popoverRow(wrap, JOBNOTE_ICON + "<span>Add job note</span>", function(){
+      popoverRow(box, JOBNOTE_ICON + "<span>Add job note</span>", function(){
         hideLockPopover();
         openAddJobNoteDialog(obj);
       });
@@ -8954,7 +9020,7 @@
     if (isRealObject && obj.type === "roomlink"){
       var rlJobNoteRec = joineryStatusCache ? findJoineryStatus(joineryStatusCache, activeLevelName, obj.roomName, obj.joineryCode || "") : null;
       if (rlJobNoteRec && rlJobNoteRec.jobNote){
-        popoverRow(wrap, JOBNOTE_ICON + "<span>View job note</span>", function(){
+        popoverRow(box, JOBNOTE_ICON + "<span>View job note</span>", function(){
           hideLockPopover();
           openViewJobNoteDialog(obj);
         });
@@ -8983,7 +9049,7 @@
     // its comment), the same way the job-note row above is gated on the
     // record's jobNote flag. Unknown-yet reads as "show", never as "hide".
     if (isRealObject && obj.type === "roomlink" && itemHasShopDrawing(shopDrawingKeyFor(obj))){
-      popoverRow(wrap, SHOPDRAWING_ICON + "<span>View shop drawing</span>", function(){
+      popoverRow(box, SHOPDRAWING_ICON + "<span>View shop drawing</span>", function(){
         hideLockPopover();
         openViewShopDrawingDialog(obj);
       });
@@ -8997,7 +9063,7 @@
     // Real image objects only offer this while unlocked, same as every
     // other action that changes one; the base photo has no lock concept.
     if (!VIEW_ONLY_MODE && (isBaseImage || (isRealObject && obj.type === "image" && !obj.locked))){
-      popoverRow(wrap, MIRROR_ICON + "<span>Mirror</span>", function(){
+      popoverRow(box, MIRROR_ICON + "<span>Mirror</span>", function(){
         hideLockPopover();
         if (isBaseImage) mirrorWholePlan();
         else mirrorImageObjectInPlace(obj);
@@ -9034,7 +9100,7 @@
     // selection-side bug described above -- no need to manually bring every
     // annotation back to front one at a time.
     if (isRealObject && obj.type === "image" && !obj.locked && !VIEW_ONLY_MODE && state.objects[0] !== obj){
-      popoverRow(wrap, SEND_BACK_ICON + "<span>Send to back</span>", function(){
+      popoverRow(box, SEND_BACK_ICON + "<span>Send to back</span>", function(){
         hideLockPopover();
         var idx = state.objects.indexOf(obj);
         if (idx >= 0){
@@ -9053,11 +9119,11 @@
     // there's no "already there" state that would make a row do nothing, a
     // rotated image can always rotate further.
     if (isRealObject && obj.type === "image" && !obj.locked && !VIEW_ONLY_MODE){
-      popoverRow(wrap, ROTATE_CW_ICON + "<span>Rotate CW</span>", function(){
+      popoverRow(box, ROTATE_CW_ICON + "<span>Rotate CW</span>", function(){
         hideLockPopover();
         rotateImageObject(obj, 1);
       });
-      popoverRow(wrap, ROTATE_CCW_ICON + "<span>Rotate CCW</span>", function(){
+      popoverRow(box, ROTATE_CCW_ICON + "<span>Rotate CCW</span>", function(){
         hideLockPopover();
         rotateImageObject(obj, -1);
       });
@@ -9074,7 +9140,7 @@
     // it simply isn't offered at all now, the same way Edit text already
     // wasn't for this type.
     if (isRealObject && obj.type !== "roomlink" && !VIEW_ONLY_MODE){
-      popoverRow(wrap, (obj.locked ? LOCK_ICON_CLOSED : LOCK_ICON_OPEN) + "<span>" + (obj.locked ? "Unlock" : "Lock") + "</span>", function(){
+      popoverRow(box, (obj.locked ? LOCK_ICON_CLOSED : LOCK_ICON_OPEN) + "<span>" + (obj.locked ? "Unlock" : "Lock") + "</span>", function(){
         obj.locked = !obj.locked;
         if (obj.locked){
           if (state.selectedId === obj.id) state.selectedId = null;
@@ -9087,6 +9153,16 @@
         showToast(obj.locked ? "Item locked." : "Item unlocked.");
       });
     }
+
+    // "Cancel" -- the new modal's explicit dismiss row (2026-09-26, item 1
+    // restyle), matching Install ITP's own markerMenuCancelBtn; always last.
+    popoverRow(box, CANCEL_ICON + "<span>Cancel</span>", function(){ hideLockPopover(); });
+
+    // The single most relevant action -- the first context row built above
+    // (Cancel is never it) -- gets the accent treatment, matching Install
+    // ITP's own single green "Open ITP"/"Open room" row.
+    var firstRow = box.querySelector(".lock-popover");
+    if (firstRow) firstRow.classList.add("lock-popover-accent");
 
     stage.appendChild(wrap);
     lockPopoverEl = wrap;
@@ -14264,6 +14340,23 @@
       showGateState("setup");
     });
   }
+  // (2026-09-26, NEXT_RUN_NOTES.md item 1) A small, deliberately minimal
+  // test-hook surface -- new, and NOT the same thing as the old
+  // `redline_projects_test.html` fixture's own much larger `window.__test`
+  // object (that fixture is a frozen, long-out-of-sync fork of this app
+  // from many versions back, with its own separate hook surface this file
+  // does not and should not try to replicate). This exists only to let a
+  // regression test drive showLockPopover directly against the real,
+  // current built app, without needing the full folder-picker/project/
+  // level setup: an object literal is enough (showLockPopover only reads
+  // its fields; it doesn't require the object to actually be a member of
+  // state.objects to render its menu).
+  window.__testHooks = {
+    ready: function(){ return true; },
+    showLockPopover: function(obj, x, y){ return showLockPopover(obj, x, y); },
+    hideLockPopover: function(){ return hideLockPopover(); },
+    isViewOnlyMode: function(){ return VIEW_ONLY_MODE; }
+  };
   boot();
 })();
 </script>
