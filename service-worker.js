@@ -1193,7 +1193,10 @@
 // second popup); job notes list faster; no long-press delete in Site Measure.
 // v56 (2026-09-27): other people's layers drawn once and kept (no full
 // redraw + photo re-decode per arrival/redraw); on-device "Timings" readout.
-var CACHE_NAME = "utzline-sitemeasure-cache-v56";
+// v57 (2026-09-27): level-open status scan no longer blocks Open check
+// measure (event cache, 3-at-a-time queue that yields to the foreground).
+// v58 (2026-09-27): "Schedule Backups" folder hidden from the project list.
+var CACHE_NAME = "utzline-sitemeasure-cache-v58";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

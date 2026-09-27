@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v56">
+<link rel="manifest" href="./manifest.json?v=v58">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v56">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v56">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v58">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v58">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1974,7 +1974,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v56";
+  var APP_VERSION = "v58";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -4347,6 +4347,40 @@
     if (idx < 0) return { user: base, stamp: "" };
     return { user: base.slice(0, idx), stamp: base.slice(idx + 3) };
   }
+  /* (v57) Foreground first. While the person is opening a check measure
+     (fgBegin/fgEnd), background scans stop starting new storage calls, and
+     they never have more than 3 in flight anyway -- Android's storage
+     layer runs calls one at a time, so a tap only ever waits behind a
+     couple of them. A foreground step that somehow never ends can't
+     starve the scan: after 30 s it carries on regardless. */
+  var fgBusyCount = 0, fgWaiters = [];
+  function fgBegin(){ fgBusyCount++; }
+  function fgEnd(){
+    fgBusyCount = Math.max(0, fgBusyCount - 1);
+    if (!fgBusyCount){ var w = fgWaiters; fgWaiters = []; w.forEach(function(f){ f(); }); }
+  }
+  function whenForegroundIdle(){
+    if (!fgBusyCount) return Promise.resolve();
+    return new Promise(function(resolve){
+      var done = false, go = function(){ if (!done){ done = true; resolve(); } };
+      fgWaiters.push(go);
+      setTimeout(go, 30000);
+    });
+  }
+  // items -> worker(item) with at most `lanes` running at once, pausing
+  // for the foreground between items. Results in input order; rejects
+  // (after the rest finish) if any worker rejected, like Promise.all.
+  function runBackgroundQueue(items, worker, lanes){
+    var i = 0, out = new Array(items.length), firstErr = null;
+    function lane(){
+      if (i >= items.length) return Promise.resolve();
+      var idx = i++;
+      return whenForegroundIdle().then(function(){ return worker(items[idx], idx); }).then(function(r){ out[idx] = r; }, function(err){ if (!firstErr) firstErr = err || new Error("scan failed"); out[idx] = null; }).then(lane);
+    }
+    var running = [];
+    for (var k = 0; k < Math.min(lanes || 3, items.length); k++) running.push(lane());
+    return Promise.all(running).then(function(){ if (firstErr) throw firstErr; return out; });
+  }
   function readJsonFileHandle(fh){
     return fh.getFile().then(function(file){ return file.text(); }).then(function(text){
       try{
@@ -4594,7 +4628,14 @@
       });
     });
   }
-  function listExistingProjects(){ return listSubdirNames(projectsRootHandle); }
+  /* (2026-09-27) "Schedule Backups" -- Scheduler's daily spreadsheet
+     backups, kept directly in the main Projects folder -- isn't a project,
+     so it's left out of the project list (the same one-line rule is in
+     every app in the family). */
+  function isReservedRootFolderName(name){ return String(name || "").trim().toLowerCase() === "schedule backups"; }
+  function listExistingProjects(){
+    return listSubdirNames(projectsRootHandle).then(function(names){ return names.filter(function(n){ return !isReservedRootFolderName(n); }); });
+  }
   // "itp", "itp-install", and "itp-manufacture" are reserved project-wide
   // folders (a sibling of "project-meta.json" -- now owned by UTZLINE
   // Projects, see next-version-notes.md's 2026-09-22 cutover entry)
@@ -5015,9 +5056,13 @@
   // everything if the person has already left that page.
   function loadOtherLayersInBackground(page, entries, perf){
     var i = 0;
+    if (!entries.length) return Promise.resolve();
+    fgBegin(); // (v57) these are what the person is waiting to see -- scans wait
+    var ended = false;
+    function end(){ if (!ended){ ended = true; fgEnd(); } }
     function next(){
-      if (activeJoineryItemPage !== page) return Promise.resolve();
-      if (i >= entries.length){ if (perf && entries.length) perf.addLate("other people's layers drawn (" + entries.length + ")"); return Promise.resolve(); }
+      if (activeJoineryItemPage !== page){ end(); return Promise.resolve(); }
+      if (i >= entries.length){ end(); if (perf && entries.length) perf.addLate("other people's layers drawn (" + entries.length + ")"); return Promise.resolve(); }
       var entry = entries[i++];
       return readJsonFileHandle(entry.handle).then(function(data){
         if (activeJoineryItemPage !== page) return;
@@ -5030,7 +5075,25 @@
     }
     return next();
   }
+  /* (v56) One open at a time. Since v55 a marker opens the item straight
+     away (no in-between dialog to close), so on a slow tablet a second tap
+     while the first is still opening used to start a SECOND full open on
+     top -- its own reads, plan save and, for a new item, plan snapshot --
+     doubling the wait. Further taps now just get told it's on its way. */
+  var joineryItemOpenInFlight = null, joineryItemOpenStartedAt = 0;
   function openJoineryItemPage(obj){
+    // (a stuck storage read must never lock opening forever: after 45 s a
+    // new tap is allowed through again)
+    if (joineryItemOpenInFlight && (Date.now() - joineryItemOpenStartedAt) < 45000){ showToast("Still opening check measure…"); return joineryItemOpenInFlight; }
+    fgBegin(); // (v57) background scans stand aside until the page is up
+    var p;
+    try{ p = openJoineryItemPageNow(obj); }catch(e){ fgEnd(); throw e; }
+    joineryItemOpenInFlight = p; joineryItemOpenStartedAt = Date.now();
+    var clear = function(){ fgEnd(); if (joineryItemOpenInFlight === p) joineryItemOpenInFlight = null; };
+    p.then(clear, clear);
+    return p;
+  }
+  function openJoineryItemPageNow(obj){
     if (!activeProjectHandle){
       showToast("Can't open a joinery item's own page without a known project — open this level from its project instead.");
       return Promise.resolve();
@@ -5685,7 +5748,10 @@
     jobNoteViewSubtitleEl.textContent = subtitle;
     jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">Loading…</p>";
     jobNoteViewBackdrop.hidden = false;
-    takeJobNotesList(key).then(function(notes){
+    fgBegin(); // (v57) scans stand aside while this list loads
+    var jnP = takeJobNotesList(key);
+    jnP.then(fgEnd, fgEnd);
+    jnP.then(function(notes){
       jobNoteListEl.innerHTML = "";
       if (!notes.length){
         jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">No job notes yet for this item.</p>";
@@ -7237,12 +7303,23 @@
     return projectHandle.getDirectoryHandle(projectSavesDirName()).then(function(psH){
       return psH.getDirectoryHandle(shopDrawingsBranchName());
     }).then(function(sdH){
-      return listSubdirNames(sdH).then(function(keys){
+      // (v57) handles straight from the listing, through the background
+      // queue -- see readJoineryStatuses.
+      var dirs = [];
+      var iter = sdH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return dirs;
+          if (res.value && res.value.kind === "directory") dirs.push(res.value);
+          return step();
+        });
+      }
+      return step().then(function(dirs){
         // A key folder with no drawing folders inside (everything removed)
         // doesn't count as "one applied".
-        return Promise.all(keys.map(function(key){
-          return sdH.getDirectoryHandle(key).then(listSubdirNames).then(function(subs){ return subs.length ? key : null; }, function(){ return null; });
-        }));
+        return runBackgroundQueue(dirs, function(dH){
+          return listSubdirNames(dH).then(function(subs){ return subs.length ? dH.name : null; }, function(){ return null; });
+        }, 3);
       });
     }).then(function(keys){ return keys.filter(Boolean); }, function(){ return []; });
   }
@@ -7515,26 +7592,80 @@
   // (an array of records with the exact same fields), now assembled by
   // enumerating every item's own event folder and folding each one's
   // events, rather than trusting one shared mutable file.
+  /* (v57) Andrew's tablet, "⏱ Timings" on v56: Open check measure took
+     154 s -- 85 s to list 4 files, 69 s to read one -- and then read all 3
+     other layers in 1.2 s. So storage itself was fast; the open was stuck
+     in the queue behind THIS scan, which runs on every level open: for
+     every item in the project it walked Project Saves -> Joinery Status ->
+     <item> (3 lookups), listed it, and re-read every event file in it, all
+     items at once. On a real project that's thousands of storage calls,
+     and Android's storage layer does them one at a time, so anything the
+     person tapped meanwhile waited for all of them.
+       Now: (1) each item's folder handle comes straight from the one
+     listing of Joinery Status (no lookups); (2) event files never change
+     once written (every status change is a NEW file), so each one is read
+     once and remembered on this device (IndexedDB) -- after the first scan
+     an item costs one listing, not 4 + one read per event; (3) the items
+     go through a small queue, 3 at a time, that stands aside entirely
+     while the person is opening a check measure (see fgBegin), so a tap
+     waits behind at most a couple of storage calls, never the whole scan. */
   function readJoineryStatuses(projectHandle){
     if (!projectHandle) return Promise.resolve([]);
+    var cacheKey = "joineryStatusEvents\u0000" + (activeProjectName || projectHandle.name || "");
+    var cache = {};
+    var cacheP = idbGet(cacheKey).then(function(c){ if (c && typeof c === "object") cache = c; }, function(){});
     return migrateLegacyJoineryStatusIfNeeded(projectHandle).then(function(){
       return getJoineryStatusEventsRootDir(projectHandle, false).then(function(rootH){
-        var keys = [];
+        var dirs = [];
         var iter = rootH.values();
         function step(){
           return iter.next().then(function(res){
-            if (res.done) return keys;
-            if (res.value && res.value.kind === "directory") keys.push(res.value.name);
+            if (res.done) return dirs;
+            if (res.value && res.value.kind === "directory") dirs.push(res.value);
             return step();
           });
         }
         return step();
       }, function(){ return null; }); // still doesn't exist -- Viewer, or migration failed -- fall back below
-    }).then(function(keys){
-      if (keys === null) return readLegacyJoineryStatusFile(projectHandle);
-      return Promise.all(keys.map(function(key){
-        return listJoineryStatusEventsForItem(projectHandle, key).then(foldJoineryStatusEvents);
-      })).then(function(list){ return list.filter(Boolean); });
+    }).then(function(dirs){
+      if (dirs === null) return readLegacyJoineryStatusFile(projectHandle);
+      return cacheP.then(function(){
+        var fresh = {};
+        return runBackgroundQueue(dirs, function(dirH){
+          return listJoineryStatusEventsCached(dirH, cache[dirH.name] || {}).then(function(r){
+            fresh[dirH.name] = r.byName;
+            return foldJoineryStatusEvents(r.events);
+          });
+        }, 3).then(function(list){
+          idbSet(cacheKey, fresh).catch(function(){});
+          return list.filter(Boolean);
+        });
+      });
+    });
+  }
+  // One item's events, reading only the files not already remembered.
+  function listJoineryStatusEventsCached(dirH, known){
+    var names = [], handles = {};
+    var iter = dirH.values();
+    function step(){
+      return iter.next().then(function(res){
+        if (res.done) return;
+        if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)){ names.push(res.value.name); handles[res.value.name] = res.value; }
+        return step();
+      });
+    }
+    return step().then(function(){
+      var byName = {};
+      var p = Promise.resolve();
+      names.forEach(function(n){
+        if (known[n] && typeof known[n] === "object"){ byName[n] = known[n]; return; }
+        p = p.then(function(){
+          return readJsonFileHandle(handles[n]).then(function(e){ if (e && typeof e === "object") byName[n] = e; }, function(){});
+        });
+      });
+      return p.then(function(){
+        return { byName: byName, events: names.map(function(n){ return byName[n]; }).filter(Boolean) };
+      });
     });
   }
   function findJoineryStatus(list, level, room, joineryId){
@@ -13862,6 +13993,11 @@
     comments.forEach(function(c){ if (c.parentNode) c.parentNode.removeChild(c); });
     var kill = clone.querySelectorAll(".ui-handle, .ui-preview, .ui-preview-node");
     kill.forEach(function(n){ n.remove(); });
+    // (v56) Hidden layers now stay in the page (display:none, kept so
+    // showing one again doesn't redraw it) -- never let one reach an export.
+    clone.querySelectorAll("#overlayLayersGroup g[data-layer-idx]").forEach(function(g){
+      if (g.getAttribute("display") === "none") g.remove();
+    });
     // The snap-to-grid overlay is a drawing aid, not a mark on the plan --
     // it should never show up in a saved PNG/PDF even while it's toggled on
     // on-screen.

@@ -1,10 +1,22 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v56** (bump this line, and add a dated changelog
+**Current version: v58** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v58 (2026-09-27):** Hides the **Schedule Backups** folder from the project list. Scheduler v29 now keeps its daily spreadsheet backups in that folder, directly in the main Projects folder (Andrew: *"a schedule backups folder directly in the main folder ... I meant in the main folder. Not the individual projects folder."*). Every app lists every folder in the main folder as a project, so each one now leaves that folder out: `isReservedRootFolderName`, the same one-line rule in every app. Tested across all 11 apps by `pdftest-projects/run_schedule_backups_folder_hidden.js`, which fails on every app's previous build and passes on the new ones.
+
+**v57 (2026-09-27, same night):** Andrew sent the v56 **⏱ Timings** from the tablet (Level 1 · MH.028 · J.T.922). The page was shown after **154 s**: 84.8 s to list the item's layers and read his draft, then 69.4 s to read his own last save. Once the page was up, it read and drew the 3 other layers in **1.2 s**. So neither storage speed nor drawing was the problem. The open was **waiting in the storage queue** behind the background status scan that runs on every level open.
+
+- That scan (`readJoineryStatuses`) handled every item in the project at once. For each one it walked Project Saves → Joinery Status → item (3 lookups), listed the folder, and re-read every event file. On a real project that's thousands of calls, and Android's storage layer runs them one at a time. Simulated at 20 ms per call with 150 items: the v55/v56 open waited behind about 1,100 calls (**21.9 s**). v57 opens in **0.5 s**. The cost grows with project history, which is how a build that was fine one night was slow the next.
+- Fix:
+  1. Item folder handles now come straight from the one Joinery Status listing, with no lookups.
+  2. Event files never change once written (every status change is a new file), so each one is read once and remembered on the device in IndexedDB (`joineryStatusEvents\0<project>`). A repeat scan costs one listing per item: about 200 calls instead of about 1,100 in the same simulation.
+  3. Items go through `runBackgroundQueue` at 3 at a time. It starts nothing new while the foreground is busy: from `fgBegin`/`fgEnd`, around opening a check measure, loading its other layers, and loading the job notes list. If the foreground somehow never ends, the scan carries on after 30 s. `listShopDrawingKeys` uses the same queue.
+- The v56 double-tap guard, incremental layers and Timings panel all stay. Hidden layer groups are stripped from exports.
+- Tests: new `run_v57_scan_priority.js` covers the queue limit, pausing for the foreground, fail semantics, the event cache (no re-read, new files picked up) and the pause during a real open. Diagnostics `diag_scan_contention.js` and `diag_open_item_photos.js` were added. The whole Site Measure/Viewer suite passes; the heavy PDF tests pass when run alone.
 
 **v56 (2026-09-27, same day):** Andrew: *"open check measure still took upto a minute to open on tablet. this was super fast lastnight"*.
 
