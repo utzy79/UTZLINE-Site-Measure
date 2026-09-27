@@ -1096,7 +1096,60 @@
 // (this app had zero live test-hook exposure before now) and a new
 // pdftest-projects/run_lock_popover_restyle.js covers the new structure for
 // both this app and the Viewer; all pre-existing tests re-run clean.
-var CACHE_NAME = "utzline-sitemeasure-cache-v50";
+// v51 (2026-09-27): read-only "Company logo" preview added to the Projects
+// screen (gateList) -- NEXT_RUN_NOTES.md item 8's "every other app" scope,
+// same fix already shipped to Install ITP/Manufacture ITP/Delivery ITP.
+// Andrew, verbatim: "change company logo should only be visable in the
+// projects app, in every other app it should load the one chosen in
+// projects." This app never showed a logo anywhere before now -- new
+// read-only thumbnail (or "No logo" placeholder), sourced from the shared
+// "company-logo.png" file at the Projects root (projectsRootHandle, same
+// root utzline-users.csv already comes from), refreshed every time the
+// gate is (re)shown (same call site as populateIdentitySelector). No
+// upload/remove controls, no PDF-export wiring (this app doesn't print a
+// logo anywhere). New CSS (.company-logo-row/.company-logo-preview) and
+// readCompanyLogoReadOnly()/refreshCompanyLogoPreview() in source.html,
+// shared with the Viewer. Covered by the new run_company_logo_readonly.js;
+// full pre-existing regression suite for this app + Viewer re-run clean.
+// v52 (2026-09-27, same day): "Viewer fixes" queue item -- five related
+// changes to the shared joinery-item-page/overlay-layers machinery,
+// dictated together, shipped together:
+//   1. All check-measure overlay layers already default to VISIBLE when a
+//      joinery item's page is opened (visible:true hardcoded at layer
+//      construction -- there's no stored on/off state to begin with).
+//      Investigated and confirmed already correct; no code change, only a
+//      new regression assertion (run_viewer_fixes_and_rework.js).
+//   2. Andrew, verbatim: "if there has not been a check measure for a
+//      joinery item, remove the open check measure button." Applied ONLY
+//      in the read-only Viewer (VIEW_ONLY_MODE) -- Site Measure still
+//      needs the button to start the very first check measure on an item
+//      with nothing saved yet, so it stays unconditional here.
+//   3. New "View rework" feature (read-only): Andrew, verbatim: "add a
+//      view rework button if a joinery item has a rework, make the text
+//      red on this button. also add this to the main menu for a
+//      project." Reads Install ITP's own rework JSON files (flat:
+//      Project Saves/UTZLINE ITP/Install ITP Rework/<Level> - <Room> -
+//      <Code>.json; legacy: itp-install-rework/<Level>/<Room>/<Code>.json)
+//      -- never writes them. A per-item "View rework" button (shown only
+//      when the item has at least one OPEN entry) and a project-level
+//      "View rework" menu entry (lists every open rework anywhere in the
+//      project) both open the same simple read-only list dialog. New
+//      --danger CSS token (a distinct, more saturated red than this app's
+//      own --accent, which is already red/orange) and .mbtn-rework style.
+//   4. The "Site Measure layers" panel (#overlayLayersPanel, foreign
+//      check-measure overlays) now docks LEFT; the "Objects/Layers" panel
+//      (#layersPanel) stays docked RIGHT -- the two used to visually
+//      overlap when both were open.
+//   5. "Faded images" regression fix: a foreign layer's own photo opacity
+//      (was 0.55) was compounding with the wrapping layer-group's OWN
+//      opacity (was 0.75, ~0.41 effective combined) on top of a grayscale
+//      filter. Per-image opacity is now 0.7 and the group-level multiplier
+//      is removed entirely (redundant with the per-image value).
+// New pdftest-projects/run_viewer_fixes_and_rework.js covers all five
+// against both real production bundles (Site Measure + Viewer); full
+// pre-existing regression suite for both apps re-run clean, no page
+// errors.
+var CACHE_NAME = "utzline-sitemeasure-cache-v52";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
