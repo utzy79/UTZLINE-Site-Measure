@@ -1185,7 +1185,11 @@
 // on every joinery item dialog open (uncached misses on Android). Now one
 // background listing per status scan decides whether an item has a
 // rework file; a dialog open reads nothing otherwise.
-var CACHE_NAME = "utzline-sitemeasure-cache-v53";
+// v54 (2026-09-27): Sub orders removed from Site Measure/Viewer; Open check
+// measure no longer renders a whole-plan snapshot on every open (only for a
+// genuinely new item, lighter, failure-safe) and no longer waits for every
+// other person's layer before opening; "Add check measure" label.
+var CACHE_NAME = "utzline-sitemeasure-cache-v54";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
