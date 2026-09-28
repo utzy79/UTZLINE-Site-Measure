@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v58">
+<link rel="manifest" href="./manifest.json?v=v59">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v58">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v58">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v59">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v59">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -928,6 +928,28 @@
     padding:1px 3px; color:inherit; resize:none; overflow:hidden;
     white-space:pre; line-height:1.25;
   }
+
+  /* (v59) Measure pad -- see openMeasurePad. A small on-screen number pad
+     with quick text, shown instead of the tablet's own keyboard while a
+     dimension/angle label is being typed. */
+  .measure-pad{
+    position:absolute; z-index:30;
+    display:grid; grid-template-columns:repeat(4, 50px) 62px; gap:5px;
+    padding:8px; border-radius:10px;
+    background:var(--surface-1); border:1px solid var(--border-strong); box-shadow:var(--shadow);
+    touch-action:manipulation;
+  }
+  .measure-pad button{
+    height:44px; border-radius:7px; border:1px solid var(--border-strong);
+    background:var(--surface-2); color:var(--text-primary);
+    font-size:19px; font-weight:600; padding:0; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  /* press feedback is a short JS flash, not :active -- :active can stick on a touch screen */
+  .measure-pad button.mp-hit{ filter:brightness(0.82); transform:scale(0.96); }
+  .measure-pad button.mp-quick{ font-size:14px; background:var(--accent-soft); color:var(--accent-ink); border-color:var(--accent); }
+  .measure-pad button.mp-fn{ font-size:14px; }
+  .measure-pad button.mp-done{ grid-column:span 2; background:var(--accent); border-color:var(--accent-ink); color:#fff; font-size:15px; }
 
   svg text{cursor:default;}
   .drop-active{outline:3px dashed var(--accent); outline-offset:-8px;}
@@ -1974,7 +1996,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v58";
+  var APP_VERSION = "v59";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -6879,7 +6901,19 @@
   function autoFontSize(){ var diag = Math.hypot(state.imageW, state.imageH); return Math.max(20, diag * 0.014); }
   function autoStroke(){ var diag = Math.hypot(state.imageW, state.imageH); return Math.max(2.5, diag * 0.0016); }
   function defaultStyle(){
-    if (!state.style) state.style = { strokeWidth: 4, fontSize: 32, dimensionEnds: "tick", lineEnds: "arrow" };
+    // (v59) Andrew, after field testing: "text to be reduced to 18 and line
+    // weight to 2 as default" (was 32 / 4). A plan or check measure saved
+    // before this carries its own style with the old defaults in it -- if
+    // those are still exactly the old untouched 4 / 32, they move to the new
+    // 2 / 18 once (flagged, so a size someone picks on purpose afterwards
+    // sticks). Only affects what NEW marks start at; everything already
+    // drawn keeps its own size.
+    if (!state.style) state.style = { strokeWidth: 2, fontSize: 18, dimensionEnds: "tick", lineEnds: "arrow", sizeDefaultsV59: true };
+    if (!state.style.sizeDefaultsV59){
+      if (state.style.strokeWidth === 4) state.style.strokeWidth = 2;
+      if (state.style.fontSize === 32) state.style.fontSize = 18;
+      state.style.sizeDefaultsV59 = true;
+    }
     // Migrate an older save's single shared "color" into the new
     // per-object-type map -- carrying whatever color someone had settled on
     // forward as every type's starting point, rather than silently resetting
@@ -9214,10 +9248,16 @@
     // normal text keyboard. This only changes which keypad the OS offers by
     // default -- switching keyboards by hand still works exactly as before.
     editorEl.inputMode = (obj.type === "dimension" || obj.type === "angle") ? "decimal" : "text";
+    // (v59) Measures get the app's own small number pad (with quick text)
+    // instead: inputMode "none" keeps the tablet's keyboard from covering
+    // half the plan, while a real keyboard (PC) still types straight in.
+    var usePad = obj.type === "dimension" || obj.type === "angle";
+    if (usePad) editorEl.inputMode = "none";
     stage.appendChild(editorEl);
     reflowInlineEditor();
     editorEl.focus();
     editorEl.select();
+    if (usePad) openMeasurePad();
     editorEl.addEventListener("input", function(){
       label.text = editorEl.value;
       if (obj.type === "dimension" && label.autoPos) repositionDimensionLabel(obj);
@@ -9245,9 +9285,152 @@
       // tapping/clicking away (blur, just below) finishes editing instead.
       if (ev.key === "Escape"){ ev.preventDefault(); ev.stopPropagation(); commitInlineEdit(); }
     });
-    editorEl.addEventListener("blur", function(){ commitInlineEdit(); });
+    editorEl.addEventListener("blur", function(){
+      // (v59) Tapping the measure pad, or switching to the full keyboard,
+      // briefly moves focus -- that's not "finished editing".
+      if (measurePadHolding){ var el = editorEl; setTimeout(function(){ if (el && el === editorEl) el.focus(); }, 0); return; }
+      commitInlineEdit();
+    });
     renderAll();
   }
+
+  /* ============================== measure pad (v59) ==============================
+     Andrew, after field testing: "site measure app need to popup a small
+     number pad when typing a measure. This to also have quick text like
+     ctr, ftc, bhead, oall". Shown while a dimension or angle label is being
+     typed: digits, point, space, backspace, the four quick texts, "ABC"
+     (hands over to the tablet's full keyboard for anything else) and Done.
+     It sits in whichever corner of the canvas keeps the label being typed
+     visible. Keys act on press (no tap delay) and never take focus from the
+     label, so the caret, selection and typing behave exactly as with a
+     keyboard. */
+  var MEASURE_QUICK_TEXTS = ["ctr", "ftc", "bhead", "oall"];
+  var measurePadEl = null, measurePadHolding = false;
+  function measurePadInsert(text, isWord){
+    var ed = editorEl;
+    if (!ed) return;
+    var v = ed.value, a = ed.selectionStart, b = ed.selectionEnd;
+    if (a == null){ a = b = v.length; }
+    // A quick text never wipes out the number it's describing: if the
+    // whole label is still selected (the editor opens that way), it goes
+    // on the end instead of replacing it.
+    if (isWord && a === 0 && b === v.length && v.length) a = b = v.length;
+    if (isWord){
+      if (a > 0 && !/\s$/.test(v.slice(0, a))) text = " " + text;
+      if (b < v.length && !/^\s/.test(v.slice(b))) text = text + " ";
+    }
+    ed.value = v.slice(0, a) + text + v.slice(b);
+    var caret = a + text.length;
+    ed.setSelectionRange(caret, caret);
+    ed.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function measurePadBackspace(){
+    var ed = editorEl;
+    if (!ed) return;
+    var v = ed.value, a = ed.selectionStart, b = ed.selectionEnd;
+    if (a == null){ a = b = v.length; }
+    if (a === b){ if (a === 0) return; a = a - 1; }
+    ed.value = v.slice(0, a) + v.slice(b);
+    ed.setSelectionRange(a, a);
+    ed.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function measurePadKey(k){
+    if (!editorEl) return;
+    if (k === "back") measurePadBackspace();
+    else if (k === "space") measurePadInsert(" ", false);
+    else if (k === "done") commitInlineEdit();
+    else if (k === "abc"){
+      // Full keyboard for anything the pad doesn't have: re-focusing with
+      // a text keyboard opens it on the tablet.
+      closeMeasurePad();
+      var ed = editorEl;
+      measurePadHolding = true;
+      ed.inputMode = "text";
+      ed.blur(); ed.focus();
+      setTimeout(function(){ measurePadHolding = false; }, 0);
+    }
+    else if (MEASURE_QUICK_TEXTS.indexOf(k) !== -1) measurePadInsert(k, true);
+    else measurePadInsert(k, false);
+  }
+  function openMeasurePad(){
+    closeMeasurePad();
+    var pad = document.createElement("div");
+    pad.className = "measure-pad";
+    pad.setAttribute("role", "group");
+    pad.setAttribute("aria-label", "Measure keypad");
+    // 5 columns: digits x3, function key, quick text.
+    var layout = [
+      ["7", "8", "9", "back", "ctr"],
+      ["4", "5", "6", "space", "ftc"],
+      ["1", "2", "3", "abc", "bhead"],
+      [".", "0", "done", "oall"]
+    ];
+    var LABELS = { back: "\u232B", space: "Space", abc: "ABC", done: "Done" };
+    layout.forEach(function(row){
+      row.forEach(function(k){
+        var b = document.createElement("button");
+        b.type = "button";
+        b.tabIndex = -1;
+        b.setAttribute("data-key", k);
+        b.textContent = LABELS[k] || k;
+        if (MEASURE_QUICK_TEXTS.indexOf(k) !== -1) b.className = "mp-quick";
+        else if (k === "done") b.className = "mp-done";
+        else if (LABELS[k]) b.className = "mp-fn";
+        if (k === "back") b.setAttribute("aria-label", "Backspace");
+        pad.appendChild(b);
+      });
+    });
+    // Act on press: no click delay on the tablet, and preventDefault keeps
+    // focus (and the caret) in the label. Everything stops here so the
+    // canvas underneath never sees the tap (no pan, no deselect).
+    function press(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      var b = ev.target.closest ? ev.target.closest("button[data-key]") : null;
+      if (!b) return;
+      measurePadHolding = true;
+      b.classList.add("mp-hit");
+      setTimeout(function(){ b.classList.remove("mp-hit"); }, 120);
+      try{ measurePadKey(b.getAttribute("data-key")); }
+      finally{ setTimeout(function(){ measurePadHolding = false; }, 0); }
+    }
+    pad.addEventListener("pointerdown", press);
+    ["mousedown", "touchstart", "click", "dblclick", "pointerup", "contextmenu"].forEach(function(t){
+      pad.addEventListener(t, function(ev){ ev.preventDefault(); ev.stopPropagation(); }, { passive: false });
+    });
+    stage.appendChild(pad);
+    measurePadEl = pad;
+    positionMeasurePad();
+  }
+  function closeMeasurePad(){
+    if (measurePadEl && measurePadEl.parentNode) measurePadEl.parentNode.removeChild(measurePadEl);
+    measurePadEl = null;
+  }
+  // Bottom-right by default; otherwise whichever corner doesn't cover the
+  // label being typed.
+  function positionMeasurePad(){
+    if (!measurePadEl || !editingId) return;
+    var obj = findObj(editingId);
+    if (!obj) return;
+    var label = labelRefFor(obj);
+    var pt = svgPoint(label.x, label.y);
+    var sw = stage.clientWidth, sh = stage.clientHeight;
+    var pw = measurePadEl.offsetWidth, ph = measurePadEl.offsetHeight, m = 10;
+    var corners = [
+      { left: sw - pw - m, top: sh - ph - m },
+      { left: m, top: sh - ph - m },
+      { left: sw - pw - m, top: m },
+      { left: m, top: m }
+    ];
+    var pick = corners[0];
+    for (var i = 0; i < corners.length; i++){
+      var c = corners[i];
+      var inside = pt.x > c.left - 40 && pt.x < c.left + pw + 40 && pt.y > c.top - 30 && pt.y < c.top + ph + 30;
+      if (!inside){ pick = c; break; }
+    }
+    measurePadEl.style.left = Math.max(0, pick.left) + "px";
+    measurePadEl.style.top = Math.max(0, pick.top) + "px";
+  }
+
   function reflowInlineEditor(){
     if (!editorEl || !editingId) return;
     var obj = findObj(editingId);
@@ -9263,6 +9446,7 @@
     editorEl.style.transform = "rotate(" + label.rot + "deg)";
     editorEl.style.transformOrigin = "200px " + (label.fontSize * scale * 0.7) + "px";
     editorEl.rows = Math.max(1, textLines(editorEl.value).length);
+    positionMeasurePad();
   }
   function svgPoint(x, y){
     var pt = svgRoot.createSVGPoint();
@@ -9276,6 +9460,7 @@
     if (!editingId) return;
     var id = editingId;
     editingId = null;
+    closeMeasurePad();
     if (editorEl && editorEl.parentNode) editorEl.parentNode.removeChild(editorEl);
     editorEl = null;
     var obj = findObj(id);

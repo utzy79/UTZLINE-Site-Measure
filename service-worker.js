@@ -1196,7 +1196,8 @@
 // v57 (2026-09-27): level-open status scan no longer blocks Open check
 // measure (event cache, 3-at-a-time queue that yields to the foreground).
 // v58 (2026-09-27): "Schedule Backups" folder hidden from the project list.
-var CACHE_NAME = "utzline-sitemeasure-cache-v58";
+// v59 (2026-09-28): measure number pad with quick text; defaults text 18 / weight 2.
+var CACHE_NAME = "utzline-sitemeasure-cache-v59";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

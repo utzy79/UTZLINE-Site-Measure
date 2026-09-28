@@ -1,10 +1,22 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v58** (bump this line, and add a dated changelog
+**Current version: v59** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v59 (2026-09-28):** Andrew, after field testing: *"Ok field tested and pretty good. Site measure app need to popup a small number pad when typing a measure. This to also have quick text like ctr, ftc, bhead, oall, text to be reduced to 18 and line weight to 2 as default."*
+
+- **Measure pad.** Typing a dimension or angle label pops up a small on-screen pad (about 300 × 210 px) instead of the tablet's keyboard: 0–9, point, Space, ⌫, and the quick texts **ctr / ftc / bhead / oall**, plus **ABC**, which hands over to the full keyboard for anything else, and **Done**.
+  - Quick text goes on with a space ("2400 ftc"). When the whole label is still selected, it's added on the end rather than replacing the number.
+  - Keys act on press and never take focus from the label, so the caret and selection behave like a keyboard. A tap on the pad never reaches the plan.
+  - The pad sits bottom-right, or whichever corner doesn't cover the label being typed. Tapping the plan still finishes editing.
+  - The label is set to `inputMode "none"` so the tablet keyboard stays down; a real keyboard (PC) still types straight in.
+  - Text and callout labels keep the normal keyboard.
+- **Defaults: text 18, line weight 2** (were 32 / 4). A plan or check measure saved with the old untouched 32 / 4 moves to 18 / 2 once (`style.sizeDefaultsV59`). A size picked on purpose is kept, and marks already drawn keep their own size.
+- Viewer: same build (it never edits, so it has no pad).
+- Tests: new `run_v59_measure_pad.js` (real touch taps). `gen_test.py` gained a `makeAngle` hook. All 140 Site Measure/Viewer tests pass.
 
 **v58 (2026-09-27):** Hides the **Schedule Backups** folder from the project list. Scheduler v29 now keeps its daily spreadsheet backups in that folder, directly in the main Projects folder (Andrew: *"a schedule backups folder directly in the main folder ... I meant in the main folder. Not the individual projects folder."*). Every app lists every folder in the main folder as a project, so each one now leaves that folder out: `isReservedRootFolderName`, the same one-line rule in every app. Tested across all 11 apps by `pdftest-projects/run_schedule_backups_folder_hidden.js`, which fails on every app's previous build and passes on the new ones.
 
