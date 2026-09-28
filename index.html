@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v59">
+<link rel="manifest" href="./manifest.json?v=v62">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v59">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v59">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v62">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v62">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -72,6 +72,7 @@
        so reusing --accent here wouldn't read as a distinct "this item has
        an open rework" flag). */
     --danger:#b91c1c;
+    --rw-green:#15803d; /* (v61) delivered reworks */
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -88,6 +89,7 @@
       --shadow:0 2px 14px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.3);
       --focus:#6bb3e0;
       --danger:#f87171;
+      --rw-green:#4ade80;
     }
   }
   :root[data-theme="dark"]{
@@ -101,6 +103,7 @@
     --accent:#ff6a3d;
     --accent-ink:#ffb199;
     --danger:#f87171;
+    --rw-green:#4ade80;
     --accent-soft:#3a241c;
     --shadow:0 2px 14px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.3);
     --focus:#6bb3e0;
@@ -600,6 +603,8 @@
      is needed here. */
   .lock-popover.lock-popover-accent{ background:var(--accent); border-color:var(--accent-ink); color:#fff; }
   .lock-popover.lock-popover-accent:hover{ background:var(--accent-ink); }
+  /* (v60) "View rework" is Viewer-only -- never shown in Site Measure. */
+  body:not(.viewer-mode) #viewProjectReworkBtn, body:not(.viewer-mode) #joineryItemViewReworkBtn{ display:none !important; }
   /* (v55) "View rework" moved onto this menu -- red text, same as the old button. */
   .lock-popover .popover-rework-label{ color:var(--danger); font-weight:600; }
 
@@ -848,6 +853,52 @@
   .jobnote-row-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .jobnote-empty{ font-size:13px; color:var(--text-secondary); padding:8px 2px 14px; }
 
+  /* (v61) Viewer: Reworks screen -- see openReworksScreen */
+  .rw-screen{ position:fixed; inset:0; z-index:60; background:var(--surface-0); display:flex; flex-direction:column; }
+  .rw-screen[hidden]{ display:none; }
+  .rw-screen-bar{ display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--border); background:var(--surface-1); }
+  .rw-screen-title{ font-weight:700; font-size:16px; color:var(--danger); }
+  .rw-screen-body{ flex:1; overflow-y:auto; padding:16px; width:100%; max-width:1100px; margin:0 auto; user-select:text; -webkit-user-select:text; touch-action:pan-y; }
+  .rw-intro{ color:var(--text-secondary); margin:0 0 12px; font-size:14px; }
+  .rw-group{ color:var(--danger); font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:13px; margin:18px 0 8px; }
+  .rw-group-delivered, .rw-delivered .rw-group{ color:var(--rw-green); }
+  .rw-card{ border:1.5px solid var(--danger); border-left-width:6px; border-radius:12px; padding:14px 16px; margin-bottom:10px; background:var(--surface-1); }
+  .rw-card.rw-delivered{ border-color:var(--rw-green); }
+  .rw-delivered .rw-card-title, .rw-delivered .rw-card-text{ color:var(--rw-green); }
+  .rw-card-top{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .rw-card-title{ font-weight:700; font-size:17px; color:var(--text-primary); }
+  .rw-card-when{ margin-left:auto; color:var(--text-secondary); font-size:13px; }
+  .rw-pill{ border:1.5px solid currentColor; border-radius:8px; padding:2px 10px; font-size:12px; font-weight:700; text-transform:uppercase; }
+  .rw-pill-logged{ color:var(--danger); }
+  .rw-pill-machined{ color:#d97706; }
+  .rw-pill-manufactured{ color:#2563eb; }
+  .rw-pill-delivered, .rw-pill-closed{ color:var(--rw-green); }
+  .rw-card-state{ color:var(--text-secondary); font-size:13px; margin:6px 0 2px; }
+  .rw-card-text{ font-size:15px; margin:4px 0; color:var(--text-primary); }
+  .rw-card-last{ font-size:13px; color:var(--text-secondary); font-style:italic; }
+  .rw-card-actions{ display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .mbtn-delivered{ color:var(--rw-green); border-color:var(--rw-green); font-weight:600; }
+  .rw-delivered-toggle{ display:block; width:100%; text-align:left; margin:22px 0 6px; padding:10px 14px; border-radius:10px; border:1.5px solid var(--rw-green); background:transparent; color:var(--rw-green); font-weight:700; font-size:14px; cursor:pointer; }
+  .rw-detail-title{ font-size:20px; }
+  .rw-detail > .mbtn{ margin-bottom:12px; }
+  .rw-photos{ display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:8px; margin:10px 0; }
+  .rw-photos img{ width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:8px; cursor:zoom-in; }
+  .rw-h3{ font-size:14px; margin:18px 0 8px; color:var(--text-primary); }
+  .rw-quick{ display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+  .rw-chip{ border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text-primary); border-radius:999px; padding:6px 12px; font-size:13px; cursor:pointer; }
+  #rwCommentInput{ width:100%; font:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text-primary); resize:vertical; box-sizing:border-box; }
+  .rw-add-row{ display:flex; align-items:center; gap:12px; margin-top:8px; flex-wrap:wrap; }
+  .rw-hint{ color:var(--text-secondary); font-size:12px; }
+  .rw-log{ border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .rw-log-row{ display:grid; grid-template-columns:150px 140px 1fr; gap:10px; padding:8px 12px; border-bottom:1px solid var(--border); font-size:13px; color:var(--text-primary); }
+  .rw-log-row:last-child{ border-bottom:none; }
+  .rw-log-when{ color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  .rw-log-who{ font-weight:600; }
+  .rw-log-comment .rw-log-what{ font-style:italic; }
+  .rw-log-delivered .rw-log-what, .rw-log-closed .rw-log-what{ color:var(--rw-green); font-weight:600; }
+  @media (max-width:640px){ .rw-log-row{ grid-template-columns:1fr; gap:2px; } .rw-card-when{ margin-left:0; width:100%; } }
+  .rw-photo-view{ position:fixed; inset:0; z-index:80; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; cursor:zoom-out; }
+  .rw-photo-view img{ max-width:94vw; max-height:94vh; }
   /* ---------- "View rework" read-only list (2026-09-27) ---------- */
   .rework-view-list{ display:flex; flex-direction:column; gap:8px; max-height:340px; overflow-y:auto; margin-bottom:14px; }
   .rework-view-row{
@@ -1795,12 +1846,21 @@
          screenshotted and pinned to the exact step, not guessed at. -->
     <div class="modal-backdrop" id="cmTimingsBackdrop" hidden>
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="cmTimingsTitle">
-        <p id="cmTimingsTitle" class="joinery-item-title">Open check measure — timings on this device</p>
+        <p id="cmTimingsTitle" class="joinery-item-title">Open site measure — timings on this device</p>
         <div class="rework-view-list" id="cmTimingsList"></div>
         <div class="modal-actions">
           <button class="mbtn" id="cmTimingsCloseBtn">Close</button>
         </div>
       </div>
+    </div>
+
+    <!-- (v61) Viewer: Reworks screen (list -> one rework with its whole log + comments) -->
+    <div class="rw-screen" id="reworkScreen" hidden>
+      <div class="rw-screen-bar">
+        <button class="mbtn" id="reworkScreenCloseBtn">Close</button>
+        <span class="rw-screen-title" id="reworkScreenTitle">Reworks</span>
+      </div>
+      <div class="rw-screen-body" id="reworkScreenBody"></div>
     </div>
 
     <div class="modal-backdrop" id="reworkViewBackdrop" hidden>
@@ -1821,7 +1881,7 @@
           <button class="mbtn" id="joineryItemOpenRoomBtn" style="display:none;">Open this room's own plan</button>
           <button class="mbtn mbtn-rework" id="joineryItemViewReworkBtn" style="display:none;">View rework</button>
           <button class="mbtn" id="joineryItemCloseBtn">Close</button>
-          <button class="mbtn mbtn-accent" id="joineryItemOpenPageBtn">Open check measure</button>
+          <button class="mbtn mbtn-accent" id="joineryItemOpenPageBtn">Open site measure</button>
         </div>
       </div>
     </div>
@@ -1996,7 +2056,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v59";
+  var APP_VERSION = "v62";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -3859,9 +3919,14 @@
   function checkMeasureKnownMissing(obj){
     return !!(checkMeasureKeySet && obj && !checkMeasureKeySet.has(resolveJoineryItemPageKey(activeLevelName, obj)));
   }
+  /* (v62) Button wording. Asked whether to use "Create / Open site measure"
+     or keep "Add / Open check measure", Andrew answered "Stay", then
+     "Actually. Create". So the button reads "Create site measure" or "Open
+     site measure" (same rule as before). Other wording is unchanged, e.g.
+     "Mark as check measured", which is a joinery status. */
   function checkMeasureActionLabel(obj){
-    if (VIEW_ONLY_MODE || !checkMeasureKeySet || !obj) return "Open check measure";
-    return checkMeasureKeySet.has(resolveJoineryItemPageKey(activeLevelName, obj)) ? "Open check measure" : "Add check measure";
+    if (VIEW_ONLY_MODE || !checkMeasureKeySet || !obj) return "Open site measure";
+    return checkMeasureKeySet.has(resolveJoineryItemPageKey(activeLevelName, obj)) ? "Open site measure" : "Create site measure";
   }
   function reworkSetKey(levelName, roomName, joineryCode, isFlat){
     var fileName = reworkFileNameFor(levelName, roomName, joineryCode, isFlat);
@@ -4062,6 +4127,456 @@
       renderReworkViewRows(rows, "No open reworks anywhere in this project.");
     }).catch(function(){
       renderReworkViewRows([], "Couldn't read rework data — try again.");
+    });
+  }
+
+  /* ============================== Viewer: Reworks screen (v61, 2026-09-28) ==============================
+     Andrew: "view rework in viewer app should open the reworks, and allow
+     comments to be added like sent to saw with user time date logging. it
+     needs to be like the photo" (Install ITP's "Outstanding reworks" page:
+     grouped by level and room, a card per rework with its code/cabinet, a
+     state pill, who logged it and when, the text, and Show on plan / Open
+     rework), plus "reworks that are delivered to be green border / text and
+     sent to bottom of page (maybe a separate selectable delivered folder)"
+     -> "Do the viewer rework also".
+
+     The list: every rework in the project -- outstanding ones grouped by
+     level/room (newest first), and a separate "Delivered (N)" section at the
+     bottom (green, tap to open). Open rework: the rework's details, its
+     photos, and its WHOLE status log (logged, every state change, delivered,
+     closed out, and every comment -- who and when, newest first), with an
+     "Add a comment" box (quick pick: "Sent to saw").
+
+     COMMENTS ARE THEIR OWN FILES. The rework file itself is one shared JSON
+     per item that Install ITP and Delivery ITP both rewrite whole -- two
+     people saving it at once is exactly what makes OneDrive leave a
+     conflict copy. So the Viewer never writes that file: each comment is a
+     new, never-overwritten file named by who + when, in a log folder beside
+     it:
+       flat:   Project Saves/UTZLINE ITP/Install ITP Rework Log/<Level> - <Room> - <Code>/<name> - <date time> - comment.json
+       legacy: itp-install-rework/<Level>/<Room>/<Code> log/<name> - <date time> - comment.json
+     {kind:"comment", reworkId, text, at, by, app}. (The other apps show
+     these comments when they get their part of the rework round.) The
+     Viewer's write permission is the same narrow per-project one "Add job
+     note" already uses; a name + PIN is required so every comment is
+     attributed. */
+  var RW_STATES = {
+    logged: { label: "Logged", long: "Logged" },
+    machined: { label: "Cut", long: "Cut (machined)" },
+    manufactured: { label: "Manufactured", long: "Manufactured" },
+    delivered: { label: "Delivered", long: "Delivered to site" }
+  };
+  var RW_QUICK_COMMENTS = ["Sent to saw"];
+  function rwStateOf(e){
+    var v = (e && e.status) || (e && e.received ? "delivered" : "logged");
+    return RW_STATES[v] ? v : "logged";
+  }
+  function rwIsDelivered(e){ return !!(e && (rwStateOf(e) === "delivered" || e.received || e.closed)); }
+  function rwFmt(iso, withTime){
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var s = d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    if (withTime) s += " " + ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+    return s;
+  }
+  // Every rework entry in the project (open, delivered and closed), with
+  // where it lives: [{ level, room, code, fileBase, isFlat, entry }]
+  function listAllProjectReworks(projectHandle, isFlat){
+    if (!projectHandle) return Promise.resolve([]);
+    function fileRows(fileHandle, level, room, code, fileBase){
+      return fileHandle.getFile().then(function(file){ return file.text(); }).then(function(text){
+        var data = null;
+        try{ data = JSON.parse(text); }catch(e){ data = null; }
+        var entries = (data && Array.isArray(data.reworks)) ? data.reworks : [];
+        var lv = (data && data.level) || level, rm = (data && data.room) || room;
+        return entries.filter(Boolean).map(function(e){ return { level: lv, room: rm, code: code, fileBase: fileBase, isFlat: isFlat, entry: e }; });
+      }, function(){ return []; });
+    }
+    function listFiles(dirH){
+      var out = [];
+      var iter = dirH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return out;
+          if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) out.push(res.value);
+          return step();
+        });
+      }
+      return step();
+    }
+    function listDirs(dirH){
+      var out = [];
+      var iter = dirH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return out;
+          if (res.value && res.value.kind === "directory") out.push(res.value);
+          return step();
+        });
+      }
+      return step();
+    }
+    var all = [];
+    if (isFlat){
+      return getReworkDirFlatReadOnly(projectHandle).then(listFiles, function(){ return []; }).then(function(files){
+        var p = Promise.resolve();
+        files.forEach(function(fh){
+          p = p.then(function(){
+            var base = fh.name.replace(/\.json$/i, "");
+            var parts = base.split(" - ");
+            var level = parts.length >= 3 ? parts[0] : "", room = parts.length >= 3 ? parts[1] : "", code = parts.length >= 3 ? parts.slice(2).join(" - ") : base;
+            return fileRows(fh, level, room, code, base).then(function(rows){ all.push.apply(all, rows); });
+          });
+        });
+        return p.then(function(){ return all; });
+      });
+    }
+    return projectHandle.getDirectoryHandle("itp-install-rework", { create: false }).then(listDirs, function(){ return []; }).then(function(levels){
+      var p = Promise.resolve();
+      levels.forEach(function(levelH){
+        p = p.then(function(){
+          return listDirs(levelH).then(function(rooms){
+            var q = Promise.resolve();
+            rooms.forEach(function(roomH){
+              q = q.then(function(){
+                return listFiles(roomH).then(function(files){
+                  var r = Promise.resolve();
+                  files.forEach(function(fh){
+                    r = r.then(function(){
+                      var code = fh.name.replace(/\.json$/i, "");
+                      return fileRows(fh, levelH.name, roomH.name, code, code).then(function(rows){ all.push.apply(all, rows); });
+                    });
+                  });
+                  return r;
+                });
+              });
+            });
+            return q;
+          });
+        });
+      });
+      return p.then(function(){ return all; });
+    });
+  }
+  function rwLogDir(projectHandle, row, create){
+    if (row.isFlat){
+      return projectHandle.getDirectoryHandle("Project Saves", { create: !!create }).then(function(ps){
+        return ps.getDirectoryHandle("UTZLINE ITP", { create: !!create });
+      }).then(function(b){
+        return b.getDirectoryHandle("Install ITP Rework Log", { create: !!create });
+      }).then(function(l){
+        return l.getDirectoryHandle(row.fileBase, { create: !!create });
+      });
+    }
+    // Legacy: the level/room folders already exist (the rework file lives there).
+    return projectHandle.getDirectoryHandle("itp-install-rework", { create: false }).then(function(h){
+      return h.getDirectoryHandle(row.level, { create: false });
+    }).then(function(h){
+      return h.getDirectoryHandle(row.room, { create: false });
+    }).then(function(h){
+      return h.getDirectoryHandle(row.fileBase + " log", { create: !!create });
+    });
+  }
+  // All comment files for one item's rework file (every entry in it).
+  function rwReadLog(projectHandle, row){
+    return rwLogDir(projectHandle, row, false).then(function(dirH){
+      var files = [];
+      var iter = dirH.values();
+      function step(){
+        return iter.next().then(function(res){
+          if (res.done) return files;
+          if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) files.push(res.value);
+          return step();
+        });
+      }
+      return step().then(function(fs){
+        var out = [];
+        var p = Promise.resolve();
+        fs.forEach(function(fh){
+          p = p.then(function(){
+            return readJsonFileHandle(fh).then(function(ev){ if (ev && typeof ev === "object") out.push(ev); }, function(){});
+          });
+        });
+        return p.then(function(){ return out; });
+      });
+    }, function(err){
+      if (isNotFoundErrSM(err)) return [];
+      throw err;
+    });
+  }
+  function rwAddComment(projectHandle, row, text, by){
+    var at = new Date();
+    var ev = { kind: "comment", reworkId: row.entry.id || "", level: row.level, room: row.room, joineryId: row.code, text: text, at: at.toISOString(), by: by, app: VIEW_ONLY_MODE ? "UTZLINE Viewer" : "UTZLINE Site Measure" };
+    return rwLogDir(projectHandle, row, true).then(function(dirH){
+      return dirH.getFileHandle(overlayUserSlug(by) + " - " + statusEventStamp(at) + " - comment.json", { create: true });
+    }).then(function(fh){
+      return verifiedHandleWrite(fh, new Blob([JSON.stringify(ev)], { type: "application/json" }));
+    }).then(function(){ return ev; });
+  }
+  // The whole log for one entry, newest first.
+  function rwLogFor(row, events){
+    var e = row.entry, out = [];
+    if (e.createdAt) out.push({ at: e.createdAt, by: e.createdBy || "", what: "Logged", kind: "logged" });
+    (Array.isArray(e.statusHistory) ? e.statusHistory : []).forEach(function(h, i){
+      if (!h || !h.status) return;
+      if (h.status === "logged" && (i === 0 || h.at === e.createdAt)) return; // same moment as "Logged"
+      out.push({ at: h.at, by: h.by || "", what: "State: " + (RW_STATES[h.status] ? RW_STATES[h.status].long : h.status), kind: h.status });
+    });
+    if (e.received && !(e.statusHistory || []).some(function(h){ return h && h.status === "delivered"; })){
+      out.push({ at: e.receivedDate || e.statusAt || "", by: e.receivedBy || "", what: "State: Delivered to site", kind: "delivered" });
+    }
+    if (e.closed) out.push({ at: e.closedAt || "", by: e.closedBy || "", what: "Closed out", kind: "closed" });
+    (events || []).forEach(function(ev){
+      if (ev.kind !== "comment") return;
+      if (ev.reworkId && e.id && ev.reworkId !== e.id) return;
+      out.push({ at: ev.at, by: ev.by || "", what: "Comment: " + (ev.text || ""), kind: "comment" });
+    });
+    out.sort(function(a, b){ return String(b.at || "").localeCompare(String(a.at || "")); });
+    return out;
+  }
+
+  var rwScreen = document.getElementById("reworkScreen");
+  var rwTitleEl = document.getElementById("reworkScreenTitle");
+  var rwBodyEl = document.getElementById("reworkScreenBody");
+  var rwUi = { rows: [], filter: null, logs: {}, showDelivered: false, detail: null, loadSeq: 0 };
+  function rwRowKey(row){ return row.fileBase; }
+  function openReworksScreen(filter){
+    rwUi = { rows: [], filter: filter || null, logs: {}, showDelivered: false, detail: null, loadSeq: rwUi.loadSeq + 1 };
+    var seq = rwUi.loadSeq;
+    rwTitleEl.textContent = filter ? ("Rework — " + (filter.code || filter.room) + " (" + [filter.level, filter.room].filter(Boolean).join(" · ") + ")") : ("Reworks — " + (activeProjectName || ""));
+    rwBodyEl.innerHTML = "<p class=\"jobnote-empty\">Loading…</p>";
+    rwScreen.hidden = false;
+    return isFlatProject(activeProjectHandle).then(function(isFlat){
+      return listAllProjectReworks(activeProjectHandle, isFlat);
+    }).then(function(rows){
+      if (seq !== rwUi.loadSeq) return;
+      if (filter){
+        rows = rows.filter(function(r){
+          return String(r.level).toLowerCase() === String(filter.level).toLowerCase() && String(r.room).toLowerCase() === String(filter.room).toLowerCase() &&
+            String(r.code).toLowerCase() === String(filter.code || "").toLowerCase();
+        });
+      }
+      rwUi.rows = rows;
+      renderReworksList();
+      // comments, in the background (they only add a "latest" line to each card)
+      var keys = {};
+      rows.forEach(function(r){ keys[rwRowKey(r)] = r; });
+      return runBackgroundQueue(Object.keys(keys).map(function(k){ return keys[k]; }), function(r){
+        return rwReadLog(activeProjectHandle, r).then(function(evs){ rwUi.logs[rwRowKey(r)] = evs; }, function(){});
+      }, 2).then(function(){ if (seq === rwUi.loadSeq && !rwUi.detail) renderReworksList(); });
+    }).catch(function(err){
+      console.error("Reading reworks failed:", err);
+      rwBodyEl.innerHTML = "<p class=\"jobnote-empty\">Couldn't read rework data (still syncing?) — try again in a moment.</p>";
+    });
+  }
+  function closeReworksScreen(){ rwScreen.hidden = true; rwUi.loadSeq++; rwUi.detail = null; }
+  document.getElementById("reworkScreenCloseBtn").addEventListener("click", function(){
+    if (rwUi.detail && !rwUi.filter){ rwUi.detail = null; renderReworksList(); return; }
+    closeReworksScreen();
+  });
+  function rwLastComment(row){
+    var evs = (rwUi.logs[rwRowKey(row)] || []).filter(function(ev){ return ev.kind === "comment" && (!ev.reworkId || !row.entry.id || ev.reworkId === row.entry.id); });
+    evs.sort(function(a, b){ return String(b.at).localeCompare(String(a.at)); });
+    return evs[0] || null;
+  }
+  function rwCard(row, idx){
+    var e = row.entry, st = rwStateOf(e), delivered = rwIsDelivered(e);
+    var card = document.createElement("div");
+    card.className = "rw-card" + (delivered ? " rw-delivered" : "");
+    var top = document.createElement("div"); top.className = "rw-card-top";
+    var title = document.createElement("span"); title.className = "rw-card-title";
+    title.textContent = [row.code, e.cabinetNumber ? "Cabinet " + e.cabinetNumber : ""].filter(Boolean).join(" · ");
+    var pill = document.createElement("span"); pill.className = "rw-pill rw-pill-" + (e.closed ? "closed" : st);
+    pill.textContent = e.closed ? "Closed out" : RW_STATES[st].label;
+    var when = document.createElement("span"); when.className = "rw-card-when";
+    when.textContent = [rwFmt(e.createdAt), e.createdBy].filter(Boolean).join(" — ");
+    top.appendChild(title); top.appendChild(pill); top.appendChild(when);
+    card.appendChild(top);
+    var stateLine = document.createElement("div"); stateLine.className = "rw-card-state";
+    stateLine.textContent = "State: " + RW_STATES[st].long + (e.statusAt && st !== "logged" ? " · " + rwFmt(e.statusAt) + (e.statusBy ? " — " + e.statusBy : "") : "");
+    card.appendChild(stateLine);
+    var text = document.createElement("div"); text.className = "rw-card-text";
+    text.textContent = e.text || "(no detail entered)";
+    card.appendChild(text);
+    var last = rwLastComment(row);
+    if (last){
+      var lc = document.createElement("div"); lc.className = "rw-card-last";
+      lc.textContent = "Latest comment: “" + last.text + "” — " + rwFmt(last.at, true) + (last.by ? ", " + last.by : "");
+      card.appendChild(lc);
+    }
+    var acts = document.createElement("div"); acts.className = "rw-card-actions";
+    var planBtn = document.createElement("button"); planBtn.className = "mbtn"; planBtn.textContent = "Show on plan";
+    planBtn.addEventListener("click", function(){ rwShowOnPlan(row); });
+    var openBtn = document.createElement("button"); openBtn.className = "mbtn " + (delivered ? "mbtn-delivered" : "mbtn-rework"); openBtn.textContent = "Open rework";
+    openBtn.setAttribute("data-rw-open", String(idx));
+    openBtn.addEventListener("click", function(){ openReworkDetail(row); });
+    acts.appendChild(planBtn); acts.appendChild(openBtn);
+    card.appendChild(acts);
+    return card;
+  }
+  function rwSortRows(rows){
+    return rows.slice().sort(function(a, b){
+      var g = (String(a.level) + " — " + String(a.room)).localeCompare(String(b.level) + " — " + String(b.room), undefined, { numeric: true, sensitivity: "base" });
+      return g || String(b.entry.createdAt || "").localeCompare(String(a.entry.createdAt || ""));
+    });
+  }
+  function renderReworksList(){
+    rwUi.detail = null;
+    rwBodyEl.innerHTML = "";
+    var rows = rwUi.rows;
+    var open = rwSortRows(rows.filter(function(r){ return !rwIsDelivered(r.entry); }));
+    var done = rwSortRows(rows.filter(function(r){ return rwIsDelivered(r.entry); }));
+    var intro = document.createElement("p"); intro.className = "rw-intro";
+    intro.textContent = open.length
+      ? open.length + " outstanding rework" + (open.length === 1 ? "" : "s") + " — not yet delivered to site. Newest first in each room."
+      : "No outstanding reworks" + (rwUi.filter ? " for this item." : " in this project.");
+    rwBodyEl.appendChild(intro);
+    var lastGroup = null;
+    open.forEach(function(r){
+      var g = [r.level, r.room].filter(Boolean).join(" — ");
+      if (g !== lastGroup){ var h = document.createElement("div"); h.className = "rw-group"; h.textContent = g; rwBodyEl.appendChild(h); lastGroup = g; }
+      rwBodyEl.appendChild(rwCard(r, rows.indexOf(r)));
+    });
+    if (done.length){
+      var tog = document.createElement("button"); tog.type = "button"; tog.className = "rw-delivered-toggle"; tog.id = "rwDeliveredToggle";
+      tog.textContent = (rwUi.showDelivered ? "▾ " : "▸ ") + "Delivered (" + done.length + ")";
+      tog.addEventListener("click", function(){ rwUi.showDelivered = !rwUi.showDelivered; renderReworksList(); });
+      rwBodyEl.appendChild(tog);
+      if (rwUi.showDelivered){
+        lastGroup = null;
+        done.forEach(function(r){
+          var g = [r.level, r.room].filter(Boolean).join(" — ");
+          if (g !== lastGroup){ var h = document.createElement("div"); h.className = "rw-group rw-group-delivered"; h.textContent = g; rwBodyEl.appendChild(h); lastGroup = g; }
+          rwBodyEl.appendChild(rwCard(r, rows.indexOf(r)));
+        });
+      }
+    }
+    rwBodyEl.scrollTop = 0;
+  }
+  function openReworkDetail(row){
+    rwUi.detail = row;
+    var e = row.entry, st = rwStateOf(e), delivered = rwIsDelivered(e);
+    rwBodyEl.innerHTML = "";
+    var wrap = document.createElement("div"); wrap.className = "rw-detail" + (delivered ? " rw-delivered" : "");
+    if (!rwUi.filter || rwUi.rows.length > 1){
+      var back = document.createElement("button"); back.className = "mbtn"; back.id = "rwBackToListBtn"; back.textContent = "← All reworks";
+      back.addEventListener("click", function(){ renderReworksList(); });
+      wrap.appendChild(back);
+    }
+    var head = document.createElement("div"); head.className = "rw-card-top";
+    var title = document.createElement("span"); title.className = "rw-card-title rw-detail-title";
+    title.textContent = [row.code, e.cabinetNumber ? "Cabinet " + e.cabinetNumber : ""].filter(Boolean).join(" · ");
+    var pill = document.createElement("span"); pill.className = "rw-pill rw-pill-" + (e.closed ? "closed" : st); pill.textContent = e.closed ? "Closed out" : RW_STATES[st].label;
+    head.appendChild(title); head.appendChild(pill);
+    wrap.appendChild(head);
+    var loc = document.createElement("div"); loc.className = "rw-group"; loc.textContent = [row.level, row.room].filter(Boolean).join(" — ");
+    wrap.appendChild(loc);
+    var text = document.createElement("div"); text.className = "rw-card-text"; text.textContent = e.text || "(no detail entered)";
+    wrap.appendChild(text);
+    var photos = Array.isArray(e.photos) ? e.photos.filter(function(p){ return p && p.dataUrl; }) : [];
+    if (photos.length){
+      var ph = document.createElement("div"); ph.className = "rw-photos";
+      photos.forEach(function(p){
+        var img = document.createElement("img"); img.src = p.dataUrl; img.alt = "Rework photo"; img.loading = "lazy";
+        img.addEventListener("click", function(){ rwShowPhoto(p.dataUrl); });
+        ph.appendChild(img);
+      });
+      wrap.appendChild(ph);
+    }
+    var ch = document.createElement("h3"); ch.className = "rw-h3"; ch.textContent = "Add a comment";
+    wrap.appendChild(ch);
+    var quick = document.createElement("div"); quick.className = "rw-quick";
+    var ta = document.createElement("textarea"); ta.id = "rwCommentInput"; ta.rows = 2; ta.placeholder = "e.g. sent to saw";
+    RW_QUICK_COMMENTS.forEach(function(q){
+      var b = document.createElement("button"); b.type = "button"; b.className = "rw-chip"; b.textContent = q;
+      b.addEventListener("click", function(){ ta.value = q; ta.focus(); });
+      quick.appendChild(b);
+    });
+    wrap.appendChild(quick);
+    wrap.appendChild(ta);
+    var addRow = document.createElement("div"); addRow.className = "rw-add-row";
+    var addBtn = document.createElement("button"); addBtn.className = "mbtn mbtn-accent"; addBtn.id = "rwCommentAddBtn"; addBtn.textContent = "Add comment";
+    var hint = document.createElement("span"); hint.className = "rw-hint"; hint.textContent = "Logged with your name, the date and the time.";
+    addRow.appendChild(addBtn); addRow.appendChild(hint);
+    wrap.appendChild(addRow);
+    addBtn.addEventListener("click", function(){
+      var t = ta.value.trim();
+      if (!t){ showToast("Type a comment first (or tap “Sent to saw”)."); return; }
+      addBtn.disabled = true;
+      rwSubmitComment(row, t).then(function(done){
+        addBtn.disabled = false;
+        if (done){ ta.value = ""; openReworkDetail(row); }
+      });
+    });
+    var lh = document.createElement("h3"); lh.className = "rw-h3"; lh.textContent = "Status log (newest first)";
+    wrap.appendChild(lh);
+    var logEl = document.createElement("div"); logEl.className = "rw-log"; logEl.id = "rwLog";
+    function paintLog(){
+      logEl.innerHTML = "";
+      rwLogFor(row, rwUi.logs[rwRowKey(row)]).forEach(function(l){
+        var li = document.createElement("div"); li.className = "rw-log-row rw-log-" + l.kind;
+        var w = document.createElement("span"); w.className = "rw-log-when"; w.textContent = rwFmt(l.at, true) || "—";
+        var who = document.createElement("span"); who.className = "rw-log-who"; who.textContent = l.by || "";
+        var what = document.createElement("span"); what.className = "rw-log-what"; what.textContent = l.what;
+        li.appendChild(w); li.appendChild(who); li.appendChild(what);
+        logEl.appendChild(li);
+      });
+    }
+    paintLog();
+    wrap.appendChild(logEl);
+    rwBodyEl.appendChild(wrap);
+    rwBodyEl.scrollTop = 0;
+    // fresh read of the comments every time a rework is opened
+    rwReadLog(activeProjectHandle, row).then(function(evs){
+      rwUi.logs[rwRowKey(row)] = evs;
+      if (rwUi.detail === row) paintLog();
+    }, function(){});
+  }
+  function rwSubmitComment(row, text){
+    var nameP = deviceUserName ? Promise.resolve(deviceUserName)
+      : ensureDeviceUserNameForSave("Comments are logged with your name — choose it first (and enter your PIN).");
+    return nameP.then(function(who){
+      return ensureProjectWritePermission().then(function(ok){
+        if (!ok){ showToast("Couldn't get permission to save here — try again."); return false; }
+        return rwAddComment(activeProjectHandle, row, text, who).then(function(ev){
+          var k = rwRowKey(row);
+          rwUi.logs[k] = (rwUi.logs[k] || []).concat([ev]);
+          showToast("Comment added — " + rwFmt(ev.at, true) + ", " + who + ".");
+          return true;
+        });
+      });
+    }).catch(function(err){
+      if (err && err.code === "name_required"){ showToast("A name is needed to add a comment — nothing was saved."); return false; }
+      console.error("Adding a rework comment failed:", err);
+      showToast("Couldn't save that comment — nothing was saved. Try again.");
+      return false;
+    });
+  }
+  function rwShowPhoto(url){
+    var ov = document.createElement("div"); ov.className = "rw-photo-view";
+    var img = document.createElement("img"); img.src = url; img.alt = "Rework photo";
+    ov.appendChild(img);
+    ov.addEventListener("click", function(){ ov.parentNode && ov.parentNode.removeChild(ov); });
+    document.body.appendChild(ov);
+  }
+  function rwShowOnPlan(row){
+    closeReworksScreen();
+    var go = (activeLevelName === row.level && onLevelPlanNow()) ? Promise.resolve() : openLevel(row.level);
+    return go.then(function(){
+      var m = state.objects.filter(function(o){
+        return o.type === "roomlink" && String(o.roomName || "").toLowerCase() === String(row.room).toLowerCase() && String(o.joineryCode || "").toLowerCase() === String(row.code).toLowerCase();
+      })[0];
+      if (!m){ showToast(row.code + " isn't on the " + row.level + " plan."); return; }
+      state.view.scale = Math.max(state.view.scale, 0.6);
+      applyView();
+      recenterViewOn(m.x, m.y);
+      state.selectedId = m.id;
+      renderAll();
+      showToast("Rework " + row.code + " — " + row.room + ".");
+    }).catch(function(err){
+      console.error("Show rework on plan failed:", err);
+      showToast("Couldn't open that level.");
     });
   }
 
@@ -4369,6 +4884,182 @@
     if (idx < 0) return { user: base, stamp: "" };
     return { user: base.slice(0, idx), stamp: base.slice(idx + 3) };
   }
+  /* (v60) Andrew, on v59: "when opening an existing site measure, it's
+     bringing up the popup with the crop plan instead. we need to decipher
+     if the button says create site measure or open site measure based on
+     if there is one existing -- fix this, important."
+     The button already followed "does anyone have a check measure for this
+     item" (checkMeasureKeySet), but opening followed "do *I* have one":
+     with nothing saved under THIS device's name (someone else measured it,
+     or the name on this device isn't the one it was saved under) it was
+     treated as brand new -- plan snapshot, crop popup, empty page. Now
+     opening follows the same rule as the button:
+       - exists (any saved check measure, my own draft, or anyone's
+         unsaved draft)  -> opens it, never the crop popup. The page starts
+         from my draft, else my latest save, else the LATEST SAVE BY ANYONE
+         (the Viewer's rule), else the newest unsaved draft by anyone.
+         Every other save still shows as a layer; my Save becomes my own
+         layer and never touches theirs.
+       - doesn't exist -> create: plan snapshot + crop (unchanged).
+     Names are matched case-insensitively. A folder that can't be read
+     (mid-sync) is retried once and then reported -- never mistaken for
+     "doesn't exist", so it can't fall back to the crop popup either. */
+  function isNotFoundErrSM(err){ return !!(err && (err.name === "NotFoundError" || err.name === "TypeMismatchError" || err.code === 8)); }
+  function listOverlayEntriesIn(dirH){
+    var out = [];
+    var iter = dirH.values();
+    function step(){
+      return iter.next().then(function(res){
+        if (res.done) return out;
+        if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)){
+          var parsed = parseJoineryOverlayFileName(res.value.name);
+          out.push({ fileName: res.value.name, user: parsed.user, stamp: parsed.stamp, handle: res.value });
+        }
+        return step();
+      });
+    }
+    return step().then(function(list){
+      list.sort(function(a, b){ return (a.user + " \u0000 " + a.stamp).localeCompare(b.user + " \u0000 " + b.stamp); });
+      return list;
+    });
+  }
+  function listDraftEntriesIn(dirH){
+    var out = [];
+    var iter = dirH.values();
+    function step(){
+      return iter.next().then(function(res){
+        if (res.done) return out;
+        if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) out.push({ fileName: res.value.name, user: res.value.name.replace(/\.json$/i, ""), handle: res.value });
+        return step();
+      });
+    }
+    return step();
+  }
+  function readJsonFileHandleRetry(fh){
+    function once(){ return readJsonFileHandle(fh).catch(function(){ return null; }); }
+    return once().then(function(d){
+      if (d) return d;
+      return new Promise(function(r){ setTimeout(r, 600); }).then(once);
+    });
+  }
+  function checkMeasureReadFailed(what){
+    var e = new Error("Couldn't read " + what);
+    e.code = "read_failed";
+    return e;
+  }
+  // { exists, overlays[], ownDraft|null, otherDrafts[] } for one item.
+  function readCheckMeasureState(projectHandle, key, user){
+    var mySlugLower = overlayUserSlug(user).toLowerCase();
+    function attempt(){
+      return getJoineryItemDir(projectHandle, key, false).then(function(itemH){
+        var overlaysP = itemH.getDirectoryHandle("overlays", { create: false }).then(listOverlayEntriesIn, function(err){ if (isNotFoundErrSM(err)) return []; throw err; });
+        var draftsP = VIEW_ONLY_MODE ? Promise.resolve([]) : itemH.getDirectoryHandle("drafts", { create: false }).then(listDraftEntriesIn, function(err){ if (isNotFoundErrSM(err)) return []; throw err; });
+        return Promise.all([overlaysP, draftsP]).then(function(r){ return { folder: true, overlays: r[0], drafts: r[1] }; });
+      }, function(err){
+        if (isNotFoundErrSM(err)) return { folder: false, overlays: [], drafts: [] };
+        throw err;
+      });
+    }
+    return attempt().catch(function(){
+      return new Promise(function(r){ setTimeout(r, 600); }).then(attempt);
+    }).catch(function(err){
+      console.error("Reading check measure " + key + " failed:", err);
+      throw checkMeasureReadFailed("this check measure");
+    }).then(function(st){
+      var mine = st.drafts.filter(function(d){ return d.user.toLowerCase() === mySlugLower; })[0] || null;
+      st.otherDrafts = st.drafts.filter(function(d){ return d !== mine; });
+      return (mine ? readJsonFileHandleRetry(mine.handle) : Promise.resolve(null)).then(function(ownDraft){
+        st.ownDraft = ownDraft;
+        st.ownDraftUnreadable = !!(mine && !ownDraft);
+        st.exists = !!(st.overlays.length || mine || st.otherDrafts.length);
+        return st;
+      });
+    });
+  }
+  // Newest readable draft among other people's (by file time).
+  function readNewestDraft(entries){
+    var best = null;
+    var p = Promise.resolve();
+    entries.forEach(function(d){
+      p = p.then(function(){
+        return d.handle.getFile().then(function(file){
+          if (best && file.lastModified <= best.time) return;
+          return file.text().then(function(text){
+            var data = null;
+            try{ data = JSON.parse(text); }catch(e){ data = null; }
+            if (data && typeof data === "object") best = { user: d.user, time: file.lastModified, data: data };
+          });
+        }).catch(function(){});
+      });
+    });
+    return p.then(function(){ return best; });
+  }
+  // Everything the page needs to open, read BEFORE leaving the plan (so a
+  // failure leaves the person where they were).
+  // (v61) Andrew, on v60: "Check measure should always show all check
+  // measures. The point of the user layers is to be able to turn them off
+  // temporarily. Latest always to top." So every saved check measure is a
+  // layer (toggleable), drawn oldest -> newest (newest on top, listed first
+  // in the layers panel). The page itself is:
+  //   - Site Measure, with my own draft or save: my draft / my latest save
+  //     (editable, as before); every OTHER save is a layer.
+  //   - Site Measure with nothing of my own, the Viewer always: the latest
+  //     save's PLAN (background only, no marks) -- every save, the latest
+  //     included, is a layer on top of it. (v60 copied the latest save's
+  //     marks onto the page instead, which hid that save from the layers
+  //     list and duplicated its marks into the next person's save.)
+  //   - only someone's unsaved draft: its plan, with the draft as a layer
+  //     marked "unsaved".
+  function checkMeasureBackgroundOnly(data){
+    return { imageDataURL: data.imageDataURL || null, imageTiles: data.imageTiles || null, imageW: data.imageW, imageH: data.imageH,
+      fileBase: data.fileBase, objects: [], style: data.style };
+  }
+  function loadCheckMeasureBase(projectHandle, key){
+    return readCheckMeasureState(projectHandle, key, deviceUserName).then(function(st){
+      var overlays = st.overlays;
+      var mySlugLower = overlayUserSlug(deviceUserName).toLowerCase();
+      function latest(list){ var b = null; list.forEach(function(o){ if (!b || o.stamp > b.stamp) b = o; }); return b; }
+      var baseEntry = null, bgEntry = null, startedFrom = null;
+      if (!VIEW_ONLY_MODE) baseEntry = latest(overlays.filter(function(o){ return String(o.user).toLowerCase() === mySlugLower; }));
+      var mineOnPage = !VIEW_ONLY_MODE && (st.ownDraft || baseEntry);
+      if (!mineOnPage){
+        bgEntry = latest(overlays);
+        if (bgEntry && !VIEW_ONLY_MODE) startedFrom = { kind: "layers", user: bgEntry.user, stamp: bgEntry.stamp };
+      }
+      var others = overlays.filter(function(o){ return o !== baseEntry; }).sort(function(a, b){
+        return (a.stamp || "").localeCompare(b.stamp || "") || String(a.user).localeCompare(String(b.user));
+      });
+      var res = { exists: st.exists, ownDraft: st.ownDraft, baseEntry: baseEntry, baseData: null, startedFrom: startedFrom, otherEntries: others };
+      if (st.ownDraft) return res;
+      if (baseEntry){
+        return readJsonFileHandleRetry(baseEntry.handle).then(function(data){
+          if (!data) throw checkMeasureReadFailed("the saved check measure");
+          res.baseData = data;
+          return res;
+        });
+      }
+      if (bgEntry){
+        return readJsonFileHandleRetry(bgEntry.handle).then(function(data){
+          if (!data) throw checkMeasureReadFailed("the saved check measure");
+          res.baseData = checkMeasureBackgroundOnly(data);
+          bgEntry.data = data; // its layer reuses this read instead of reading the file twice
+          return res;
+        });
+      }
+      if (st.ownDraftUnreadable) throw checkMeasureReadFailed("your autosaved check measure");
+      if (!VIEW_ONLY_MODE && st.otherDrafts.length){
+        return readNewestDraft(st.otherDrafts).then(function(d){
+          if (!d) throw checkMeasureReadFailed("this check measure");
+          res.baseData = checkMeasureBackgroundOnly(d.data);
+          res.otherEntries = res.otherEntries.concat([{ user: d.user, stamp: "", unsaved: true, fileName: d.user + ".json", data: d.data }]);
+          res.startedFrom = { kind: "draft", user: d.user };
+          return res;
+        });
+      }
+      return res;
+    });
+  }
+
   /* (v57) Foreground first. While the person is opening a check measure
      (fgBegin/fgEnd), background scans stop starting new storage calls, and
      they never have more than 3 in flight anyway -- Android's storage
@@ -4502,9 +5193,9 @@
   // (without navigating away from whatever's open) rather than just
   // pointing the person at the startup screen's own selector and rejecting
   // outright -- see the README changelog for why.
-  function ensureDeviceUserNameForSave(){
+  function ensureDeviceUserNameForSave(msg){
     if (deviceUserName) return Promise.resolve(deviceUserName);
-    showToast("Every Site Measure save needs a name first, so others can tell whose layer is whose.");
+    showToast(msg || "Every Site Measure save needs a name first, so others can tell whose layer is whose.");
     return showRenameDialog("", "Your name — checked against utzline-users.csv (or set any time from the Projects screen's own name selector):", "Continue").then(function(rawName){
       if (rawName === null) return Promise.reject({ code: "name_required" });
       var clean = sanitizeUserName(rawName);
@@ -5086,9 +5777,11 @@
       if (activeJoineryItemPage !== page){ end(); return Promise.resolve(); }
       if (i >= entries.length){ end(); if (perf && entries.length) perf.addLate("other people's layers drawn (" + entries.length + ")"); return Promise.resolve(); }
       var entry = entries[i++];
-      return readJsonFileHandle(entry.handle).then(function(data){
+      var dataP = entry.data ? Promise.resolve(entry.data) : readJsonFileHandle(entry.handle);
+      entry.data = null; // (v61) drop the preloaded copy once handed over (4 GB tablets)
+      return dataP.then(function(data){
         if (activeJoineryItemPage !== page) return;
-        page.layers.push({ user: entry.user, stamp: entry.stamp, fileName: entry.fileName, visible: true, objects: (data && data.objects) || [] });
+        page.layers.push({ user: entry.user, stamp: entry.stamp, fileName: entry.fileName, unsaved: !!entry.unsaved, visible: true, objects: (data && data.objects) || [] });
         renderOverlayLayers(); // (v56) appends just this layer -- see renderOverlayLayers
         renderOverlayLayersPanel();
       }, function(err){
@@ -5135,16 +5828,13 @@
     var perf = cmPerfStart([activeLevelName, obj.roomName, obj.joineryCode].filter(Boolean).join(" · "));
     var preKey = resolveJoineryItemPageKey(activeLevelName, obj);
     var wantSnapshot = !VIEW_ONLY_MODE && onLevelPlanNow() && firstOpenSnapshotMode !== "off";
-    var preloadP = Promise.all([
-      listJoineryOverlays(activeProjectHandle, preKey),
-      VIEW_ONLY_MODE ? Promise.resolve(null) : readJoineryDraft(activeProjectHandle, preKey, deviceUserName)
-    ]);
+    // (v60) One rule, same as the button -- see loadCheckMeasureBase.
+    var preloadP = loadCheckMeasureBase(activeProjectHandle, preKey);
     var firstOpenSnapshotP = preloadP.then(function(pre){
-      perf.mark("read this item's saved layers list + your draft");
-      if (!wantSnapshot || pre[1]) return null;
-      var mySlug = overlayUserSlug(deviceUserName);
-      var hasMine = pre[0].some(function(o){ return o.user === mySlug; });
-      return hasMine ? null : safeRenderPlanViewSnapshotForItem();
+      perf.mark(pre.exists ? "read the check measure (layers list, drafts, the save it opens from)" : "checked: no check measure yet");
+      if (pre.exists && checkMeasureKeySet) checkMeasureKeySet.add(preKey);
+      if (!wantSnapshot || pre.exists) return null;
+      return safeRenderPlanViewSnapshotForItem();
     });
     showToast("Opening check measure…");
     return firstOpenSnapshotP.then(function(snap){
@@ -5180,101 +5870,39 @@
       return Promise.all([
         getFlatPdfsDir(activeProjectHandle, create).catch(function(){ return null; }),
         getFlatBackupsDirForLevel(activeProjectHandle, key, create).catch(function(){ return null; }),
-        sameKey ? preloadP.then(function(pre){ return pre[0]; }) : listJoineryOverlays(activeProjectHandle, key),
-        // The Viewer never has a device identity of its own worth reading a
-        // draft for -- it never writes anything, ever (VIEW_ONLY_MODE), so
-        // there's no "my own in-progress work" concept to load for it at
-        // all; see the VIEW_ONLY_MODE branch just below.
-        VIEW_ONLY_MODE ? Promise.resolve(null) : (sameKey ? preloadP.then(function(pre){ return pre[1]; }) : readJoineryDraft(activeProjectHandle, key, deviceUserName))
+        sameKey ? preloadP : loadCheckMeasureBase(activeProjectHandle, key)
       ]).then(function(results){
-        var pdfsHandle = results[0], backupsHandle = results[1], overlays = results[2], ownDraft = results[3];
-        // (v45.12, 2026-09-24) Andrew, verbatim, on why v45.11's fix still
-        // wasn't enough: "still not working, every site measure save needs
-        // to be added as an extra layer, using the username and datetime in
-        // the filename. this is to eliminate any risk of deletion...alll
-        // username layers need to be accessible regardless of who is using
-        // the viewer." Every permanent Save already WAS its own immutable,
-        // username+datetime-stamped file on disk (see listJoineryOverlays'
-        // own comment) -- nothing was ever at risk of deletion. The actual
-        // bug was right here: this code used to collapse straight to each
-        // user's single newest overlay (an old `latestByUser` map, one slot
-        // per username, later entries silently overwriting earlier ones),
-        // so anyone's OWN earlier Saves -- and, on the Viewer, anyone's
-        // earlier Saves at all -- were quietly dropped from the layer list
-        // and never offered as a toggle, even though the files themselves
-        // were sitting right there untouched. That's "only gives you one
-        // name to exclude" exactly: with two people each saving twice, the
-        // old code could only ever show two layers total, not four.
-        //
-        // Fixed by keeping every single overlay file as its own distinct
-        // layer -- the only entry ever left out is the exact file used to
-        // seed the base/editable view below, matched by the entry itself
-        // (object identity), never by which user it belongs to. Every
-        // OTHER overlay -- including a user's own older Saves -- is now a
-        // toggleable reference layer, labelled "username — date" by
-        // renderOverlayLayersPanel exactly as before (that rendering code
-        // was already correct; only the list feeding it was too narrow).
-        var baseEntry = null; // whichever overlay (if any) becomes the non-toggleable base view
-        if (!VIEW_ONLY_MODE){
-          // Site Measure itself: "my own" MOST RECENT Save is always the
-          // base, editable layer -- everyone else's Saves, and any of my
-          // OWN older ones, are all toggleable reference layers.
-          var mySlug = overlayUserSlug(deviceUserName);
-          overlays.forEach(function(o){
-            if (o.user === mySlug && (!baseEntry || o.stamp > baseEntry.stamp)) baseEntry = o;
-          });
-        } else {
-          // The Viewer has no "own" layer to prefer -- picks the single
-          // most recent overlay across EVERYONE as the base view, per the
-          // interim "most-recent-layer-wins" placeholder rule (the real
-          // "official layer" picker is still a separate, not-yet-built
-          // piece meant to live in UTZLINE Projects). Every OTHER overlay,
-          // from every user and every earlier Save, is still offered as a
-          // toggleable reference layer underneath it.
-          // Compares stamps ALONE, never the user-name prefix -- the stamp
-          // is the only part that actually encodes chronological order
-          // (fixed-width, zero-padded, left-to-right), so comparing
-          // "user + stamp" here would have sorted by whoever's NAME comes
-          // later alphabetically whenever two different users' timestamps
-          // landed on opposite sides of their names' own alphabetical
-          // order -- a real bug caught before it shipped, not a real-world
-          // report.
-          overlays.forEach(function(o){
-            if (!baseEntry || o.stamp > baseEntry.stamp) baseEntry = o;
-          });
-        }
-        var otherEntries = overlays.filter(function(o){ return o !== baseEntry; }).sort(function(a, b){
-          return (a.user + " \u0000 " + a.stamp).localeCompare(b.user + " \u0000 " + b.stamp);
-        });
-        // (v54, speed) Other people's layers no longer hold the page back:
-        // each is a full JSON file (photos as base64 included), and with
-        // every Save kept as its own layer (v45.12) an item can have many.
-        // The page opens as soon as the base view is read; the layers are
-        // read one at a time afterwards (one file in memory being parsed
-        // at a time on a 4 GB tablet, not all at once) and drawn as they
-        // arrive -- still all visible by default (v52).
-        var pendingLayerEntries = otherEntries;
-        // My own draft (if any) always wins over my own last permanent
-        // Save -- it's strictly newer work-in-progress by definition (a
-        // draft only ever gets written AFTER whatever overlay preceded it,
-        // and gets deleted the moment a fresh Save supersedes it -- see
-        // saveJoineryItemPageFile). Only read the base overlay file at all
-        // when there's no draft to prefer instead, to avoid an unneeded
-        // read on the common "opened, Saved, came back later" path. Never
-        // applies to the Viewer, which has no draft at all (see above).
-        var basePromise = ownDraft ? Promise.resolve(null) : (baseEntry ? readJsonFileHandle(baseEntry.handle) : Promise.resolve(null));
-        return basePromise.then(function(baseData){
-          perf.mark("your own last save read");
+        var pdfsHandle = results[0], backupsHandle = results[1], pre = results[2];
+        var ownDraft = pre.ownDraft;
+        // (v45.12) Every save is its own layer; the only entry left out is
+        // the one the page itself opened from (pre.baseEntry, matched by the
+        // entry itself). (v54) Other layers load after the page opens, one
+        // at a time. (v60) Which one the page opens from: see
+        // loadCheckMeasureBase -- my draft, my latest save, else the latest
+        // save by anyone (Site Measure); the latest save by anyone (Viewer).
+        var pendingLayerEntries = pre.otherEntries;
+        return Promise.resolve(pre.baseData).then(function(baseData){
+          perf.mark("the save it opens from is ready");
           activeJoineryItemPage = {
             levelName: levelName, roomName: roomName, joineryCode: joineryCode,
             key: key, displayName: displayName,
             pdfsHandle: pdfsHandle, backupsHandle: backupsHandle,
-            layers: [], pendingLayerCount: pendingLayerEntries.length, ownHasDraft: !!ownDraft
+            layers: [], pendingLayerCount: pendingLayerEntries.length, ownHasDraft: !!ownDraft,
+            startedFrom: pre.startedFrom
           };
           loadOtherLayersInBackground(activeJoineryItemPage, pendingLayerEntries, perf);
           var saved = ownDraft || baseData;
           if (savedHasImage(saved)){
             applyRestoredState(saved);
+            return;
+          }
+          // (v60) It exists but what it opens from has no plan image of its
+          // own (shouldn't happen) -- still never the crop popup for an
+          // existing check measure: a plain page, with whatever marks it has.
+          if (pre.exists){
+            startBlankPlan(displayName);
+            if (saved && Array.isArray(saved.objects)) state.objects = saved.objects;
+            unsavedSinceLastSave = false; backupDirty = false;
             return;
           }
           // Very first open of this item (nothing saved by anyone yet):
@@ -5346,14 +5974,24 @@
       perf.finish();
       var otherLayerCount = activeJoineryItemPage.pendingLayerCount || (activeJoineryItemPage.layers || []).length;
       var layerNote = otherLayerCount
-        ? " " + otherLayerCount + " other saved layer" + (otherLayerCount === 1 ? "" : "s") + " on this item — tap the layers-with-a-badge icon in the toolbar above to view/toggle."
+        ? " " + otherLayerCount + " " + ((activeJoineryItemPage.startedFrom && !activeJoineryItemPage.ownHasDraft) || VIEW_ONLY_MODE ? "" : "other ") + "saved layer" + (otherLayerCount === 1 ? "" : "s") + " on this item — tap the layers-with-a-badge icon in the toolbar above to hide any of them for a moment."
         : "";
-      showToast((activeJoineryItemPage.ownHasDraft
+      var sf = activeJoineryItemPage.startedFrom;
+      var openedMsg = activeJoineryItemPage.ownHasDraft
         ? "Opened “" + activeJoineryItemPage.displayName + "” — continuing your unsaved autosaved changes. Hit Save to make this a permanent, shared layer."
-        : "Opened “" + activeJoineryItemPage.displayName + "”.") + layerNote,
-        otherLayerCount ? 7000 : undefined);
+        : (sf && sf.kind === "layers" && !VIEW_ONLY_MODE)
+          ? "Opened “" + activeJoineryItemPage.displayName + "” — every saved check measure is shown as a layer, newest (" + sf.user + ", " + formatOverlayStamp(sf.stamp) + ") on top. What you draw is yours; when you Save it becomes your own layer."
+          : (sf && sf.kind === "draft")
+            ? "Opened “" + activeJoineryItemPage.displayName + "” — " + sf.user + "'s unsaved work is shown as a layer (they haven't pressed Save yet). When you Save, yours becomes your own layer."
+            : "Opened “" + activeJoineryItemPage.displayName + "”.";
+      showToast(openedMsg + layerNote, (otherLayerCount || sf) ? 7000 : undefined);
     }).catch(function(err){
       if (err && err.code === "nav_cancelled") return; // declined the save-before-leaving confirm -- just stay put
+      if (err && err.code === "read_failed"){
+        // (v60) Read before leaving the plan, so nothing has changed.
+        showToast(err.message + " (still syncing?) — nothing was changed. Try again in a moment.", 7000);
+        return;
+      }
       console.error("Open joinery item page failed:", err);
       showToast("Couldn't open that joinery item — try again.");
     });
@@ -5615,7 +6253,7 @@
     activeJoineryItemReworkEntries = [];
     // (v53, speed) Only touch storage when the background scan says this
     // item actually has a rework file -- see reworkFileKeySet.
-    if (obj.roomName && itemMayHaveReworkFile(activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat)){
+    if (VIEW_ONLY_MODE && obj.roomName && itemMayHaveReworkFile(activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat)){ // (v60) Viewer only
       readItemReworkEntries(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat).then(function(entries){
         if (activeJoineryItemMarker !== obj) return; // dialog moved on to a different item/closed meanwhile
         var openEntries = openReworkEntriesOf(entries);
@@ -5643,8 +6281,7 @@
   joineryItemViewReworkBtn.addEventListener("click", function(){
     if (!activeJoineryItemMarker) return;
     var obj = activeJoineryItemMarker;
-    var title = "Rework" + (obj.joineryCode ? " — " + obj.joineryCode : "") + (obj.roomName ? " (" + [activeLevelName, obj.roomName].filter(Boolean).join(" · ") + ")" : "");
-    openReworkViewForItem(title, activeJoineryItemReworkEntries);
+    openReworksScreen({ level: activeLevelName, room: obj.roomName, code: obj.joineryCode || "" }); // (v61)
   });
 
   /* ============================== Job note dialogs (2026-09-22) ==============================
@@ -7787,7 +8424,7 @@
     joineryStatusRefreshP = Promise.all([
       readJoineryStatuses(activeProjectHandle),
       listShopDrawingKeys(activeProjectHandle),
-      listReworkFileKeys(activeProjectHandle), // v53 speed -- see reworkFileKeySet
+      VIEW_ONLY_MODE ? listReworkFileKeys(activeProjectHandle) : Promise.resolve([]), // v53 speed; (v60) rework is Viewer-only, so Site Measure skips the listing
       listCheckMeasureKeys(activeProjectHandle) // v54 -- see checkMeasureKeySet (v55: the Viewer uses it too)
     ]).then(function(res){
       if (joineryStatusCacheProject !== projectName) return; // project changed under us
@@ -9891,13 +10528,12 @@
       });
     }
     // (v55) Moved here from the old in-between Joinery Item dialog.
-    if (isRealObject && obj.type === "roomlink" && obj.roomName && reworkFileKeySet && itemMayHaveReworkFile(activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat)){
+    // (v60) Viewer only -- Andrew: "the view rework does not need to be in site measure app, remove it".
+    if (VIEW_ONLY_MODE && isRealObject && obj.type === "roomlink" && obj.roomName && reworkFileKeySet && itemMayHaveReworkFile(activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat)){
       popoverRow(box, JOBNOTE_ICON + "<span class=\"popover-rework-label\">View rework</span>", function(){
         hideLockPopover();
         var title = "Rework" + (obj.joineryCode ? " \u2014 " + obj.joineryCode : "") + (obj.roomName ? " (" + [activeLevelName, obj.roomName].filter(Boolean).join(" \u00b7 ") + ")" : "");
-        readItemReworkEntries(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat).then(function(entries){
-          openReworkViewForItem(title, entries);
-        }).catch(function(){ showToast("Couldn't read rework data \u2014 try again."); });
+        openReworksScreen({ level: activeLevelName, room: obj.roomName, code: obj.joineryCode || "" }); // (v61)
       });
     }
     if (isRealObject && obj.type === "roomlink" && !activeLevelIsFlat && obj.roomName){
@@ -10787,7 +11423,9 @@
       overlayLayersList.appendChild(empty);
       return;
     }
-    layers.forEach(function(layer){
+    // (v61) "Latest always to top": layers are drawn oldest -> newest (the
+    // newest on top), so the list runs newest-first to match.
+    layers.slice().reverse().forEach(function(layer){
       var row = document.createElement("div");
       row.className = "layer-row";
       var cb = document.createElement("input");
@@ -10799,7 +11437,7 @@
       });
       row.appendChild(cb);
       var lab = document.createElement("span"); lab.className = "layer-label";
-      lab.textContent = (layer.user || "Unnamed") + " — " + formatOverlayStamp(layer.stamp);
+      lab.textContent = (layer.user || "Unnamed") + " — " + (layer.unsaved ? "unsaved (not saved yet)" : formatOverlayStamp(layer.stamp));
       row.appendChild(lab);
       overlayLayersList.appendChild(row);
     });
@@ -11667,10 +12305,13 @@
   // own comment). Available in BOTH Site Measure and the Viewer, unlike the
   // PDF-export buttons above, since listing is not a write action.
   var viewProjectReworkBtn = document.getElementById("viewProjectReworkBtn");
+  // (v60) Viewer only -- Andrew: "the view rework does not need to be in
+  // site measure app, remove it". Hidden in Site Measure by the
+  // body:not(.viewer-mode) CSS rule; the click is refused there too.
   if (viewProjectReworkBtn){
     viewProjectReworkBtn.addEventListener("click", function(){
-      if (!activeProjectHandle) return;
-      openReworkViewForProject();
+      if (!activeProjectHandle || !VIEW_ONLY_MODE) return;
+      openReworksScreen(null); // (v61)
     });
   }
   // Steps back out to the top-level project list without opening a level --
@@ -15450,7 +16091,8 @@
     // read-only functions actually call.
     makeFakeDirHandleForTest: function(node, name){
       node = node || {};
-      var dirs = node.dirs || {}, files = node.files || {};
+      // (v61) create:true now supported (Viewer rework comments write new files)
+      var dirs = node.dirs || (node.dirs = {}), files = node.files || (node.files = {});
       function wrapFile(fname, fnode){
         // createWritable/close (2026-09-27, added for the (since removed) Sub Orders
         // write-back test) actually mutate fnode.text in place -- a
@@ -15489,10 +16131,12 @@
         kind: "directory", name: name || "",
         getDirectoryHandle: function(n, opts){
           if (dirs[n]) return Promise.resolve(window.__testHooks.makeFakeDirHandleForTest(dirs[n], n));
+          if (opts && opts.create){ dirs[n] = { dirs: {}, files: {} }; return Promise.resolve(window.__testHooks.makeFakeDirHandleForTest(dirs[n], n)); }
           return Promise.reject(new DOMException("Not found", "NotFoundError"));
         },
         getFileHandle: function(n, opts){
           if (files[n]) return Promise.resolve(wrapFile(n, files[n]));
+          if (opts && opts.create){ files[n] = { text: "" }; return Promise.resolve(wrapFile(n, files[n])); }
           return Promise.reject(new DOMException("Not found", "NotFoundError"));
         },
         values: function(){
@@ -15517,6 +16161,7 @@
     // read-only functions/the joinery-item dialog rely on.
     setFakeProjectForTest: function(tree, opts){
       opts = opts || {};
+      window.__lastFakeProjectTree = tree;
       activeProjectHandle = window.__testHooks.makeFakeDirHandleForTest(tree, opts.projectName || "Test Project");
       activeProjectName = opts.projectName || "Test Project";
       activeLevelName = opts.levelName || "L1";
@@ -15578,10 +16223,15 @@
       if (btn) btn.click();
       return new Promise(function(resolve){ setTimeout(resolve, 50); });
     },
-    reworkViewBackdropHidden: function(){ return reworkViewBackdrop.hidden; },
-    reworkViewListText: function(){ return reworkViewListEl.textContent; },
-    reworkViewTitleText: function(){ return reworkViewTitleEl.textContent; },
-    closeReworkViewForTest: function(){ closeReworkView(); },
+    // (v61) these now describe the Reworks screen that replaced the old dialog
+    reworkViewBackdropHidden: function(){ return rwScreen.hidden; },
+    reworkViewListText: function(){ return rwBodyEl.textContent; },
+    reworkViewTitleText: function(){ return rwTitleEl.textContent; },
+    closeReworkViewForTest: function(){ closeReworksScreen(); },
+    openReworksScreenForTest: function(filter){ return openReworksScreen(filter || null); },
+    setDeviceUserNameDirectForTest: function(n){ deviceUserName = n || ""; },
+    fakeProjectTreeForTest: function(){ return window.__lastFakeProjectTree || null; },
+    reworkRowsForTest: function(){ return rwUi.rows.map(function(r){ return { level: r.level, room: r.room, code: r.code, id: r.entry.id, delivered: rwIsDelivered(r.entry) }; }); },
     closeJoineryItemDialogForTest: function(){ closeJoineryItemDialog(); },
     // Reads any plain-text file under activeProjectHandle by an explicit
     // directory-segment path, for asserting on the real Orders/*.json (and

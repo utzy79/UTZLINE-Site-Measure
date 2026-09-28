@@ -1197,7 +1197,10 @@
 // measure (event cache, 3-at-a-time queue that yields to the foreground).
 // v58 (2026-09-27): "Schedule Backups" folder hidden from the project list.
 // v59 (2026-09-28): measure number pad with quick text; defaults text 18 / weight 2.
-var CACHE_NAME = "utzline-sitemeasure-cache-v59";
+// v60 (2026-09-28): opening an existing check measure never shows the crop popup; View rework Viewer-only.
+// v61 (2026-09-28): every check measure is a layer (newest on top); Viewer Reworks screen with comments.
+// v62 (2026-09-28): button reads "Create site measure" / "Open site measure".
+var CACHE_NAME = "utzline-sitemeasure-cache-v62";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

@@ -1,10 +1,54 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v59** (bump this line, and add a dated changelog
+**Current version: v62** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v62 (2026-09-28):** Button wording. Asked whether to change to "Create / Open site measure" or keep "Add / Open check measure", Andrew answered *"Stay"*, then *"Actually. Create"*.
+- The joinery item's button and its long-press row now read **Create site measure** when there isn't one yet and **Open site measure** when there is. The rule for which one shows hasn't changed. The Viewer always says "Open site measure", and the Timings panel title matches.
+- Nothing else is renamed. "Mark as check measured" stays as it is because it's a joinery status.
+- Tests updated for the new labels.
+
+**v61 (2026-09-28):** Two requests from Andrew.
+
+1. **All check measures are layers.** Andrew: *"Check measure should always show all check measures. The point of the user layers is to be able to turn them off temporarily. Latest always to top."*
+   - Every saved check measure is now a toggleable layer, drawn oldest to newest so the newest is on top. The layers panel lists newest first.
+   - Site Measure with your own draft or save: that's your editable page (as before), and every other save is a layer.
+   - Nothing of your own (and always in the Viewer): the page is the latest save's plan with no marks, and **every** save, the latest included, is a layer.
+     - v60 copied the latest save's marks onto your page instead. That hid that save from the layers list and duplicated its marks into your next save.
+     - That save's file is read once and reused for its layer.
+   - If there's only someone's unsaved draft, it shows as a layer marked "unsaved".
+2. **Viewer: Reworks screen.** Andrew: *"view rework in viewer app should open the reworks, and allow comments to be added like sent to saw with user time date logging. it needs to be like the photo"*, *"reworks that are delivered to be green border / text and sent to bottom of page (maybe a separate selectable delivered folder)"*, then *"Do the viewer rework also"*.
+   - View rework (project menu, the item dialog, and the long-press row) opens a full screen like Install ITP's Outstanding reworks page.
+   - Outstanding reworks are grouped by level and room, newest first. Each card shows the code and cabinet, a state pill (Logged / Cut / Manufactured), who logged it and when, the text, the latest comment, and **Show on plan** / **Open rework**.
+   - Delivered and closed-out reworks sit in a separate **Delivered (N)** section at the bottom, tap to open, with a green border and text.
+   - **Open rework** shows the photos (tap to enlarge) and the whole status log, newest first: logged, every state change, delivered, closed out, and every comment, each with name, date and time.
+   - **Add a comment**, with a "Sent to saw" quick pick, needs a name and PIN.
+   - Each comment is its own new file, named by who and when, in a log folder beside the rework file:
+     - flat projects: `Project Saves/UTZLINE ITP/Install ITP Rework Log/<Level> - <Room> - <Code>/<name> - <date time> - comment.json`
+     - legacy projects: `itp-install-rework/<Level>/<Room>/<Code> log/…`
+   - The shared rework file (which Install ITP and Delivery ITP rewrite whole) is never written, so comments can't cause OneDrive conflict copies. Install ITP, Delivery ITP and the rework PDFs pick these comments up in their own parts of the rework round.
+- Tests:
+  - New: `run_v61_viewer_reworks.js`.
+  - Updated for all-layers: `run_v60_open_existing.js`, `run_v54_check_measure.js`, `run_layers_discoverability_fix.js`, `run_joinery_item_dialog.js`.
+  - The built-app fake folders can now create files. The full suite passes.
+
+**v60 (2026-09-28) — important fix:** Andrew, on v59: *"when opening an existing site measure, it's bringing up the popup with the crop plan instead. we need to decipher if the button says create site measure or open site measure based on if there is one existing -- fix this important"*, and *"the view rework does not need to be in site measure app, remove it"*.
+
+- **Cause:** the button followed "does anyone have a check measure for this item" (`checkMeasureKeySet`), but opening followed "does *this device's name* have one". So an item someone else measured, or one saved under a different name on this device, was treated as brand new: plan snapshot, crop popup and an empty page.
+- **Fix: one rule for both** (`loadCheckMeasureBase` / `readCheckMeasureState`, read before leaving the plan):
+  - **Exists** (any saved check measure, my draft, or anyone's unsaved draft): it opens straight in, with no crop popup. The page starts from my draft, else my latest save, else the latest save by anyone, else the newest unsaved draft by anyone. A toast says whose it opened from. Every other save is still a layer, and my Save becomes my own new layer without changing theirs.
+  - **Doesn't exist:** "Add check measure", plan snapshot and crop, as before.
+  - Names on this device are matched case-insensitively.
+  - A folder that can't be read (mid-sync) is retried once, then reported with "still syncing? — nothing was changed" while you stay on the plan. It's never mistaken for "doesn't exist", so it can't fall back to the crop popup.
+- **View rework is Viewer-only now:** the long-press row, the item dialog button and the project menu button are gone from Site Measure. Site Measure also skips the rework listing in its background scan.
+- Timings step names changed ("read the check measure …", "the save it opens from is ready").
+- Tests:
+  - New: `run_v60_open_existing.js` (someone else's save, own save after saving, case-insensitive name, other person's draft only, brand new, unreadable folder, no View rework).
+  - Updated for the new behaviour: `run_v54_check_measure.js`, `run_layers_discoverability_fix.js`, `run_v53_dialog_speed.js`, `run_viewer_fixes_and_rework.js`.
+  - The full Site Measure/Viewer suite passes.
 
 **v59 (2026-09-28):** Andrew, after field testing: *"Ok field tested and pretty good. Site measure app need to popup a small number pad when typing a measure. This to also have quick text like ctr, ftc, bhead, oall, text to be reduced to 18 and line weight to 2 as default."*
 
