@@ -1,10 +1,14 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v62** (bump this line, and add a dated changelog
+**Current version: v63** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v63 (2026-09-28):** Rework round. Andrew asked for every rework change to be its own file (*"also need to fix this rework conflict"*), a status log per rework, and *"reworks that are delivered to be green border / text and sent to bottom of page"*. The other apps now write each change as its own small file in the item's rework log folder, and this build reads them.
+- The shared rework code (`shared/utzline-rework.js`, `window.UtzRework`) is now pasted into `source.html` by `shared/sync_rework_module.py`. Never edit that block by hand. Site Measure itself doesn't use it: rework stays Viewer-only (v60).
+- The Viewer part is in the Viewer README.
 
 **v62 (2026-09-28):** Button wording. Asked whether to change to "Create / Open site measure" or keep "Add / Open check measure", Andrew answered *"Stay"*, then *"Actually. Create"*.
 - The joinery item's button and its long-press row now read **Create site measure** when there isn't one yet and **Open site measure** when there is. The rule for which one shows hasn't changed. The Viewer always says "Open site measure", and the Timings panel title matches.

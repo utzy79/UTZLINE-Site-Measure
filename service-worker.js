@@ -1200,7 +1200,8 @@
 // v60 (2026-09-28): opening an existing check measure never shows the crop popup; View rework Viewer-only.
 // v61 (2026-09-28): every check measure is a layer (newest on top); Viewer Reworks screen with comments.
 // v62 (2026-09-28): button reads "Create site measure" / "Open site measure".
-var CACHE_NAME = "utzline-sitemeasure-cache-v62";
+// v63 (2026-09-28): Viewer Reworks screen folds the rework event files (shared UtzRework module).
+var CACHE_NAME = "utzline-sitemeasure-cache-v63";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
