@@ -1206,7 +1206,8 @@
 // v66 (2026-09-29): the "⏱ Timings" button and its list removed (nothing stored any more); pdf.js worker is the local copy.
 // v67 (2026-09-29): RC 1.0 -- the version is shown as RC 1.0, with a small "RC 1.0" tag on the logo.
 // v68 (2026-09-29): RC 1.0 -- "Site measure not required"; the saved copy's title block is rows that scale; Yes/No "Mark check measure complete?"; inserted PDF pages can be cropped.
-var CACHE_NAME = "utzline-sitemeasure-cache-v68";
+// v69 (2026-09-29): RC 1.0 -- "Projects on this device": pick the jobs this device works on; sync help; get ready for offline.
+var CACHE_NAME = "utzline-sitemeasure-cache-v69";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

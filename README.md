@@ -1,10 +1,20 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v68 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v69 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v69 (2026-09-29) — RC 1.0: Projects on this device.** Andrew: *"the onsite apps need an option fo rthe user to pick the projectas they are working on to minimise the syunc on their device"*.
+
+- **Plan markers 20% smaller.** Andrew: *"on he next projects update, make the indicator dots about 20% smaller (and the icons)"*. Every marker dot on a plan, and the status icon over it, is drawn at 0.8 × its saved size. This matches UTZLINE Projects v42. Nothing saved changes, and tapping a marker still uses the full size.
+- **Projects on this device.** The project list has a new bar at the top: **Choose my projects**. Tick the one or two jobs this device is working on. Then:
+  - Only those are listed. The rest sit behind **Show the other N projects**, and the app reads nothing from them. On a Windows tablet with OneDrive, an online-only job is never downloaded by this app.
+  - **How to sync only these** says exactly what to keep on the device: the files in the main folder itself (names & PINs, logo) and each ticked job. It covers OneDrive on Windows (Always keep on this device / Free up space) and OneSync / Dropsync on Android (sync only those folders).
+  - **Get ready for offline** opens every file in the ticked jobs, plus the names & PINs list. Anything online-only is downloaded while there's internet. Anything that won't open is listed. The bar then shows "✓ Ready for offline — checked today 09:15".
+  - A ticked job that isn't on the device shows as **not on this device yet**, not just missing.
+  - The choice is kept on this device, per main folder, under the same key in every UTZLINE app. Nothing is written to the Projects folder. **Show all projects** in the chooser goes back to the full list.
 
 **v68 (2026-09-29) — RC 1.0.**
 

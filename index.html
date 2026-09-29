@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v68">
+<link rel="manifest" href="./manifest.json?v=v69">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v68">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v68">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v69">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v69">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1186,6 +1186,34 @@
     --accent-ink:#99d6ff;
     --accent-soft:#1c2d3a;
   }
+/* (v69) Projects on this device -- see deviceProjects in the script */
+.dp-bar{ background:var(--surface-1); border:1px solid var(--border-strong); border-left:4px solid var(--accent); border-radius:10px; padding:10px 12px; margin:0 0 12px; display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.dp-bar[hidden]{ display:none !important; }
+.dp-bar .dp-text{ flex:1 1 260px; font-size:13.5px; color:var(--text-primary); line-height:1.45; }
+.dp-bar .dp-actions{ display:flex; flex-wrap:wrap; gap:6px; }
+.dp-bar .dp-actions .mbtn{ padding:7px 11px; font-size:12.5px; }
+.dp-bar .dp-ready{ flex:1 1 100%; font-size:12.5px; }
+.dp-ok{ color:#15803d; } .dp-bad{ color:var(--danger); }
+.dp-missing{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; padding:11px 14px; margin:0 0 8px; border:1px dashed var(--border-strong); border-radius:10px; color:var(--text-secondary); background:var(--surface-0); }
+.dp-missing-name{ font-weight:600; color:var(--text-primary); }
+.dp-missing-note{ font-size:12.5px; }
+.dp-toggle{ display:block; width:100%; text-align:left; margin:4px 0 8px; padding:10px 14px; border:1px dashed var(--border-strong); border-radius:10px; background:transparent; color:var(--text-secondary); font:inherit; font-size:13px; cursor:pointer; touch-action:manipulation; }
+.dp-back{ position:fixed; inset:0; z-index:2000; background:rgba(15,20,18,.55); display:flex; align-items:center; justify-content:center; padding:14px; }
+.dp-card{ background:var(--surface-1); color:var(--text-primary); border-radius:14px; box-shadow:var(--shadow); width:100%; max-width:560px; max-height:calc(100vh - 28px); overflow:auto; padding:18px 18px 14px; font-size:14px; line-height:1.45; }
+.dp-card h3{ margin:0 0 8px; font-size:17px; }
+.dp-card p{ margin:0 0 10px; } .dp-card ul{ margin:0 0 10px; padding-left:20px; } .dp-card li{ margin:0 0 4px; }
+.dp-hint{ color:var(--text-secondary); font-size:13px; }
+.dp-search{ width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--border-strong); border-radius:8px; font:inherit; margin:0 0 8px; background:var(--surface-0); color:var(--text-primary); }
+.dp-checks{ max-height:46vh; overflow:auto; border:1px solid var(--surface-2); border-radius:10px; margin:0 0 12px; }
+.dp-check{ display:flex; align-items:center; gap:10px; padding:11px 12px; border-bottom:1px solid var(--surface-2); cursor:pointer; touch-action:manipulation; }
+.dp-check[hidden]{ display:none; }
+.dp-check:last-child{ border-bottom:0; }
+.dp-check input{ width:20px; height:20px; flex:none; accent-color:var(--accent); }
+.dp-btns{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:4px; }
+.dp-grow{ flex:1; }
+.dp-prog{ font-weight:600; }
+.dp-result > div{ margin:0 0 6px; }
+.dp-list{ white-space:pre-wrap; word-break:break-all; font:12px/1.4 ui-monospace,Consolas,monospace; background:var(--surface-0); border-radius:8px; padding:6px 8px; max-height:160px; overflow:auto; color:var(--text-secondary); }
 </style>
 
 <div class="app" id="app">
@@ -3552,7 +3580,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v68";
+  var APP_VERSION = "v69";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -10280,7 +10308,10 @@
       // legible over any background -- only the color fill fades with
       // Opacity (the rings, like every other type's border/outline, stay
       // fully opaque).
-      var rlR = obj.r, rlPad = Math.max(1.5, rlR * 0.14);
+      // (v69) Andrew: "make the indicator dots about 20% smaller (and the
+      // icons)" -- drawn at ROOMLINK_DOT_SCALE of the saved r (the icon
+      // below follows the dot); hit-testing still uses the full obj.r.
+      var rlR = obj.r * ROOMLINK_DOT_SCALE, rlPad = Math.max(1.5, rlR * 0.14);
       g.appendChild(el("circle", { cx: obj.x, cy: obj.y, r: rlR + rlPad * 2, fill: "#ffffff" }));
       g.appendChild(el("circle", { cx: obj.x, cy: obj.y, r: rlR + rlPad, fill: "#000000" }));
       g.appendChild(el("circle", { cx: obj.x, cy: obj.y, r: rlR, fill: obj.color, "fill-opacity": objOpacity(obj) }));
@@ -10470,7 +10501,7 @@
       // (see applyMove); this dashed ring is purely a "this is selected"
       // indicator, same spirit as the base-image pseudo-selection's dashed
       // outline.
-      handlesLayer.appendChild(el("circle", { cx: obj.x, cy: obj.y, r: obj.r + hr() * 1.4, class: "ui-handle", fill: "none", stroke: "var(--focus)", "stroke-width": hr() * 0.3, "stroke-dasharray": (hr()*0.6)+","+(hr()*0.6) }));
+      handlesLayer.appendChild(el("circle", { cx: obj.x, cy: obj.y, r: obj.r * ROOMLINK_DOT_SCALE + hr() * 1.4, class: "ui-handle", fill: "none", stroke: "var(--focus)", "stroke-width": hr() * 0.3, "stroke-dasharray": (hr()*0.6)+","+(hr()*0.6) }));
     }
   }
   function labelHandles(label){
@@ -11841,6 +11872,7 @@
   var SEND_BACK_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="9" height="9" rx="1"/><path d="M14.5 7.5H16A1 1 0 0 1 17 8.5V16A1 1 0 0 1 16 17H8.5A1 1 0 0 1 7.5 16V14.5"/></svg>';
   var ROOM_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17V4.5a1 1 0 0 1 1-1h4l4 2v11.5"/><path d="M5 17h9"/><circle cx="11.3" cy="10.5" r="0.7" fill="currentColor" stroke="none"/></svg>';
   // A little tape measure -- "Mark as check measured" (📏 once set).
+  var ROOMLINK_DOT_SCALE = 0.8; // (v69) plan markers + their status icons drawn 20% smaller (see the roomlink render)
   var NOT_REQUIRED_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="14" height="6" rx="1.3"/><path d="M6 7.5v2.2M9 7.5v2.2M12 7.5v2.2M15 7.5v2.2"/><path d="M4 16.5L16 3.5"/></svg>'; // (v68) the tape, struck through
   var MEASURE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="14" height="6" rx="1.3"/><path d="M6 7.5v2.2M9 7.5v2.2M12 7.5v2.2M15 7.5v2.2"/></svg>';
   // A small paperclip -- "Add job note"/"View job note".
@@ -13644,6 +13676,289 @@
     });
     listEl.appendChild(toggle);
   }
+  /* ============================== Projects on this device (v69, 2026-09-29) ==============================
+     Andrew: "the onsite apps need an option fo rthe user to pick the
+     projectas they are working on to minimise the syunc on their device".
+     With the Projects folder on SharePoint / OneDrive, a tablet doesn't need
+     every job on it -- only the one or two it's working on. Here the person
+     ticks those. Then:
+       - the project list shows just those (the rest behind "Show the other
+         N projects"), and nothing is read from the others -- on a Windows
+         tablet (OneDrive "Files On-Demand") an online-only job is never
+         downloaded by this app;
+       - "How to sync only these" says exactly what to keep on the device
+         (the files in the main folder itself -- names & PINs, logo -- plus
+         each ticked job) for OneDrive on Windows and OneSync / Dropsync on
+         Android;
+       - "Get ready for offline" opens every file in the ticked jobs (and the
+         names & PINs list): anything online-only is downloaded now, while
+         there's internet, and anything that won't open is listed;
+       - a ticked job that isn't on the device at all shows as "not on this
+         device yet" instead of just vanishing.
+     Kept per main-folder name in this device's own storage (the same key in
+     every UTZLINE app, so apps that share storage share the choice). Nothing
+     is written to the Projects folder. The same block is in Install ITP,
+     Manufacture ITP, Delivery ITP and Site Measure / Viewer. */
+  var deviceProjects = (function(){
+    var LS_KEY = "utzline-device-projects", READY_KEY = "utzline-device-projects-ready";
+    var A = null, showOthers = false, bar = null, run = null;
+    function lsGet(k){ try{ var v = JSON.parse(localStorage.getItem(k) || "{}"); return (v && typeof v === "object") ? v : {}; }catch(e){ return {}; } }
+    function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+    function root(){ return A ? A.getRoot() : null; }
+    function rootKey(){ var r = root(); return r ? String(r.name || "") : ""; }
+    function chosen(){ var e = lsGet(LS_KEY)[rootKey()]; return (e && Array.isArray(e.names)) ? e.names.filter(function(n){ return typeof n === "string" && n; }) : []; }
+    function setChosen(names){
+      var all = lsGet(LS_KEY), key = rootKey();
+      if (names && names.length) all[key] = { names: names.slice(), at: new Date().toISOString() }; else delete all[key];
+      lsSet(LS_KEY, all);
+      var rd = lsGet(READY_KEY); delete rd[key]; lsSet(READY_KEY, rd);
+      showOthers = false;
+    }
+    function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+    function when(iso){
+      var d = new Date(iso); if (isNaN(d.getTime())) return "";
+      var p = function(n){ return (n < 10 ? "0" : "") + n; };
+      var today = new Date().toDateString() === d.toDateString();
+      return (today ? "today" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" })) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+    }
+    // names: every project folder in the main folder (already sorted, the
+    // reserved ones left out). -> { picked, names (to list), missing, others }
+    function filter(names){
+      var ch = chosen();
+      if (!ch.length) return { picked: false, names: names, missing: [], others: 0, showOthers: false };
+      var have = {}; names.forEach(function(n){ have[n] = true; });
+      var mine = names.filter(function(n){ return ch.indexOf(n) !== -1; });
+      var missing = ch.filter(function(n){ return !have[n]; });
+      var others = names.filter(function(n){ return ch.indexOf(n) === -1; });
+      return { picked: true, names: showOthers ? mine.concat(others) : mine, mine: mine, missing: missing, others: others.length, showOthers: showOthers };
+    }
+    // After the app has drawn its rows: a row for each ticked job that isn't
+    // here, and the "Show the other N projects" switch.
+    function decorate(listEl, info){
+      if (!listEl || !info || !info.picked) return;
+      info.missing.forEach(function(n){
+        var row = document.createElement("div");
+        row.className = "dp-missing";
+        row.innerHTML = '<span class="dp-missing-name"></span><span class="dp-missing-note">not on this device yet — add it to the sync (or let it finish), then come back</span>';
+        row.querySelector(".dp-missing-name").textContent = n;
+        listEl.appendChild(row);
+      });
+      if (info.others){
+        var t = document.createElement("button");
+        t.type = "button"; t.className = "dp-toggle";
+        t.textContent = info.showOthers ? "Hide the other projects" : "Show the other " + info.others + " project" + (info.others === 1 ? "" : "s") + " (not needed on this device)";
+        t.addEventListener("click", function(){ showOthers = !showOthers; A.rerender(); });
+        listEl.appendChild(t);
+      }
+    }
+    function whyNot(rd){
+      var bits = [];
+      if (rd.failed) bits.push(rd.failed + " of " + rd.files + " files wouldn't open");
+      if (rd.missingJobs) bits.push(rd.missingJobs + (rd.missingJobs === 1 ? " project isn't" : " projects aren't") + " here");
+      if (rd.usersMissing) bits.push("no names & PINs list");
+      return bits.join(", ") || "see Get ready for offline";
+    }
+    function renderBar(){
+      if (!A) return;
+      if (!bar){
+        var host = A.barHost();
+        if (!host || !host.parentNode) return;
+        bar = document.createElement("div");
+        bar.className = "dp-bar"; bar.id = "deviceProjectsBar";
+        host.parentNode.insertBefore(bar, host);
+      }
+      var ch = chosen(), rd = lsGet(READY_KEY)[rootKey()];
+      if (!root()){ bar.hidden = true; return; }
+      bar.hidden = false;
+      if (!ch.length){
+        bar.innerHTML = '<div class="dp-text"><b>All projects</b> are listed. Working on just one or two? Choose them, so this device only has to keep those.</div>' +
+          '<div class="dp-actions"><button type="button" class="mbtn dp-choose">Choose my projects</button></div>';
+      } else {
+        var names = ch.map(function(n){ return "<b>" + esc(n) + "</b>"; }).join(", ");
+        var ready = rd && rd.at ? '<div class="dp-ready ' + (rd.ok ? "dp-ok" : "dp-bad") + '">' + (rd.ok ? "✓ Ready for offline" : "⚠ Not all on this device") + " — checked " + esc(when(rd.at)) + (rd.ok ? " (" + rd.files + " files)" : " (" + whyNot(rd) + ")") + "</div>" : "";
+        bar.innerHTML = '<div class="dp-text">On this device: ' + names + "</div>" + ready +
+          '<div class="dp-actions"><button type="button" class="mbtn dp-choose">Change</button>' +
+          '<button type="button" class="mbtn mbtn-accent dp-ready-btn">Get ready for offline</button>' +
+          '<button type="button" class="mbtn dp-help">How to sync only these</button></div>';
+      }
+      var c = bar.querySelector(".dp-choose"), r = bar.querySelector(".dp-ready-btn"), h = bar.querySelector(".dp-help");
+      if (c) c.addEventListener("click", openChooser);
+      if (r) r.addEventListener("click", getReady);
+      if (h) h.addEventListener("click", function(){ openHelp(false); });
+    }
+    /* ---- the dialogs ---- */
+    function dialog(title){
+      var back = document.createElement("div"); back.className = "dp-back";
+      var card = document.createElement("div"); card.className = "dp-card"; card.setAttribute("role", "dialog"); card.setAttribute("aria-modal", "true");
+      card.innerHTML = "<h3></h3>"; card.querySelector("h3").textContent = title;
+      back.appendChild(card); document.body.appendChild(back);
+      function onKey(e){ if (e.key === "Escape"){ e.stopPropagation(); close(); } }
+      function close(){ document.removeEventListener("keydown", onKey, true); if (run) run.cancelled = true; back.remove(); }
+      document.addEventListener("keydown", onKey, true);
+      return { back: back, card: card, close: close };
+    }
+    function listProjectNames(){
+      var r = root(), out = [];
+      if (!r || typeof r.values !== "function") return Promise.resolve(out);
+      var it = r.values();
+      function step(){ return it.next().then(function(res){ if (res.done) return out; if (res.value && res.value.kind === "directory" && !A.isReserved(res.value.name)) out.push(res.value.name); return step(); }); }
+      return step().then(function(l){ return l.sort(function(a, b){ return a.localeCompare(b, undefined, { sensitivity: "base" }); }); });
+    }
+    function openChooser(){
+      listProjectNames().then(function(names){
+        var ch = chosen(), d = dialog("Projects on this device");
+        var extra = ch.filter(function(n){ return names.indexOf(n) === -1; });
+        var all = names.concat(extra);
+        d.card.insertAdjacentHTML("beforeend",
+          '<p class="dp-hint">Tick the projects you’re working on. Only these are listed and opened here — the others can stay online, not on this device.</p>' +
+          (all.length > 8 ? '<input type="search" class="dp-search" placeholder="Find a project…">' : "") +
+          '<div class="dp-checks"></div>' +
+          '<div class="dp-btns"><button type="button" class="mbtn dp-all">Show all projects</button><span class="dp-grow"></span><button type="button" class="mbtn dp-cancel">Cancel</button><button type="button" class="mbtn mbtn-accent dp-save">Save</button></div>');
+        var box = d.card.querySelector(".dp-checks");
+        all.forEach(function(n){
+          var lab = document.createElement("label"); lab.className = "dp-check";
+          var cb = document.createElement("input"); cb.type = "checkbox"; cb.value = n; cb.checked = ch.indexOf(n) !== -1;
+          var sp = document.createElement("span"); sp.textContent = n + (names.indexOf(n) === -1 ? " (not on this device)" : "");
+          lab.appendChild(cb); lab.appendChild(sp); box.appendChild(lab);
+        });
+        if (!all.length) box.innerHTML = '<div class="dp-hint">No projects in this folder yet.</div>';
+        var s = d.card.querySelector(".dp-search");
+        if (s) s.addEventListener("input", function(){
+          var q = s.value.trim().toLowerCase();
+          Array.prototype.forEach.call(box.querySelectorAll(".dp-check"), function(l){ l.hidden = q && l.textContent.toLowerCase().indexOf(q) === -1; });
+        });
+        d.card.querySelector(".dp-cancel").addEventListener("click", d.close);
+        d.card.querySelector(".dp-all").addEventListener("click", function(){
+          setChosen([]); d.close(); renderBar(); A.rerender();
+          A.toast("All projects are listed again.");
+        });
+        d.card.querySelector(".dp-save").addEventListener("click", function(){
+          var picked = Array.prototype.filter.call(box.querySelectorAll("input[type=checkbox]"), function(c){ return c.checked; }).map(function(c){ return c.value; });
+          setChosen(picked); d.close(); renderBar(); A.rerender();
+          if (picked.length) openHelp(true); else A.toast("All projects are listed again.");
+        });
+        setTimeout(function(){ (s || d.card.querySelector(".dp-save")).focus(); }, 30);
+      }).catch(function(err){ console.error("Projects on this device failed:", err); A.toast("Couldn't list the projects — try again."); });
+    }
+    function openHelp(justSaved){
+      var ch = chosen(), r = root(), rootName = r ? r.name : "Projects";
+      var d = dialog(justSaved ? "Saved — now sync only these" : "How to sync only these");
+      d.card.insertAdjacentHTML("beforeend",
+        "<p>Keep these on this device:</p><ul class=\"dp-keep\">" +
+        "<li>the <b>files</b> in “" + esc(rootName) + "” itself — <i>utzline-users.csv</i> (names &amp; PINs) and <i>company-logo.png</i> — not its folders</li>" +
+        ch.map(function(n){ return "<li>“" + esc(rootName) + " › " + esc(n) + "” (the whole folder)</li>"; }).join("") +
+        "</ul><p>The other project folders don’t need to be on this device.</p>" +
+        "<p><b>Windows tablet (OneDrive):</b> in File Explorer, right-click each folder above → <b>Always keep on this device</b>. Right-click the other project folders → <b>Free up space</b>.</p>" +
+        "<p><b>Android tablet (OneSync / Dropsync):</b> set the folder pair to sync only the folders above — leave the other projects out.</p>" +
+        "<p>Then tap <b>Get ready for offline</b> while you still have internet.</p>" +
+        '<div class="dp-btns"><span class="dp-grow"></span><button type="button" class="mbtn dp-close">Close</button><button type="button" class="mbtn mbtn-accent dp-go">Get ready for offline</button></div>');
+      d.card.querySelector(".dp-close").addEventListener("click", d.close);
+      d.card.querySelector(".dp-go").addEventListener("click", function(){ d.close(); getReady(); });
+    }
+    // Opens every file (first byte) in the ticked jobs and the names & PINs
+    // list. On OneDrive this downloads anything online-only; files that
+    // won't open are listed.
+    function openOne(fh){
+      return fh.getFile().then(function(f){
+        if (f && typeof f.slice === "function") return f.slice(0, 1).arrayBuffer();
+        return f && typeof f.text === "function" ? f.text() : null;
+      });
+    }
+    function getReady(){
+      var ch = chosen(), r = root();
+      if (!r || !ch.length) return;
+      var d = dialog("Get ready for offline");
+      d.card.insertAdjacentHTML("beforeend", '<p class="dp-hint">Opening every file in your projects, so they’re all on this device. Anything online-only is downloaded now — keep the internet on until it’s done.</p><p class="dp-prog">Starting…</p><div class="dp-result"></div><div class="dp-btns"><span class="dp-grow"></span><button type="button" class="mbtn dp-stop">Stop</button></div>');
+      var prog = d.card.querySelector(".dp-prog"), out = d.card.querySelector(".dp-result"), stop = d.card.querySelector(".dp-stop");
+      var my = run = { cancelled: false };
+      stop.addEventListener("click", d.close);
+      var report = { files: 0, failed: 0, jobs: [] }, rootFiles = [];
+      function walk(dirH, prefix, list){
+        var it = dirH.values();
+        function step(){
+          if (my.cancelled) return Promise.reject(new Error("cancelled"));
+          return it.next().then(function(res){
+            if (res.done) return;
+            var e = res.value, p = prefix + "/" + e.name;
+            if (e.kind === "directory") return walk(e, p, list).then(step);
+            list.push({ h: e, path: p });
+            if (list.length % 50 === 0) prog.textContent = "Finding files… " + list.length;
+            return step();
+          });
+        }
+        return step();
+      }
+      var p = Promise.resolve();
+      // names & PINs (needed to sign anything) and the logo, from the main folder
+      p = p.then(function(){
+        return Promise.all(["utzline-users.csv", "company-logo.png"].map(function(n){
+          return r.getFileHandle(n).then(function(fh){ return openOne(fh).then(function(){ return { name: n, ok: true }; }, function(){ return { name: n, ok: false, why: "won't open" }; }); },
+            function(){ return { name: n, ok: false, why: "not on this device" }; });
+        })).then(function(res){ rootFiles = res; });
+      });
+      ch.forEach(function(name){
+        p = p.then(function(){
+          if (my.cancelled) throw new Error("cancelled");
+          var job = { name: name, files: 0, failed: [], missing: false };
+          report.jobs.push(job);
+          return r.getDirectoryHandle(name).then(function(dirH){
+            var list = [];
+            prog.textContent = "“" + name + "” — finding files…";
+            return walk(dirH, name, list).then(function(){
+              job.files = list.length;
+              var i = 0;
+              function next(){
+                if (my.cancelled) return Promise.reject(new Error("cancelled"));
+                if (i >= list.length) return Promise.resolve();
+                var f = list[i++];
+                return openOne(f.h).catch(function(){ job.failed.push(f.path); }).then(function(){
+                  if (i % 10 === 0 || i === list.length) prog.textContent = "“" + name + "” — " + i + " of " + list.length + " files";
+                  return next();
+                });
+              }
+              return next();
+            });
+          }, function(){ job.missing = true; });
+        });
+      });
+      p.then(function(){
+        if (my.cancelled) return;
+        var users = rootFiles[0] || { ok: false }, html = "", ok = true;
+        report.jobs.forEach(function(j){
+          report.files += j.files; report.failed += j.failed.length;
+          if (j.missing){ ok = false; html += '<div class="dp-bad">✗ “' + esc(j.name) + "” isn’t on this device — add it to the sync.</div>"; }
+          else if (j.failed.length){ ok = false; html += '<div class="dp-bad">✗ “' + esc(j.name) + "”: " + j.failed.length + " of " + j.files + " files wouldn’t open — let the sync finish (with internet), then check again.</div>" +
+            '<div class="dp-list">' + esc(j.failed.slice(0, 20).join("\n")) + (j.failed.length > 20 ? "\n… and " + (j.failed.length - 20) + " more" : "") + "</div>"; }
+          else html += '<div class="dp-ok">✓ “' + esc(j.name) + "”: all " + j.files + " files are on this device.</div>";
+        });
+        if (users.ok) html += '<div class="dp-ok">✓ Names &amp; PINs (utzline-users.csv) are on this device.</div>';
+        else { ok = false; html += '<div class="dp-bad">✗ utzline-users.csv (names &amp; PINs) ' + esc(users.why || "isn't here") + " — sync the files in the main folder too, or nobody can sign in here.</div>"; }
+        var rd = lsGet(READY_KEY); rd[rootKey()] = { at: new Date().toISOString(), ok: ok, files: report.files, failed: report.failed,
+          missingJobs: report.jobs.filter(function(j){ return j.missing; }).length, usersMissing: !users.ok }; lsSet(READY_KEY, rd);
+        prog.textContent = ok ? "Done — this device is ready to work offline on these projects." : "Done — some things aren’t on this device yet.";
+        prog.className = "dp-prog " + (ok ? "dp-ok" : "dp-bad");
+        out.innerHTML = html;
+        stop.textContent = "Close";
+        renderBar();
+      }).catch(function(err){
+        if (err && err.message === "cancelled") return;
+        console.error("Get ready for offline failed:", err);
+        prog.textContent = "Couldn’t finish the check (" + (err && err.message || err) + ").";
+      });
+    }
+    function init(adapter){ A = adapter; }
+    return { init: init, filter: filter, decorate: decorate, renderBar: renderBar, chosen: chosen, setChosen: setChosen, openChooser: openChooser, openHelp: openHelp, getReady: getReady,
+      resetView: function(){ showOthers = false; } };
+  })();
+  deviceProjects.init({
+    getRoot: function(){ return projectsRootHandle; },
+    rerender: function(){ return populateProjectList(); },
+    barHost: function(){ return projectListItems; },
+    isReserved: function(n){ return isReservedRootFolderName(n); },
+    toast: function(m){ showToast(m); }
+  });
+  window.__deviceProjects = deviceProjects; // (tests)
+
   function populateProjectList(){
     return listExistingProjects().then(function(names){
       // Neither build can create a project from here any more (moved to
@@ -13651,7 +13966,14 @@
       // below" would point at a button that no longer exists in either the
       // editor or the Viewer, so both now point at Projects instead.
       var emptyMessage = VIEW_ONLY_MODE ? "No projects here." : "No projects here yet — create one in UTZLINE Projects.";
-      return renderPickerList(projectListItems, "project", names, emptyMessage, openProjectLevels, populateProjectList);
+      // (v69) Projects on this device: only the ticked ones (the rest
+      // behind "Show the other N projects")
+      deviceProjects.renderBar();
+      var dpInfo = deviceProjects.filter(names);
+      if (dpInfo.picked && names.length) emptyMessage = "None of your projects for this device are here yet — see below.";
+      return renderPickerList(projectListItems, "project", dpInfo.names, emptyMessage, openProjectLevels, populateProjectList).then(function(){
+        deviceProjects.decorate(projectListItems, dpInfo);
+      });
     });
   }
   // Same shape as populateProjectList, one folder deeper: lists the levels
