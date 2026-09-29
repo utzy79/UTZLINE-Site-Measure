@@ -1,10 +1,30 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v65** (bump this line, and add a dated changelog
+**Current version: v68 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v68 (2026-09-29) — RC 1.0.**
+
+- **The saved copy's title block** (Save PDF / PNG, backups, the current-view snapshot). Andrew: *"this text must be scalable, it comes out great on an a1 size but when smaller or shapshot it takes over the whole title block area, it needs to have the room name, joinery name and date time username, all in readabele. multi row text."*
+  - It's now rows of text: **Joinery** code (larger), **Room**, level · project, then **Saved** date, time · who.
+  - All of it is sized as a share of the copy's own width (2.4%, capped for very big sheets). A snapshot's block is the same proportion of the picture as an A1's, not the whole bar.
+  - Each row shrinks a little to fit, then is cut with "…". The logo sits on the right, as tall as the rows.
+- **Site measure not required** (right-click a joinery item). Andrew: *"on right click have another option for site measure not required, this flags it as check measured (not required)"*. It's the same Check measured step (📏), with `measureNotRequired` and a note on the event, so every app shows it as check measured; UTZLINE Projects' History reads "Check measured — site measure not required".
+- **Save & exit on a check measure** asks **"Mark check measure complete?"** with **Yes** / **No** (Andrew: *"is check measure complete should be mark check measure complete, with yes or no buttins"*).
+- **Insert image → a PDF:** each page picked gets the same crop as a photo, one at a time ("Use whole page" keeps it as it is). Andrew: *"insert a file still needs the crop capability"*.
+
+**v67 (2026-09-29) — RC 1.0.** Andrew: *"ok, now change them all to version RC 1.0. and have that on the logos (small)"*.
+
+- The app is now **RC 1.0** (release candidate 1.0) across the UTZLINE family. A small **RC 1.0** tag sits beside the logo in the toolbar and on the start screen, and the quick-help tip reads "RC 1.0 (build v67)".
+- The build number (v67) still counts up underneath, so installed copies pick up each update. It's also what the Windows installer "Setup RC 1.0" contains.
+
+**v66 (2026-09-29):** **Timings removed.** Andrew: *"remove timings"*.
+- The **⏱ Timings** button on the Projects screen and its list are gone. Nothing about opens is stored on the device any more, and the old list is cleared.
+- **Plan PDFs read offline.** The pdf.js worker was still loaded from the internet (only `pdf.min.js` was local), so reading a plan PDF needed a connection. It now uses the local `pdf.worker.min.js`, which was already in the folder and precached.
+- This build is also the one inside the new Windows installer.
 
 **v65 (2026-09-29):** Same build as the Viewer's v65, where job notes added from the Viewer are stamped **FOR CONSTRUCTION**. Site Measure itself doesn't add job notes, so nothing changes here. Test: `pdftest-projects/run_v65_jobnote_for_construction.js`.
 

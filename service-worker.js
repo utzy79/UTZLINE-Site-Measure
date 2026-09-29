@@ -1203,7 +1203,10 @@
 // v63 (2026-09-28): Viewer Reworks screen folds the rework event files (shared UtzRework module).
 // v64 (2026-09-28): View shop drawing lists Sent and Returned; revisions read as REV A, B, C.
 // v65 (2026-09-29): same build as the Viewer's v65 (job notes are only added from the Viewer).
-var CACHE_NAME = "utzline-sitemeasure-cache-v65";
+// v66 (2026-09-29): the "⏱ Timings" button and its list removed (nothing stored any more); pdf.js worker is the local copy.
+// v67 (2026-09-29): RC 1.0 -- the version is shown as RC 1.0, with a small "RC 1.0" tag on the logo.
+// v68 (2026-09-29): RC 1.0 -- "Site measure not required"; the saved copy's title block is rows that scale; Yes/No "Mark check measure complete?"; inserted PDF pages can be cropped.
+var CACHE_NAME = "utzline-sitemeasure-cache-v68";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

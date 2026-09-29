@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v65">
+<link rel="manifest" href="./manifest.json?v=v68">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v65">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v65">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v68">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v68">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -166,6 +166,9 @@
      icon-*.png artwork. This app's header/gate title used to be one flat
      color with no split at all -- brought into line with both of those. */
   .brand b, .project-gate-brand h1 b{ color:var(--accent); font-weight:inherit; }
+  /* (RC 1.0) the small release tag on the logo (toolbar and start screen) */
+  .rc-tag{ display:inline-block; margin-left:7px; padding:0 4px; border:1px solid currentColor; border-radius:4px; font-size:9px; line-height:13px; font-weight:600; letter-spacing:.05em; opacity:.55; vertical-align:middle; position:relative; top:-1px; white-space:nowrap; text-transform:none; font-style:normal; }
+  .project-gate-brand .rc-tag{ margin-left:0; top:0; }
   .brand small{
     display:block;
     font-family:'IBM Plex Mono',monospace;
@@ -1208,7 +1211,7 @@
          huge monitors, where there's enough room for that to actually help
          instead of just being a coincidence of window width. -->
     <div class="toolbar-row" id="toolbarRowFile">
-    <div class="brand"><img class="brand-icon" id="brandIcon" src="" alt="" aria-hidden="true"><span><span id="brandName">UTZ<b>LINE</b> Site Measure</span><small id="brandSubtitle">plan markup</small></span></div>
+    <div class="brand"><img class="brand-icon" id="brandIcon" src="" alt="" aria-hidden="true"><span><span id="brandName">UTZ<b>LINE</b> Site Measure</span><span class="rc-tag" title="Release candidate 1.0">RC 1.0</span><small id="brandSubtitle">plan markup</small></span></div>
     <div class="sep"></div>
 
     <!-- Requested directly by Andrew, 2026-09-18: "we need a back button on
@@ -1550,7 +1553,7 @@
 
     <div class="project-gate" id="projectGate" hidden>
       <div class="project-gate-box">
-        <div class="project-gate-brand"><img id="projectGateIcon" src="" alt="" aria-hidden="true"><h1 id="projectGateTitle">UTZ<b>LINE</b> Site Measure</h1></div>
+        <div class="project-gate-brand"><img id="projectGateIcon" src="" alt="" aria-hidden="true"><h1 id="projectGateTitle">UTZ<b>LINE</b> Site Measure</h1><span class="rc-tag" title="Release candidate 1.0">RC 1.0</span></div>
 
         <!-- Shared name+PIN identity (2026-09-23) -- Andrew, verbatim: "site
              measure app needs the correct user selector in the startup
@@ -1617,8 +1620,7 @@
           <div class="project-list" id="projectListItems"></div>
           <div class="project-gate-actions">
             <button class="mbtn" id="switchProjectsRootBtn">Use a Different Projects Folder</button>
-            <!-- (v56) On-device timings for "Open check measure" -- see cmPerfStart. -->
-            <button class="mbtn" id="cmTimingsBtn">⏱ Timings</button>
+            <!-- (v66) the "⏱ Timings" button (v56) is gone: Andrew, "remove timings". -->
           </div>
         </div>
 
@@ -1846,18 +1848,6 @@
          job; this is purely a read-only viewer, reusing the shared rework
          file both those apps already read/write. See readItemReworkEntries/
          listAllProjectOpenReworks further down. -->
-    <!-- (v56) "⏱ Timings": how long each recent Open check measure took on
-         THIS device, step by step -- so a slow open on the tablet can be
-         screenshotted and pinned to the exact step, not guessed at. -->
-    <div class="modal-backdrop" id="cmTimingsBackdrop" hidden>
-      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="cmTimingsTitle">
-        <p id="cmTimingsTitle" class="joinery-item-title">Open site measure — timings on this device</p>
-        <div class="rework-view-list" id="cmTimingsList"></div>
-        <div class="modal-actions">
-          <button class="mbtn" id="cmTimingsCloseBtn">Close</button>
-        </div>
-      </div>
-    </div>
 
     <!-- (v61) Viewer: Reworks screen (list -> one rework with its whole log + comments) -->
     <div class="rw-screen" id="reworkScreen" hidden>
@@ -3562,7 +3552,8 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v65";
+  var APP_VERSION = "v68";
+  var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -4016,7 +4007,7 @@
         var newWorker = reg.installing;
         if (!newWorker){
           checking = false;
-          showToast("You're already on the latest version (" + APP_VERSION + ").");
+          showToast("You're already on the latest version (" + RELEASE_LABEL + ", build " + APP_VERSION + ").");
           return;
         }
         awaitingReload = true;
@@ -7208,54 +7199,26 @@
      make the same folder calls and open in the same time -- so the next
      step is real numbers from the tablet itself. Every Open check measure
      records how long each step took; "⏱ Timings" on the Projects screen
-     lists the last 10 (kept on this device only). */
+     lists the last 10 (kept on this device only).
+     (v66) Andrew: "remove timings" -- the button and its list are gone, and
+     nothing is stored any more (the old stored list is cleared). The steps
+     are still counted, in memory only, for the tests. */
   var cmTimings = [];
-  try{ cmTimings = JSON.parse(localStorage.getItem("utzline-sm:cmTimings") || "[]") || []; }catch(e){ cmTimings = []; }
+  try{ localStorage.removeItem("utzline-sm:cmTimings"); }catch(e){}
   function cmPerfStart(label){
     var rec = { label: label, at: new Date().toISOString(), t0: performance.now(), steps: [] };
     rec.mark = function(name){ rec.steps.push({ name: name, ms: Math.round(performance.now() - rec.t0) }); };
     rec.finish = function(){
       var plain = { label: rec.label, at: rec.at, steps: rec.steps.slice() };
       cmTimings = [plain].concat(cmTimings.filter(function(r){ return r !== plain; })).slice(0, 10);
-      try{ localStorage.setItem("utzline-sm:cmTimings", JSON.stringify(cmTimings)); }catch(e){}
       rec.saved = plain;
     };
     rec.addLate = function(name){ // a step that finishes after the page is shown
       rec.mark(name);
-      if (rec.saved){ rec.saved.steps = rec.steps.slice(); try{ localStorage.setItem("utzline-sm:cmTimings", JSON.stringify(cmTimings)); }catch(e){} }
+      if (rec.saved) rec.saved.steps = rec.steps.slice();
     };
     return rec;
   }
-  function renderCmTimings(){
-    var list = document.getElementById("cmTimingsList");
-    list.innerHTML = "";
-    if (!cmTimings.length){ list.innerHTML = "<p class=\"jobnote-empty\">No check measures opened on this device yet.</p>"; return; }
-    cmTimings.forEach(function(r){
-      var row = document.createElement("div"); row.className = "rework-view-row"; row.style.borderColor = "var(--border)";
-      var head = document.createElement("div"); head.className = "rework-view-loc";
-      var total = r.steps.length ? r.steps[r.steps.length - 1].ms : 0;
-      var shown = r.steps.filter(function(x){ return x.name === "page shown"; })[0];
-      head.textContent = r.label + " — page shown after " + (shown ? (shown.ms / 1000).toFixed(1) + " s" : "?") + (total !== (shown && shown.ms) ? ", everything done " + (total / 1000).toFixed(1) + " s" : "");
-      row.appendChild(head);
-      var prev = 0;
-      r.steps.forEach(function(x){
-        var line = document.createElement("div"); line.className = "rework-view-meta";
-        line.textContent = x.name + ": +" + ((x.ms - prev) / 1000).toFixed(1) + " s (at " + (x.ms / 1000).toFixed(1) + " s)";
-        prev = x.ms;
-        row.appendChild(line);
-      });
-      var when = document.createElement("div"); when.className = "rework-view-meta";
-      try{ when.textContent = new Date(r.at).toLocaleString(); }catch(e){}
-      row.appendChild(when);
-      list.appendChild(row);
-    });
-  }
-  (function(){
-    var b = document.getElementById("cmTimingsBtn"), bd = document.getElementById("cmTimingsBackdrop");
-    if (b) b.addEventListener("click", function(){ renderCmTimings(); bd.hidden = false; });
-    document.getElementById("cmTimingsCloseBtn").addEventListener("click", function(){ bd.hidden = true; });
-    bd.addEventListener("click", function(e){ if (e.target === bd) bd.hidden = true; });
-  })();
 
   // (v54) Reads other people's saved layers for the item page that's open
   // NOW, one file at a time, adding each as it lands and redrawing. Drops
@@ -8667,7 +8630,8 @@
     // mid-work Save on a level's own plan -- exitToPlanAfter is exactly the
     // same "is this actually a joinery item page" gate the lock-all-on-exit
     // logic just below already uses, so the two stay in sync automatically.
-    var askComplete = exitToPlanAfter ? showConfirm("Is this check measure complete?") : Promise.resolve(false);
+    // (v68) Andrew: "is check measure complete should be mark check measure complete, with yes or no buttins"
+    var askComplete = exitToPlanAfter ? showConfirm("Mark check measure complete?", { okLabel: "Yes", cancelLabel: "No" }) : Promise.resolve(false);
     askComplete.then(function(markComplete){ runSaveAllProjectAware(exitToPlanAfter, markComplete); });
   }
   function runSaveAllProjectAware(exitToPlanAfter, markComplete){
@@ -9687,7 +9651,9 @@
       rec.status = best.status; rec.updatedAt = best.at; rec.updatedBy = best.by || "";
       rec.history = statusEvents.slice().sort(function(a, b){
         return (a.at || "") < (b.at || "") ? -1 : (a.at || "") > (b.at || "") ? 1 : 0;
-      }).map(function(e){ return { status: e.status, at: e.at, by: e.by || "" }; });
+      }).map(function(e){ var h = { status: e.status, at: e.at, by: e.by || "" }; if (e.note) h.note = e.note; return h; });
+      // (v68) check measured because a site measure isn't needed (Site Measure's "Site measure not required")
+      if (statusEvents.some(function(e){ return e.status === "measured" && e.measureNotRequired; })) rec.measureNotRequired = true;
     } else {
       rec.status = ""; rec.updatedAt = ""; rec.updatedBy = ""; rec.history = [];
     }
@@ -9869,7 +9835,8 @@
   // just one call site. Patches joineryStatusCache in place too (via
   // mergeFoldedRecordIntoCache), so a caller that then calls renderAll()
   // sees the change immediately without waiting on a fresh read.
-  function setJoineryStatusForward(projectHandle, level, room, joineryId, newStatus, updatedBy){
+  // (v68) extra: more fields for the event itself, e.g. { measureNotRequired: true, note: "Site measure not required" }
+  function setJoineryStatusForward(projectHandle, level, room, joineryId, newStatus, updatedBy, extra){
     if (!projectHandle) return Promise.resolve(null);
     var key = joineryItemPageKey(level, room, joineryId);
     return migrateLegacyJoineryStatusIfNeeded(projectHandle).then(function(){
@@ -9885,6 +9852,7 @@
       var atIso = new Date().toISOString();
       var stamp = statusEventStamp();
       var payload = { kind: "status", level: level, room: room || "", joineryId: joineryId || "", status: newStatus, by: updatedBy || "", at: atIso };
+      if (extra) Object.keys(extra).forEach(function(k){ if (!(k in payload)) payload[k] = extra[k]; }); // (v68)
       return getJoineryStatusItemDir(projectHandle, key, true).then(function(dirH){
         return dirH.getFileHandle(statusEventFileName(updatedBy, stamp, "status"), { create: true });
       }).then(function(fh){
@@ -9892,7 +9860,8 @@
       }).then(function(){
         var updatedRec = rec ? Object.assign({}, rec) : { level: level, room: room || "", joineryId: joineryId || "" };
         updatedRec.status = newStatus; updatedRec.updatedAt = atIso; updatedRec.updatedBy = updatedBy || "";
-        updatedRec.history = (rec && Array.isArray(rec.history) ? rec.history.slice() : []).concat([{ status: newStatus, at: atIso, by: updatedBy || "" }]);
+        if (extra && extra.measureNotRequired && newStatus === "measured") updatedRec.measureNotRequired = true; // (v68)
+        updatedRec.history = (rec && Array.isArray(rec.history) ? rec.history.slice() : []).concat([Object.assign({ status: newStatus, at: atIso, by: updatedBy || "" }, extra && extra.note ? { note: extra.note } : {})]);
         mergeFoldedRecordIntoCache(updatedRec);
         return newStatus;
       });
@@ -11872,6 +11841,7 @@
   var SEND_BACK_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="9" height="9" rx="1"/><path d="M14.5 7.5H16A1 1 0 0 1 17 8.5V16A1 1 0 0 1 16 17H8.5A1 1 0 0 1 7.5 16V14.5"/></svg>';
   var ROOM_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17V4.5a1 1 0 0 1 1-1h4l4 2v11.5"/><path d="M5 17h9"/><circle cx="11.3" cy="10.5" r="0.7" fill="currentColor" stroke="none"/></svg>';
   // A little tape measure -- "Mark as check measured" (📏 once set).
+  var NOT_REQUIRED_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="14" height="6" rx="1.3"/><path d="M6 7.5v2.2M9 7.5v2.2M12 7.5v2.2M15 7.5v2.2"/><path d="M4 16.5L16 3.5"/></svg>'; // (v68) the tape, struck through
   var MEASURE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="14" height="6" rx="1.3"/><path d="M6 7.5v2.2M9 7.5v2.2M12 7.5v2.2M15 7.5v2.2"/></svg>';
   // A small paperclip -- "Add job note"/"View job note".
   var JOBNOTE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.2l-6 6a3 3 0 0 0 4.24 4.24l5.3-5.3a1.8 1.8 0 0 0-2.55-2.55l-5.3 5.3a0.6 0.6 0 0 0 0.85 0.85l4.9-4.9"/></svg>';
@@ -12076,6 +12046,22 @@
             if (status) showToast("Marked “" + roomlinkDisplayText(obj) + "” as site measured.");
           }).catch(function(err){
             console.error("Mark as check measured failed:", err);
+            showToast("Couldn't save that — try again.");
+          });
+        });
+        // (v68) Andrew: "on right click have another option for site measure
+        // not required, this flags it as check measured (not required)" --
+        // the same "measured" step (📏, rank 1, every app reads it as Check
+        // measured), with measureNotRequired + a note on the event so it's
+        // clear no site measure was taken.
+        popoverRow(box, NOT_REQUIRED_ICON + "<span>Site measure not required</span>", function(){
+          hideLockPopover();
+          setJoineryStatusForward(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode || "", "measured", deviceUserName || "Site Measure",
+            { measureNotRequired: true, note: "Site measure not required" }).then(function(status){
+            renderAll();
+            if (status) showToast("Marked “" + roomlinkDisplayText(obj) + "” as check measured — site measure not required.");
+          }).catch(function(err){
+            console.error("Site measure not required failed:", err);
             showToast("Couldn't save that — try again.");
           });
         });
@@ -14117,9 +14103,12 @@
   var confirmCancel = document.getElementById("confirmCancel");
   var confirmResolve = null;
   var confirmOkCallback = null;
-  function showConfirm(msg){
+  // (v68) opts.okLabel / opts.cancelLabel -- e.g. Yes / No
+  function showConfirm(msg, opts){
     confirmOkCallback = null;
     confirmMsg.textContent = msg;
+    confirmOk.textContent = (opts && opts.okLabel) || "Confirm";
+    confirmCancel.textContent = (opts && opts.cancelLabel) || "Cancel";
     confirmBackdrop.hidden = false;
     return new Promise(function(resolve){ confirmResolve = resolve; });
   }
@@ -14133,6 +14122,7 @@
   function showConfirmSync(msg, onOk){
     confirmResolve = null;
     confirmMsg.textContent = msg;
+    confirmOk.textContent = "Confirm"; confirmCancel.textContent = "Cancel"; // (v68)
     confirmBackdrop.hidden = false;
     confirmOkCallback = onOk;
   }
@@ -14903,7 +14893,7 @@
   }
   function ensurePdfWorker(){
     if (!ensurePdfWorker._set){
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "./pdf.worker.min.js";
       ensurePdfWorker._set = true;
     }
   }
@@ -15981,6 +15971,20 @@
       // falling straight through to the original single-image placement
       // when there's only one.
       pdfFileToImages(file).then(function(pages){
+        // (v68) Andrew: "insert a file still needs the crop capability" --
+        // each page picked is offered the same crop as a photo, one at a
+        // time ("Use whole page" leaves it as it is)
+        var out = [], q = Promise.resolve();
+        pages.forEach(function(pg, i){
+          q = q.then(function(){
+            return showCropDialog(pg.dataUrl, pg.w, pg.h, {
+              label: (pages.length > 1 ? "Page " + pg.pageNum + " (" + (i + 1) + " of " + pages.length + "): crop" : "Crop this page") + " before it's added — drag the corners or edges, or use the whole page:",
+              skipLabel: "Use whole page"
+            }).then(function(c){ out.push(Object.assign({}, pg, { dataUrl: c.dataUrl, w: c.w, h: c.h })); });
+          });
+        });
+        return q.then(function(){ return out; });
+      }).then(function(pages){
         placeInsertedImagesCollated(pages);
         autosaveLevelPlanIfActive();
         var first = pages[0];
@@ -16303,9 +16307,45 @@
     // with contentW, still clamped top and bottom) just at 4x the scale, so
     // it still grows/shrinks with the export size exactly as before -- a
     // small plan's bar isn't oversized, a big one's isn't undersized.
-    var wmSize = clamp(contentW * 0.044, 44, 128);
-    var footerH = Math.round(wmSize * 3.6);
-    return { x0: cb.x0, y0: cb.y0, x1: cb.x1, y1: cb.y1 + footerH, wmSize: wmSize, contentY1: cb.y1 };
+    // (v68) the title block is rows of text now, sized as a share of the
+    // copy's own width -- see exportTitleLayout
+    var tl = exportTitleLayout(contentW);
+    return { x0: cb.x0, y0: cb.y0, x1: cb.x1, y1: cb.y1 + tl.footerH, wmSize: tl.u, titleLayout: tl, contentY1: cb.y1 };
+  }
+  /* (v68) The saved copy's title block (Save PDF / PNG, backups, the
+     "current view" snapshot). Andrew: "this text must be scalable, it comes
+     out great on an a1 size but when smaller or shapshot it takes over the
+     whole title block area, it needs to have the room name, joinery name
+     and date time username, all in readabele. multi row text."
+     Rows, each on its own line so none crowds another off:
+       Joinery <code>            (larger)       -- on an item's check measure
+       Room <room>
+       <level> · <project>
+       Saved <date, time> · <who>
+     (a level plan: its level/room and project, then the saved line). One
+     text unit u sets everything -- a fixed share of the copy's width
+     (EXPORT_TITLE_SHARE), capped for very big sheets -- so a snapshot's
+     block is the same proportion of the picture as an A1's, never the
+     whole bar. Each row shrinks a little to fit, then is cut with "…". */
+  var EXPORT_TITLE_SHARE = 0.024, EXPORT_TITLE_MAX_U = 100;
+  function exportTitleRows(){
+    var pg = activeJoineryItemPage;
+    var level = pg ? pg.levelName : activeLevelName, room = pg ? pg.roomName : activeRoomName, code = pg ? (pg.joineryCode || "") : "";
+    var rows = [];
+    if (code) rows.push({ text: "Joinery " + code, big: true });
+    if (room) rows.push({ text: "Room " + room, big: !code });
+    var where = [level, activeProjectName].filter(Boolean).join(" · ");
+    if (where) rows.push({ text: where, big: !rows.length });
+    if (!rows.length && (state.fileBase || "").trim() && state.fileBase !== "plan") rows.push({ text: state.fileBase.trim(), big: true });
+    rows.push({ text: formatSaveStamp(new Date()) + (deviceUserName ? " · " + deviceUserName : ""), stamp: true });
+    return rows;
+  }
+  function exportTitleLayout(contentW){
+    var u = Math.max(0.5, Math.min(contentW * EXPORT_TITLE_SHARE, EXPORT_TITLE_MAX_U));
+    var rows = exportTitleRows();
+    var pad = u * 0.75, textH = 0;
+    rows.forEach(function(r){ r.size = r.big ? u * 1.3 : u; r.lineH = r.size * 1.28; textH += r.lineH; });
+    return { u: u, rows: rows, pad: pad, textH: textH, footerH: Math.round(textH + pad * 2) };
   }
   // Shared by both export paths: a clean copy of the annotation layer with
   // no transform (world's pan/zoom stripped, coordinates back in native
@@ -16373,141 +16413,50 @@
   // what was drawn, not a stamp from whenever it happened to be saved).
   function addExportOverlays(clone, cb){
     var contentW = cb.x1 - cb.x0;
-
+    var tl = cb.titleLayout || exportTitleLayout(contentW);
     // Sits in the reserved strip below the plan's own content (see
-    // computeExportBounds) -- never on top of an actual measurement,
-    // however the plan happens to be laid out. contentY1 is where the
-    // plan's real content ends and the reserved strip begins; fall back to
-    // cb.y1 itself for a caller that didn't reserve one. Filled explicitly
-    // rather than relying on whatever's behind it defaulting to white, with
-    // a thin top border so it reads as a deliberate bar rather than just
-    // empty page margin.
-    var wmSize = cb.wmSize || clamp(contentW * 0.044, 44, 128);
-    // computeViewSnapshotBounds sizes wmSize off the PHYSICAL screen (a
-    // constant ~28-64 CSS px, converted to world units via the current
-    // zoom's density, floored at 44 world units so it never reads illegibly
-    // small on screen) -- that floor has nothing to do with how much world-
-    // unit width is actually available in a "current view" crop, and at a
-    // tight enough zoom the crop's own contentW can come out SMALLER than
-    // the logo+timestamp block's fixed footprint. Anchored to the right
-    // edge (cb.x1), that block then spilled part or all of itself past the
-    // LEFT edge of the crop -- rendering off-canvas (invisible) or, more
-    // often, overlapping/overflowing however much of it still fell inside
-    // frame, which is exactly the "logo looks fine, the timestamp text does
-    // not" report (reported by Andrew, 2026-09-17): the logo sits flush
-    // against the anchor edge (cb.x1) so it's the block's LAST piece to run
-    // out of room, while the timestamp text sits furthest from it and is
-    // the first to spill. Reusing the same "Saved ..." format string twice
-    // (here as a width estimate, again below as the real content) rather
-    // than computing it once is deliberate: the two calls are microseconds
-    // apart, so any difference is never more than a possible one-digit
-    // day-of-month/hour, immaterial to a footprint check that already needs
-    // no more than rough accuracy.
-    var pad = wmSize * 0.8;
-    var footprintStampWidth = textWidth(formatSaveStamp(new Date()), wmSize, "sans");
-    var naturalFootprint = pad + wmSize * 2.6 + wmSize * 0.6 + footprintStampWidth + pad;
-    if (naturalFootprint > contentW && naturalFootprint > 0){
-      var shrink = Math.max(contentW / naturalFootprint, 0);
-      wmSize = Math.max(8, wmSize * shrink);
-      pad = wmSize * 0.8;
-    }
-    var footerTop = cb.contentY1 != null ? cb.contentY1 : cb.y1;
+    // computeExportBounds) -- never on top of an actual measurement.
+    var footerTop = cb.contentY1 != null ? cb.contentY1 : cb.y1 - tl.footerH;
     var footerH = cb.y1 - footerTop;
-    var footerMidY = (footerTop + cb.y1) / 2;
+    var u = tl.u, pad = tl.pad;
     clone.appendChild(el("rect", { x: cb.x0, y: footerTop, width: contentW, height: footerH, fill: "#ffffff" }));
-    clone.appendChild(el("line", { x1: cb.x0, y1: footerTop, x2: cb.x1, y2: footerTop, stroke: "#c5ccc9", "stroke-width": Math.max(1, wmSize * 0.05) }));
-
-    // Logo + save timestamp geometry, bottom-right of the bar -- computed
-    // BEFORE the title below so the title can fit itself into whatever
-    // space is actually left of this fixed block, rather than the two
-    // being laid out independently and left to collide.
-    var wmImgSize = wmSize * 2.6;
-    var wmImgX = cb.x1 - pad - wmImgSize;
-    var wmImgY = footerMidY - wmImgSize / 2;
-    var stampText = formatSaveStamp(new Date());
-    var stampWidth = textWidth(stampText, wmSize, "sans");
-    var stampX = wmImgX - wmSize * 0.6;
-
-    // Plan title, bottom-left of the bar. Plain filled text with no
-    // stroke/halo -- unlike renderLabelGroup's on-plan labels below, this
-    // bar's background is guaranteed flat white (just filled above), never
-    // a photo, so there's nothing a halo would need to protect legibility
-    // against, and plain text reads cleaner for something meant to look
-    // like a printed title block.
-    var name = (state.fileBase || "").trim();
-    if (name){
-      var titleX = cb.x0 + pad;
-      var titleSize = clamp(wmSize * 1.5, 52, 160);
-      // The timestamp block above sits at a FIXED position on the right
-      // regardless of the title -- at 4x the old text size, a longer
-      // project/level(/room) name can run straight into it (this isn't a
-      // rare extreme-length case: a perfectly normal combined name did
-      // this at the old 1x-mapped-to-4x sizing). Shrink to fit first, down
-      // to a floor that keeps it legibly close to everything else in the
-      // bar; only a name that still doesn't fit even at that floor gets
-      // truncated with an ellipsis, rather than ever overlapping the
-      // timestamp.
-      var availableTitleWidth = (stampX - stampWidth - pad) - titleX;
-      var titleText = name;
-      if (availableTitleWidth > 0){
-        var natural = textWidth(titleText, titleSize, "sans");
-        if (natural > availableTitleWidth){
-          var floorSize = Math.max(wmSize * 0.9, 20);
-          titleSize = Math.max(floorSize, titleSize * (availableTitleWidth / natural));
-          if (textWidth(titleText, titleSize, "sans") > availableTitleWidth){
-            while (titleText.length > 1 && textWidth(titleText + "…", titleSize, "sans") > availableTitleWidth){
-              titleText = titleText.slice(0, -1);
-            }
-            titleText = titleText + "…";
-          }
+    clone.appendChild(el("line", { x1: cb.x0, y1: footerTop, x2: cb.x1, y2: footerTop, stroke: "#c5ccc9", "stroke-width": Math.max(0.5, u * 0.06) }));
+    // The logo on the right, as tall as the rows (no taller than the bar
+    // allows, no wider than a quarter of the copy).
+    var logo = Math.max(0, Math.min(footerH - pad * 2, contentW * 0.25, u * 4.2));
+    var logoX = cb.x1 - pad - logo;
+    if (logo > u * 0.8){
+      clone.appendChild(el("image", {
+        x: logoX, y: footerTop + (footerH - logo) / 2, width: logo, height: logo,
+        href: LOGO_WATERMARK_DATA_URL, preserveAspectRatio: "xMidYMid meet"
+      }));
+    } else { logoX = cb.x1; }
+    // The rows, top to bottom, left of the logo. Plain text on the white
+    // bar (font-weight 500: the one weight registered with the PDF export,
+    // see registerExportFonts) -- the saved line in the app's red.
+    var textX = cb.x0 + pad, avail = logoX - pad * 1.2 - textX;
+    var y = footerTop + (footerH - tl.textH) / 2;
+    tl.rows.forEach(function(r){
+      var size = r.size, text = r.text;
+      if (avail > 0){
+        var w = textWidth(text, size, "sans");
+        if (w > avail){
+          size = Math.max(r.size * 0.72, r.size * (avail / w));
+          while (text.length > 1 && textWidth(text + "…", size, "sans") > avail) text = text.slice(0, -1);
+          if (text !== r.text) text = text.replace(/\s+$/, "") + "…";
         }
-      } else {
-        // An extremely tight crop (e.g. "current view" zoomed in past the
-        // point where even the floor-sized timestamp/logo block fits
-        // alongside it) leaves no room for a title at all. Omitting it is
-        // far better than the old behavior here, which skipped the whole
-        // shrink/truncate block and rendered the full name at full size --
-        // guaranteed to overlap the timestamp once there's truly no space.
-        titleText = "";
-      }
-      if (titleText){
-        var titleEl = el("text", {
-          x: titleX, y: footerMidY,
-          "text-anchor": "start", "dominant-baseline": "middle",
-          // font-weight 500, not 600 -- registerExportFonts() only registers
-          // the app's one embedded weight (500) with jsPDF; svg2pdf.js can't
-          // match anything else against it and silently falls back to a
-          // built-in PDF font (helvetica) instead, which both looks
-          // inconsistent with every other label on the page and isn't
-          // guaranteed to have real IBM Plex Sans glyph metrics. Distinguishing
-          // the title from the timestamp is done with size alone (already
-          // larger, from titleSize above), the same way the rest of this app
-          // never varies font-weight either.
-          "font-family": fontStack("sans"), "font-size": titleSize, "font-weight": 500,
-          fill: "#1b2422"
-        });
-        titleEl.textContent = titleText;
-        clone.appendChild(titleEl);
-      }
-    }
-
-    // Logo + save timestamp, bottom-right of the same bar. Used to be a
-    // plain text label spelling out "UTZLINE Site Measure" -- replaced with
-    // the actual logo (see LOGO_WATERMARK_DATA_URL above) now that there is
-    // one. The save timestamp stays as its own text next to it -- that's
-    // the part a handed-off plan actually needs read off it (exactly when
-    // this copy was saved), which a static logo image can't carry on its
-    // own. Kept on renderLabelGroup's halo technique (three passes, never
-    // relying on paint-order, which svg2pdf.js doesn't honor for text) in
-    // case a future layout ever lets this sit over non-white content again.
-    clone.appendChild(el("image", {
-      x: wmImgX, y: wmImgY, width: wmImgSize, height: wmImgSize,
-      href: LOGO_WATERMARK_DATA_URL, preserveAspectRatio: "xMidYMid meet"
-    }));
-    clone.appendChild(renderLabelGroup({
-      text: stampText, x: stampX, y: footerMidY, rot: 0,
-      fontSize: wmSize, family: "sans", color: "#c8391c", anchor: "end"
-    }, "export-watermark"));
+      } else text = "";
+      y += r.lineH;
+      if (!text) return;
+      var t = el("text", {
+        x: textX, y: y - r.lineH * 0.26, "text-anchor": "start",
+        "font-family": fontStack("sans"), "font-size": size, "font-weight": 500,
+        fill: r.stamp ? "#c8391c" : "#1b2422"
+      });
+      t.setAttribute("class", "export-title-row");
+      t.textContent = text;
+      clone.appendChild(t);
+    });
   }
   // opts.maxDim (2026-09-25, speed): the rolling backups pass a smaller
   // ceiling -- a backup is a safety copy, and rasterizing every one at up
@@ -17097,10 +17046,11 @@
     var r = svgRoot.getBoundingClientRect();
     var dpr = clamp(window.devicePixelRatio || 1, 1, 3);
     var density = contentW > 0 ? (r.width * dpr) / contentW : dpr; // = dpr * state.view.scale
-    var desiredPxSize = clamp(r.width * dpr * 0.028, 28, 64);
-    var wmSize = clamp(density > 0 ? desiredPxSize / density : 44, 44, 128);
-    var footerH = Math.round(wmSize * 3.6);
-    return { x0: cb.x0, y0: cb.y0, x1: cb.x1, y1: cb.y1 + footerH, wmSize: wmSize, contentY1: cb.y1 };
+    // (v68) the same proportional title block as a full export (rows, so the
+    // saved line no longer crowds the rest out -- the reason this used to be
+    // sized off the screen instead; see exportTitleLayout)
+    var tl = exportTitleLayout(contentW);
+    return { x0: cb.x0, y0: cb.y0, x1: cb.x1, y1: cb.y1 + tl.footerH, wmSize: tl.u, titleLayout: tl, contentY1: cb.y1 };
   }
   function renderViewSnapshotBlob(){
     var viewportBounds = computeViewportWorldBounds();
@@ -17474,7 +17424,7 @@
     // on phone widths) so it's always possible to eyeball which build is
     // actually running, on any device, without digging into devtools.
     var hintTextEl = document.getElementById("emptyHintText");
-    if (hintTextEl) hintTextEl.appendChild(document.createTextNode(" · " + APP_VERSION));
+    if (hintTextEl) hintTextEl.appendChild(document.createTextNode(" · " + RELEASE_LABEL + " (build " + APP_VERSION + ")"));
     // Shared name+PIN identity (added v39, ported to the CSV+PIN registry
     // 2026-09-23) -- independent of the project-gate flow below, so it
     // loads (and the startup screen's identity row updates) whether or not
