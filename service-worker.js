@@ -1201,7 +1201,9 @@
 // v61 (2026-09-28): every check measure is a layer (newest on top); Viewer Reworks screen with comments.
 // v62 (2026-09-28): button reads "Create site measure" / "Open site measure".
 // v63 (2026-09-28): Viewer Reworks screen folds the rework event files (shared UtzRework module).
-var CACHE_NAME = "utzline-sitemeasure-cache-v63";
+// v64 (2026-09-28): View shop drawing lists Sent and Returned; revisions read as REV A, B, C.
+// v65 (2026-09-29): same build as the Viewer's v65 (job notes are only added from the Viewer).
+var CACHE_NAME = "utzline-sitemeasure-cache-v65";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

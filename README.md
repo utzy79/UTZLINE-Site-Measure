@@ -1,10 +1,18 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v63** (bump this line, and add a dated changelog
+**Current version: v65** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v65 (2026-09-29):** Same build as the Viewer's v65, where job notes added from the Viewer are stamped **FOR CONSTRUCTION**. Site Measure itself doesn't add job notes, so nothing changes here. Test: `pdftest-projects/run_v65_jobnote_for_construction.js`.
+
+**v64 (2026-09-28):** Shop drawings. Andrew: *"shop drawings need a sent and a returned section"* and *"we call them REV A REV B and so on"*.
+- View shop drawing now has a **Sent** part and a **Returned** part. Each drawing gets a revision picker (latest chosen) and Open.
+- Returned copies come from the drawing's `Returned` folder; the Scheduler adds them.
+- Revisions read as REV A, B, C…; files saved as REV 0/1/2 show as A/B/C, and the first-day "RevA" files still read.
+- Tests: `pdftest-projects/run_v64_shop_drawings_sent_returned.js` (new) and `run_shop_drawings.js` (updated).
 
 **v63 (2026-09-28):** Rework round. Andrew asked for every rework change to be its own file (*"also need to fix this rework conflict"*), a status log per rework, and *"reworks that are delivered to be green border / text and sent to bottom of page"*. The other apps now write each change as its own small file in the item's rework log folder, and this build reads them.
 - The shared rework code (`shared/utzline-rework.js`, `window.UtzRework`) is now pasted into `source.html` by `shared/sync_rework_module.py`. Never edit that block by hand. Site Measure itself doesn't use it: rework stays Viewer-only (v60).

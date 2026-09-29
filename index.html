@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v63">
+<link rel="manifest" href="./manifest.json?v=v65">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v63">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v63">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v65">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v65">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -921,6 +921,8 @@
      button), and the plain-button rows in the "which drawing is this a
      revision of?" picker. */
   .jobnote-row-name{ flex:1 1 auto; min-width:0; }
+  .shopdrawing-part-title{ font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-secondary); margin: 10px 2px 4px; }
+  .shopdrawing-part-title:first-child{ margin-top: 0; }
   .shopdrawing-rev-select{
     font:inherit; font-size:12px; padding:3px 6px; border-radius:6px;
     border:1px solid var(--border-strong); background:var(--surface-0); color:var(--text-primary);
@@ -1905,6 +1907,7 @@
           <span>or tap to choose a file</span>
         </div>
         <p class="jobnote-status" id="jobNoteAddStatus"></p>
+        <p class="jobnote-empty" style="padding:4px 2px 0;">Every page gets a light grey FOR CONSTRUCTION watermark.</p>
         <input type="file" id="jobNoteFileInput" accept="application/pdf,.pdf" style="display:none;">
         <div class="modal-actions">
           <button class="mbtn" id="jobNoteAddCancel">Close</button>
@@ -3559,7 +3562,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v63";
+  var APP_VERSION = "v65";
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
   // office to browse projects/levels/rooms without any ability to edit,
@@ -6105,11 +6108,78 @@
   // job note added after the fact. Shop Drawings are explicitly excluded --
   // see that feature's own comment ("deliberately NOT wired into the
   // joinery-status pipeline") -- unaffected by this change.
+
+  /* ---- (v65) Job notes are "For Construction" ----
+     Andrew: "a job note is IFC, and this gets a light grey watermark on the
+     pdf stating IFC", then "make that For Construction watermark". Every
+     page of a job note PDF gets FOR CONSTRUCTION in light grey, corner to
+     corner, as it's saved (the saved file IS the stamped one, so every app
+     shows it). Uses pdf-lib, loaded only when a job note is added (from
+     this app's folder, else the CDN). A PDF that can't be edited (e.g. a
+     password-protected one) is saved as it is, and the person is told.
+     4 GB tablet: one file at a time, and nothing is kept once it's saved. */
+  var PDF_LIB_SRCS = ["pdf-lib.min.js", "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"];
+  var FOR_CONSTRUCTION_TEXT = "FOR CONSTRUCTION";
+  var pdfLibLoadP = null;
+  function loadPdfLib(){
+    if (window.PDFLib && window.PDFLib.PDFDocument) return Promise.resolve(window.PDFLib);
+    if (pdfLibLoadP) return pdfLibLoadP;
+    pdfLibLoadP = new Promise(function(resolve, reject){
+      var i = 0;
+      function next(){
+        if (i >= PDF_LIB_SRCS.length){ pdfLibLoadP = null; reject(new Error("The PDF library couldn't load")); return; }
+        var el = document.createElement("script");
+        el.src = PDF_LIB_SRCS[i++]; el.async = true;
+        el.onload = function(){ if (window.PDFLib && window.PDFLib.PDFDocument) resolve(window.PDFLib); else next(); };
+        el.onerror = function(){ if (el.parentNode) el.parentNode.removeChild(el); next(); };
+        document.head.appendChild(el);
+      }
+      next();
+    });
+    return pdfLibLoadP;
+  }
+  // Resolves a Blob of the stamped PDF; rejects if it can't be done.
+  function stampForConstruction(file){
+    return loadPdfLib().then(function(PDFLib){
+      return file.arrayBuffer().then(function(buf){
+        return PDFLib.PDFDocument.load(buf, { updateMetadata: false });
+      }).then(function(doc){
+        return doc.embedFont(PDFLib.StandardFonts.HelveticaBold).then(function(font){
+          var text = FOR_CONSTRUCTION_TEXT;
+          doc.getPages().forEach(function(page){
+            var size = page.getSize(), w = size.width, h = size.height;
+            var rot = (((page.getRotation().angle || 0) % 360) + 360) % 360;
+            // as the page is seen (a /Rotate 90 page shows its long side across)
+            var vw = (rot === 90 || rot === 270) ? h : w, vh = (rot === 90 || rot === 270) ? w : h;
+            var seenAngle = Math.atan2(vh, vw) * 180 / Math.PI;            // bottom-left to top-right, as seen
+            var angle = seenAngle + rot;                                    // in the page's own coordinates
+            var fontSize = Math.max(10, Math.hypot(vw, vh) * 0.55 / font.widthOfTextAtSize(text, 1));
+            var tw = font.widthOfTextAtSize(text, fontSize), th = font.heightAtSize(fontSize, { descender: false });
+            var rad = angle * Math.PI / 180, c = Math.cos(rad), s = Math.sin(rad);
+            // centre the text on the page: back off half its length along the line and half its height across it
+            var x = w / 2 - (tw / 2) * c + (th / 2) * s;
+            var y = h / 2 - (tw / 2) * s - (th / 2) * c;
+            page.drawText(text, { x: x, y: y, size: fontSize, font: font, color: PDFLib.rgb(0.62, 0.62, 0.62), opacity: 0.32, rotate: PDFLib.degrees(angle) });
+          });
+          return doc.save();
+        });
+      }).then(function(bytes){ return new Blob([bytes], { type: "application/pdf" }); });
+    });
+  }
+  // Resolves { stamped } -- false when the PDF couldn't take the watermark
+  // and was saved as it is (v65).
   function addJobNote(projectHandle, level, room, joineryId, key, file, updatedBy){
-    return getJobNotesDirForItem(projectHandle, key, true).then(function(dirH){
-      return dirH.getFileHandle(jobNoteFileName(file.name), { create: true });
-    }).then(function(fh){
-      return verifiedHandleWrite(fh, file);
+    var stamped = true;
+    return stampForConstruction(file).then(null, function(err){
+      console.error("Couldn't add the For Construction watermark to " + (file.name || "a job note") + ":", err);
+      stamped = false;
+      return file;
+    }).then(function(data){
+      return getJobNotesDirForItem(projectHandle, key, true).then(function(dirH){
+        return dirH.getFileHandle(jobNoteFileName(file.name), { create: true });
+      }).then(function(fh){
+        return verifiedHandleWrite(fh, data);
+      });
     }).then(function(){
       // Sequential rather than Promise.all -- kept that way for simplicity,
       // though it's no longer required for correctness the way it used to
@@ -6123,7 +6193,7 @@
       return markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy).then(function(){
         return setJoineryStatusForward(projectHandle, level, room, joineryId, "in_manufacture", updatedBy);
       });
-    });
+    }).then(function(){ return { stamped: stamped }; });
   }
   function jobNoteKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
 
@@ -6164,16 +6234,19 @@
   // always before any new-scheme numeric revision -- read-side
   // compatibility only, nothing on disk is ever renamed.
   function revLabelValue(revLabel){
-    var m = /^REV (\d+)$/.exec(revLabel || "");
-    if (m) return parseInt(m[1], 10);
+    var m = /^REV ([A-Z]{1,3})$/.exec(revLabel || "");
+    if (m){ var v = 0; for (var i = 0; i < m[1].length; i++){ v = v * 26 + (m[1].charCodeAt(i) - 64); } return v - 1; } // (v64) REV A = 0
+    var d = /^REV (\d+)$/.exec(revLabel || "");
+    if (d) return parseInt(d[1], 10);
     var legacy = /^Rev([A-Z]+)$/.exec(revLabel || "");
     if (legacy){
       var letters = legacy[1], n = 0;
-      for (var i = 0; i < letters.length; i++){ n = n * 26 + (letters.charCodeAt(i) - 64); }
+      for (var j = 0; j < letters.length; j++){ n = n * 26 + (letters.charCodeAt(j) - 64); }
       return n - 1000000;
     }
     return -1;
   }
+
   // Splits "REV 0 - 2026-09-23 02-04-06 - elevation-north.pdf" into its
   // revision label and the original file's own display name -- found by
   // slicing off the rev-label prefix, then the FIRST " - " after it (the
@@ -6184,15 +6257,29 @@
   // drawing revision saved under the original v45.3 lettered scheme keeps
   // reading back correctly rather than showing "REV ?" -- nothing on disk
   // is ever renamed/migrated, this is read-side only.
+  /* (v64) Andrew: "we call them REV A    REV B and so on". A drawing's
+     revisions are lettered -- REV A (the first), REV B, ... REV Z, REV AA.
+     A file saved as "REV 0/1/2 - ..." (numbered, 23-28 Sep 2026) reads as
+     REV A/B/C, in the same order -- nothing on disk is renamed. The
+     first-day "RevA - ..." files still read as before. */
+  function shopRevLetters(n){
+    var out = ""; n = Math.max(0, n | 0) + 1;
+    while (n > 0){ var r = (n - 1) % 26; out = String.fromCharCode(65 + r) + out; n = Math.floor((n - 1) / 26); }
+    return out;
+  }
   function parseShopDrawingRevisionFileName(fileName){
-    var m = /^REV (\d+) - /.exec(fileName) || /^Rev([A-Z]+) - /.exec(fileName);
+    var m = /^REV ([A-Z]{1,3}|\d+) - /.exec(fileName), legacy = m ? null : /^Rev([A-Z]+) - /.exec(fileName);
     var revLabel = "REV ?";
-    if (m) revLabel = (/^\d+$/.test(m[1]) ? "REV " + m[1] : "Rev" + m[1]);
-    var afterRev = m ? fileName.slice(m[0].length) : fileName;
+    if (m) revLabel = "REV " + (/^\d+$/.test(m[1]) ? shopRevLetters(parseInt(m[1], 10)) : m[1]);
+    else if (legacy) revLabel = "Rev" + legacy[1];
+    var hit = m || legacy;
+    var afterRev = hit ? fileName.slice(hit[0].length) : fileName;
     var idx = afterRev.indexOf(" - ");
     var displayName = idx >= 0 ? afterRev.slice(idx + 3) : afterRev;
-    return { revLabel: revLabel, displayName: displayName };
+    var stamp = idx >= 0 && /^\d{4}-\d{2}-\d{2}/.test(afterRev) ? afterRev.slice(0, idx) : ""; // when it was saved
+    return { revLabel: revLabel, displayName: displayName, stamp: stamp };
   }
+
   // Every revision inside ONE drawing group's own folder, oldest (RevA)
   // first.
   function listShopDrawingRevisions(groupHandle){
@@ -6232,11 +6319,14 @@
     }, function(){ return []; }).then(function(groupHandles){
       return Promise.all(groupHandles.map(function(groupH){
         return listShopDrawingRevisions(groupH).then(function(revisions){
-          return { drawingId: groupH.name, revisions: revisions };
+          // (v64) the copies that came back, in the drawing's own "Returned" folder
+          return groupH.getDirectoryHandle("Returned", { create: false }).then(listShopDrawingRevisions, function(){ return []; }).then(function(returned){
+            return { drawingId: groupH.name, revisions: revisions, returned: returned };
+          });
         });
       }));
     }).then(function(groups){
-      groups = groups.filter(function(g){ return g.revisions.length > 0; });
+      groups = groups.filter(function(g){ return g.revisions.length > 0 || g.returned.length > 0; });
       groups.sort(function(a, b){ return b.drawingId.localeCompare(a.drawingId); });
       return groups;
     });
@@ -7750,9 +7840,9 @@
         return;
       }
       var key = jobNoteKeyFor(obj);
-      return addJobNote(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode || "", key, file, deviceUserName || (VIEW_ONLY_MODE ? "Viewer" : "Site Measure")).then(function(){
+      return addJobNote(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode || "", key, file, deviceUserName || (VIEW_ONLY_MODE ? "Viewer" : "Site Measure")).then(function(res){
         renderAll();
-        showToast("Job note added to “" + roomlinkDisplayText(obj) + "”.");
+        showToast("Job note added to “" + roomlinkDisplayText(obj) + "”." + (res && res.stamped === false ? " It couldn't take the For Construction watermark (a protected PDF?) and was saved as it is." : ""), res && res.stamped === false ? 7000 : undefined);
         closeAddJobNoteDialog();
       });
     }).catch(function(err){
@@ -7906,48 +7996,63 @@
         shopDrawingListEl.innerHTML = "<p class=\"jobnote-empty\">No shop drawings yet for this item.</p>";
         return;
       }
-      groups.forEach(function(g){
-        var row = document.createElement("div");
-        row.className = "jobnote-row";
-        var nameSpan = document.createElement("span");
-        nameSpan.className = "jobnote-row-name";
-        nameSpan.textContent = g.revisions[0].displayName;
-        row.appendChild(nameSpan);
-        // Revisions never get deleted, so even a single-revision drawing
-        // gets a (disabled-feeling but still real) one-item selector --
-        // consistent rather than the row's shape jumping around once a
-        // second revision eventually shows up.
-        var select = document.createElement("select");
-        select.className = "shopdrawing-rev-select";
-        g.revisions.forEach(function(rev, i){
-          var opt = document.createElement("option");
-          opt.value = String(i);
-          opt.textContent = rev.revLabel;
-          select.appendChild(opt);
-        });
-        select.selectedIndex = g.revisions.length - 1; // latest revision by default
-        row.appendChild(select);
-        var openBtn = document.createElement("button");
-        openBtn.type = "button"; openBtn.className = "mbtn";
-        openBtn.textContent = "Open";
-        openBtn.addEventListener("click", function(){
-          var rev = g.revisions[Number(select.value)];
-          rev.handle.getFile().then(function(file){
-            var url = URL.createObjectURL(file);
-            window.open(url, "_blank");
-            setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
-          }).catch(function(err){
-            console.error("Open shop drawing failed:", err);
-            showToast("Couldn't open that file — try again.");
-          });
-        });
-        row.appendChild(openBtn);
-        shopDrawingListEl.appendChild(row);
-      });
+      /* (v64) Andrew: "shop drawings need a sent and a returned section".
+         Sent (every drawing, a revision picker each, latest first choice)
+         then Returned (the builder's copies, same). */
+      function part(title, list, empty){
+        var h = document.createElement("div");
+        h.className = "shopdrawing-part-title";
+        h.textContent = title;
+        shopDrawingListEl.appendChild(h);
+        if (!list.length){
+          var p = document.createElement("p"); p.className = "jobnote-empty"; p.textContent = empty;
+          shopDrawingListEl.appendChild(p);
+          return;
+        }
+        list.forEach(function(revs){ shopDrawingListEl.appendChild(shopDrawingRow(revs)); });
+      }
+      part("Sent", groups.filter(function(g){ return g.revisions.length; }).map(function(g){ return g.revisions; }), "Nothing sent yet.");
+      part("Returned", groups.filter(function(g){ return g.returned.length; }).map(function(g){ return g.returned; }), "Nothing returned yet.");
     }).catch(function(err){
       console.error("List shop drawings failed:", err);
       shopDrawingListEl.innerHTML = "<p class=\"jobnote-empty\">Couldn't load shop drawings — try again.</p>";
     });
+  }
+  // One drawing's revisions (oldest first): its name, a revision picker
+  // (the latest chosen) and an Open for whichever is picked.
+  function shopDrawingRow(revs){
+    var row = document.createElement("div");
+    row.className = "jobnote-row";
+    var nameSpan = document.createElement("span");
+    nameSpan.className = "jobnote-row-name";
+    nameSpan.textContent = revs[revs.length - 1].displayName;
+    row.appendChild(nameSpan);
+    var select = document.createElement("select");
+    select.className = "shopdrawing-rev-select";
+    revs.forEach(function(rev, i){
+      var opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = rev.revLabel;
+      select.appendChild(opt);
+    });
+    select.selectedIndex = revs.length - 1; // latest revision by default
+    row.appendChild(select);
+    var openBtn = document.createElement("button");
+    openBtn.type = "button"; openBtn.className = "mbtn";
+    openBtn.textContent = "Open";
+    openBtn.addEventListener("click", function(){
+      var rev = revs[Number(select.value)];
+      rev.handle.getFile().then(function(file){
+        var url = URL.createObjectURL(file);
+        window.open(url, "_blank");
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+      }).catch(function(err){
+        console.error("Open shop drawing failed:", err);
+        showToast("Couldn't open that file — try again.");
+      });
+    });
+    row.appendChild(openBtn);
+    return row;
   }
   function openViewShopDrawingDialog(obj){
     var subtitle = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
