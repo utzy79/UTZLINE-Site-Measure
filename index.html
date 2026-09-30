@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v71">
+<link rel="manifest" href="./manifest.json?v=v73">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v71">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v71">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v73">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v73">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -23,9 +23,7 @@
      onerror handlers flag it explicitly, so the Save PDF button can say
      "failed to load" instead of quietly hanging or throwing something
      confusing deep inside the export code later. -->
-<script>window.__pdfLibFailed = false;</script>
-<script src="./jspdf.umd.min.js" onerror="window.__pdfLibFailed = true;"></script>
-<script src="./svg2pdf.umd.min.js" onerror="window.__pdfLibFailed = true;"></script>
+<!-- (v73) now loaded on first use: see the loader below -->
 <!-- PDF IMPORT (a separate library and a separate failure flag from the PDF
      EXPORT pair above -- one CDN outage shouldn't be reported as breaking a
      feature it doesn't affect): pdf.js renders a PDF page to a plain
@@ -36,8 +34,39 @@
      still ships a classic global-exposing build (pdfjsLib) -- pdf.js 3+
      dropped that in favor of ES modules only, which don't fit this page's
      plain-script-tag loading pattern. -->
-<script>window.__pdfImportLibFailed = false;</script>
-<script src="./pdf.min.js" onerror="window.__pdfImportLibFailed = true;"></script>
+<!-- (v73) now loaded on first use: -->
+<script>
+/* (2026-09-30) The PDF libraries load the first time they're needed -- a
+   PDF made or read -- not on every open (Andrew: "Is there anything we can
+   strip out to speed it up"). window.__utzNeedPdfLibs() and
+   window.__utzNeedPdfImportLib() start the load (once) and return a promise
+   that settles when it has finished; the __pdf*Failed flags say whether it
+   failed, as before. */
+window.__pdfLibFailed = false;
+window.__pdfImportLibFailed = false;
+(function(){
+  var running = {};
+  function load(srcs, flag){
+    var key = srcs.join("|");
+    if (running[key]) return running[key];
+    running[key] = srcs.reduce(function(prev, src){
+      return prev.then(function(){
+        if (window[flag]) return;
+        return new Promise(function(res){
+          var s = document.createElement("script");
+          s.src = src;
+          s.onload = function(){ res(); };
+          s.onerror = function(){ window[flag] = true; res(); };
+          (document.head || document.documentElement).appendChild(s);
+        });
+      });
+    }, Promise.resolve());
+    return running[key];
+  }
+  window.__utzNeedPdfLibs = function(){ return load(["./jspdf.umd.min.js", "./svg2pdf.umd.min.js"], "__pdfLibFailed"); };
+  window.__utzNeedPdfImportLib = function(){ return load(["./pdf.min.js"], "__pdfImportLibFailed"); };
+})();
+</script>
 <!-- Manual light/dark override: applied synchronously here, before the
      stylesheet below and any content paints, so switching -- or just
      loading a saved choice -- never flashes the wrong theme first. No
@@ -1973,6 +2002,581 @@
   </div>
 </div>
 
+<!-- UTZLINE-EVENT-STORE BEGIN (generated from shared/event-store -- don't edit here) -->
+<script>
+/* ============================== UTZLINE event store v2 (2026-09-30) ==============================
+   Andrew: "how can we speed up schedule loading on the app android" / "all
+   are slow" -> "and yes build it". Every record the apps share (status,
+   schedule date, cut, solid-surface completion / schedule, cutting file,
+   note) is one small immutable file per change. Until v2 those files lived
+   in ONE FOLDER PER JOINERY ITEM:
+       Project Saves/Joinery Status/<Level> - <Room> - <Code>/<name> - <stamp> - status.json
+   so a schedule had to list hundreds of folders, and on Andrew's tablet every
+   folder costs about a quarter of a second. v2 keeps the same files and the
+   same contents in ONE FOLDER PER LEVEL:
+       Project Saves/UTZLINE Events/<Branch>/<Level>/<Level> - <Room> - <Code> -- <name> - <stamp> - status.json
+   A whole schedule is now one listing per level, not one per item.
+
+   Nothing in the apps' reading and folding had to change: UtzEvents.root()
+   hands an app a stand-in for the old branch folder. Listing it gives one
+   stand-in "item folder" per item (named with the app's own key), listing
+   one of those gives the item's files under their old names, and creating a
+   file in one writes it into the new level folder. Records still sitting in
+   the old per-item folders are read as well (merged into the same item, an
+   old copy of a moved file counted once), so nothing disappears while
+   devices are updated. Old folders' file lists are remembered on the device
+   for 12 hours (they only change when a device that hasn't been updated
+   writes there); UtzEvents.refresh({ old: true }) forgets that.
+
+   UtzEvents.tidy() (UTZLINE Projects -> "Speed up this project") moves the
+   old per-item records into the new layout: copy, read back, then remove
+   the old file; an old item folder is removed once empty. Safe to repeat,
+   safe on two PCs at once. Run it only when every device has the v2 apps.
+
+   Generated into each app between UTZLINE-EVENT-STORE markers from
+   shared/event-store/event-store.js -- edit it there. */
+(function(){
+  "use strict";
+  var ROOT = "UTZLINE Events", SEP = " -- ";
+  var BRANCHES = ["Joinery Status", "Joinery Schedule", "Machining Flags", "Solid Surface Completion", "Solid Surface Schedule", "Joinery Cutting File", "Joinery Notes"];
+  var MEMO_MS = 4000, LEGACY_TTL = 12 * 3600 * 1000, MISS_MS = 5000, LEG_MISS_MS = 60000, NAME_KEY_MAX = 150;
+
+  // ---------- names ----------
+  function sanitize(name, max, fallback){
+    var cleaned = String(name == null ? "" : name).replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().replace(/^[._]+|[._\s]+$/g, "");
+    return cleaned.slice(0, max) || fallback;
+  }
+  // The key every UTZLINE app has always used for an item's folder
+  // (Site Measure / the schedules / Projects: 120 characters, "plan"), with
+  // any "--" run made "-" so " -- " only ever separates key from name.
+  function canonSeg(s){ return sanitize(s, 120, "plan").replace(/-{2,}/g, "-"); }
+  function itemKey(level, room, code){
+    return canonSeg(level) + " - " + canonSeg(room) + (code ? " - " + canonSeg(code) : "");
+  }
+  // The ITPs' older 80-character key -- only used to find their old folders.
+  function itpKey(level, room, code){
+    function s(x){ return sanitize(x, 80, "item"); }
+    return s(level) + " - " + s(room) + (code ? " - " + s(code) : "");
+  }
+  function hash(str){
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
+    return ("0000000" + h.toString(16)).slice(-8);
+  }
+  // A key short enough to lead a file name (Windows caps a name at 255).
+  function nameKey(key){
+    key = String(key || "").replace(/-{2,}/g, "-");
+    if (key.length <= NAME_KEY_MAX) return key;
+    return key.slice(0, NAME_KEY_MAX - 12).replace(/[ .]+$/, "") + " ~" + hash(key);
+  }
+  function levelFolder(level){ return sanitize(level, 120, "No level"); }
+  function splitName(n){
+    var i = n.indexOf(SEP);
+    if (i <= 0) return null;
+    return { key: n.slice(0, i), base: n.slice(i + SEP.length) };
+  }
+
+  // Every key an app makes is remembered with the item it names, so a
+  // stand-in folder asked for by key knows its level and its canonical key.
+  var registry = {}, alias = {};
+  function remember(key, level, room, code){
+    if (!key || registry[key]) return key;
+    var canon = nameKey(itemKey(level, room, code));
+    registry[key] = { level: level == null ? "" : String(level), room: room == null ? "" : String(room), code: code == null ? "" : String(code), canon: canon };
+    if (key !== canon && !alias[canon]) alias[canon] = key;
+    return key;
+  }
+  function canonOf(key){ var r = registry[key]; return r ? r.canon : nameKey(key); }
+
+  // ---------- small helpers ----------
+  function isNotFound(err){ return !!(err && (err.name === "NotFoundError" || err.name === "TypeMismatchError")); }
+  function notFound(what){
+    var e;
+    try{ e = new DOMException(what + " not found", "NotFoundError"); }catch(x){ e = new Error(what + " not found"); e.name = "NotFoundError"; }
+    return e;
+  }
+  function softNull(err){ if (isNotFound(err)) return null; throw err; }
+  function listAll(dirH){
+    var out = [];
+    if (!dirH || typeof dirH.values !== "function") return Promise.resolve(out);
+    var it = dirH.values();
+    function step(){ return it.next().then(function(r){ if (r.done) return out; if (r.value) out.push(r.value); return step(); }); }
+    return step();
+  }
+  function iterOver(listP, map){
+    var items = null, i = 0, p = null;
+    var it = {
+      next: function(){
+        if (!p) p = Promise.resolve(listP()).then(function(l){ items = l; });
+        return p.then(function(){ return i < items.length ? { done: false, value: map(items[i++]) } : { done: true, value: undefined }; });
+      }
+    };
+    if (typeof Symbol !== "undefined" && Symbol.asyncIterator) it[Symbol.asyncIterator] = function(){ return it; };
+    return it;
+  }
+  function now(){ return Date.now(); }
+
+  // ---------- device cache of old folders' file lists (IndexedDB) ----------
+  var dbP = null;
+  function db(){
+    if (dbP) return dbP;
+    dbP = new Promise(function(res, rej){
+      if (typeof indexedDB === "undefined") return rej(new Error("no IndexedDB"));
+      var rq = indexedDB.open("utzline-event-store", 1);
+      rq.onupgradeneeded = function(){ rq.result.createObjectStore("kv"); };
+      rq.onsuccess = function(){ res(rq.result); };
+      rq.onerror = function(){ rej(rq.error); };
+    });
+    dbP.catch(function(){});
+    return dbP;
+  }
+  function idbGet(k){
+    return db().then(function(d){ return new Promise(function(res){
+      try{ var rq = d.transaction("kv", "readonly").objectStore("kv").get(k); rq.onsuccess = function(){ res(rq.result); }; rq.onerror = function(){ res(null); }; }catch(e){ res(null); }
+    }); }, function(){ return null; });
+  }
+  function idbSet(k, v){
+    return db().then(function(d){ return new Promise(function(res){
+      try{ var tx = d.transaction("kv", "readwrite"); tx.objectStore("kv").put(v, k); tx.oncomplete = function(){ res(true); }; tx.onerror = function(){ res(false); }; }catch(e){ res(false); }
+    }); }, function(){ return false; });
+  }
+  var legacyMem = {};
+  function legacyCache(id){
+    var L = legacyMem[id];
+    if (L) return L.p;
+    L = legacyMem[id] = { data: { folders: {}, rootAt: 0, rootNames: null }, timer: 0 };
+    L.p = idbGet("legacy\u0000" + id).then(function(v){
+      if (v && typeof v === "object" && v.folders) L.data = v;
+      return L;
+    });
+    return L.p;
+  }
+  function legacySave(L, id){
+    if (L.timer) return;
+    L.timer = setTimeout(function(){ L.timer = 0; idbSet("legacy\u0000" + id, L.data); }, 400);
+  }
+
+  // ---------- one project's branch ----------
+  var memos = {}, misses = {};
+  function memoKey(id, level){ return id + "\u0000" + (level == null ? "*" : levelFolder(level)); }
+  function freshMemo(k){ var m = memos[k]; return m && (now() - m.at) < MEMO_MS ? m : null; }
+  function recordWrite(id, lf, canon, base, rec){
+    Object.keys(memos).forEach(function(k){
+      if (k.indexOf(id + "\u0000") !== 0) return;
+      var m = memos[k], scope = k.slice(id.length + 1);
+      if (scope !== "*" && scope !== lf) return;
+      if (!m.groups) return;
+      var g = m.groups[canon] || (m.groups[canon] = newGroup(lf));
+      g.entries[base] = rec;
+    });
+  }
+  function newGroup(lf){ return { entries: {}, legacy: [], lf: lf || null }; }
+
+  function Ctx(o){
+    this.dir = o.dir;
+    this.branch = o.branch;
+    this.id = String(o.cacheId || "") + "\u0000" + o.branch;
+    this.force = !!o.force;
+  }
+  Ctx.prototype.levelDirs = function(newH){
+    // the level folders under the new branch folder, remembered briefly
+    var k = this.id + "\u0001levels", m = memos[k];
+    if (m && (now() - m.at) < MEMO_MS && !this.force) return m.p;
+    var p = newH ? listAll(newH).then(function(es){ return es.filter(function(e){ return e.kind === "directory"; }); }) : Promise.resolve([]);
+    memos[k] = { at: now(), p: p };
+    p.catch(function(){ delete memos[k]; });
+    return p;
+  };
+
+  // A level folder's handle, remembered on its branch folder's handle for
+  // the session (level folders are never removed).
+  function levelDir(newH, lf, create){
+    var c = newH.__utzLevels || (newH.__utzLevels = {});
+    if (c[lf]) return Promise.resolve(c[lf]);
+    return newH.getDirectoryHandle(lf, { create: !!create }).then(function(h){ c[lf] = h; return h; });
+  }
+  function scan(ctx, newH, legH, level){
+    var k = memoKey(ctx.id, level);
+    var m = !ctx.force && freshMemo(k);
+    if (m && m.newH === newH && m.legH === legH) return m.p;
+    var groups = {};
+    function addNew(levelDirH, files){
+      files.forEach(function(f){
+        if (f.kind !== "file") return;
+        var s = splitName(f.name);
+        if (!s) return;
+        var g = groups[s.key] || (groups[s.key] = newGroup(levelDirH.name));
+        g.lf = levelDirH.name;
+        g.entries[s.base] = { h: f, parent: levelDirH, real: f.name, layout: "new" };
+      });
+    }
+    var pNew;
+    if (!newH) pNew = Promise.resolve();
+    else if (level != null){
+      pNew = levelDir(newH, levelFolder(level), false).then(function(lh){
+        return listAll(lh).then(function(fs){ addNew(lh, fs); });
+      }, softNull);
+    } else {
+      pNew = ctx.levelDirs(newH).then(function(dirs){
+        return Promise.all(dirs.map(function(lh){ return listAll(lh).then(function(fs){ addNew(lh, fs); }); }));
+      });
+    }
+    var pLeg = !legH ? Promise.resolve() : Promise.all([listAll(legH), legacyCache(ctx.id)]).then(function(r){
+      var dirs = r[0].filter(function(e){ return e.kind === "directory"; }), L = r[1];
+      var names = {};
+      dirs.forEach(function(dh){
+        names[dh.name] = 1;
+        var c = canonOf(dh.name);
+        var g = groups[c] || (groups[c] = newGroup(null));
+        g.legacy.push(dh);
+      });
+      // forget folders that have gone (moved by a tidy-up)
+      Object.keys(L.data.folders).forEach(function(n){ if (!names[n]) delete L.data.folders[n]; });
+      L.data.rootNames = Object.keys(names); L.data.rootAt = now();
+      legacySave(L, ctx.id);
+    });
+    var p = Promise.all([pNew, pLeg]).then(function(){ return groups; });
+    memos[k] = { at: now(), p: p, groups: groups, newH: newH, legH: legH };
+    p.catch(function(){ if (memos[k] && memos[k].p === p) delete memos[k]; });
+    return p;
+  }
+
+  // An old per-item folder's file names: from the device cache while fresh,
+  // otherwise listed (and remembered).
+  function legacyEntries(ctx, dh){
+    return legacyCache(ctx.id).then(function(L){
+      var f = L.data.folders[dh.name];
+      if (f && !ctx.force && (now() - f.at) < LEGACY_TTL && Array.isArray(f.names)){
+        return f.names.map(function(n){ return { h: null, parent: dh, real: n, layout: "legacy", cacheId: ctx.id }; });
+      }
+      return listAll(dh).then(function(es){
+        var files = es.filter(function(e){ return e.kind === "file"; });
+        L.data.folders[dh.name] = { at: now(), names: files.map(function(e){ return e.name; }) };
+        legacySave(L, ctx.id);
+        return files.map(function(e){ return { h: e, parent: dh, real: e.name, layout: "legacy" }; });
+      });
+    });
+  }
+
+  // ---------- stand-in handles ----------
+  function FileWrap(base, rec){ this.kind = "file"; this.name = base; this._rec = rec; }
+  // An old folder's file known only from the device's remembered list may
+  // have been moved since (a tidy-up on another PC): it then reads as an
+  // empty file -- which every app already skips -- and that folder is
+  // listed afresh next time.
+  function goneFile(name){
+    var f;
+    try{ f = new File([], name); }catch(e){ f = new Blob([]); }
+    return { kind: "file", name: name, getFile: function(){ return Promise.resolve(f); }, createWritable: function(){ return Promise.reject(notFound(name)); } };
+  }
+  FileWrap.prototype._real = function(){
+    var rec = this._rec;
+    if (rec.h) return Promise.resolve(rec.h);
+    return rec.parent.getFileHandle(rec.real, { create: false }).then(function(h){ rec.h = h; return h; }, function(err){
+      if (!isNotFound(err) || rec.layout !== "legacy" || !rec.cacheId) throw err;
+      return legacyCache(rec.cacheId).then(function(L){
+        var f = L.data.folders[rec.parent.name]; if (f) f.at = 0;
+        return goneFile(rec.real);
+      });
+    });
+  };
+  FileWrap.prototype.getFile = function(){ return this._real().then(function(h){ return h.getFile(); }); };
+  FileWrap.prototype.createWritable = function(o){ return this._real().then(function(h){ return h.createWritable(o); }); };
+  FileWrap.prototype.isSameEntry = function(other){
+    return this._real().then(function(h){
+      if (other && other._rec) return other._real().then(function(o){ return h === o || (typeof h.isSameEntry === "function" ? h.isSameEntry(o) : false); });
+      return h === other || (typeof h.isSameEntry === "function" && other ? h.isSameEntry(other) : false);
+    });
+  };
+  FileWrap.prototype.queryPermission = function(){ return Promise.resolve("granted"); };
+
+  function ItemDir(root, canon, group, name){
+    this.kind = "directory";
+    this.name = name || alias[canon] || canon;
+    this._root = root; this._canon = canon; this._g = group;
+    this._listP = null;
+  }
+  ItemDir.prototype._merged = function(){
+    var self = this, g = this._g, ctx = this._root._ctx;
+    return Promise.all(g.legacy.map(function(dh){ return legacyEntries(ctx, dh); })).then(function(lists){
+      var out = {};
+      lists.forEach(function(l){ l.forEach(function(e){ if (!out[e.real]) out[e.real] = e; }); });
+      Object.keys(g.entries).forEach(function(b){ out[b] = g.entries[b]; });
+      self._last = out;
+      return out;
+    });
+  };
+  ItemDir.prototype._files = function(){
+    return this._merged().then(function(out){ return Object.keys(out).sort().map(function(b){ return new FileWrap(b, out[b]); }); });
+  };
+  ItemDir.prototype.values = function(){ var s = this; return iterOver(function(){ return s._files(); }, function(f){ return f; }); };
+  ItemDir.prototype.entries = function(){ var s = this; return iterOver(function(){ return s._files(); }, function(f){ return [f.name, f]; }); };
+  ItemDir.prototype.keys = function(){ var s = this; return iterOver(function(){ return s._files(); }, function(f){ return f.name; }); };
+  ItemDir.prototype.getDirectoryHandle = function(n){ return Promise.reject(notFound(n)); };
+  ItemDir.prototype.queryPermission = function(){ return Promise.resolve("granted"); };
+  ItemDir.prototype.requestPermission = function(){ return Promise.resolve("granted"); };
+  ItemDir.prototype._levelDir = function(create){
+    var root = this._root, g = this._g, lf = g.lf || root._lfFor(this._canon, this.name);
+    g.lf = lf;
+    return root._newRoot(create).then(function(nh){
+      if (!nh) throw notFound(root.name);
+      return levelDir(nh, lf, create);
+    });
+  };
+  ItemDir.prototype.getFileHandle = function(name, opts){
+    var self = this, create = !!(opts && opts.create), g = this._g;
+    return this._merged().then(function(out){
+      var rec = out[name];
+      if (rec) return new FileWrap(name, rec);
+      if (!create) throw notFound(name);
+      return self._levelDir(true).then(function(lh){
+        var real = self._canon + SEP + name;
+        return lh.getFileHandle(real, { create: true }).then(function(h){
+          var r = { h: h, parent: lh, real: real, layout: "new" };
+          g.entries[name] = r;
+          recordWrite(self._root._ctx.id, lh.name, self._canon, name, r);
+          return new FileWrap(name, r);
+        });
+      });
+    });
+  };
+  ItemDir.prototype.removeEntry = function(name){
+    var g = this._g;
+    return this._merged().then(function(out){
+      var rec = out[name];
+      if (!rec) throw notFound(name);
+      return rec.parent.removeEntry(rec.real).then(function(){ if (g.entries[name] === rec) delete g.entries[name]; });
+    });
+  };
+
+  function Root(ctx, newH, legH, o){
+    this.kind = "directory"; this.name = ctx.branch;
+    this._ctx = ctx; this._newH = newH; this._legH = legH;
+    this._level = o.level == null ? null : o.level;
+  }
+  Root.prototype._newRoot = function(create){
+    var self = this;
+    if (this._newH) return Promise.resolve(this._newH);
+    if (!create) return Promise.resolve(null);
+    return this._ctx.dir([ROOT, this._ctx.branch], true).then(function(h){ self._newH = h; delete misses[self._ctx.id + "\u0000new"]; return h; });
+  };
+  Root.prototype._groups = function(){ return scan(this._ctx, this._newH, this._legH, this._level); };
+  Root.prototype._dirs = function(){
+    var self = this;
+    return this._groups().then(function(groups){
+      return Object.keys(groups).sort().filter(function(c){ var g = groups[c]; return g.legacy.length || Object.keys(g.entries).length; })
+        .map(function(c){ return new ItemDir(self, c, groups[c]); });
+    });
+  };
+  Root.prototype.values = function(){ var s = this; return iterOver(function(){ return s._dirs(); }, function(d){ return d; }); };
+  Root.prototype.entries = function(){ var s = this; return iterOver(function(){ return s._dirs(); }, function(d){ return [d.name, d]; }); };
+  Root.prototype.keys = function(){ var s = this; return iterOver(function(){ return s._dirs(); }, function(d){ return d.name; }); };
+  Root.prototype.getFileHandle = function(n){ return Promise.reject(notFound(n)); };
+  Root.prototype.queryPermission = function(){ return Promise.resolve("granted"); };
+  Root.prototype.requestPermission = function(){ return Promise.resolve("granted"); };
+  // The level folder for an item the registry doesn't know: the existing
+  // level folder its key starts with, else the key's first part.
+  Root.prototype._lfFor = function(canon, key){
+    var r = registry[key] || null;
+    if (r) return levelFolder(r.level);
+    var m = memos[this._ctx.id + "\u0001levels"], best = null;
+    if (m && m.names) m.names.forEach(function(n){ if ((key.indexOf(n + " - ") === 0 || key === n) && (!best || n.length > best.length)) best = n; });
+    if (best) return best;
+    if (typeof console !== "undefined") console.warn("UTZLINE events: no level known for " + key);
+    return levelFolder(String(key).split(" - ")[0]);
+  };
+  Root.prototype.getDirectoryHandle = function(key, opts){
+    var self = this, ctx = this._ctx, create = !!(opts && opts.create);
+    var r = registry[key] || null, canon = canonOf(key);
+    var lf = r ? levelFolder(r.level) : null;
+    // the new-layout files: from a whole-branch or this level's listing
+    var all = !ctx.force && freshMemo(memoKey(ctx.id, null));
+    var groupsP;
+    if (all && all.newH === this._newH && all.legH === this._legH) groupsP = all.p;
+    else if (lf != null && this._newH) groupsP = scan(ctx, this._newH, null, r.level);
+    else if (this._newH){
+      groupsP = ctx.levelDirs(this._newH).then(function(dirs){
+        var m = memos[ctx.id + "\u0001levels"]; if (m) m.names = dirs.map(function(d){ return d.name; });
+        lf = self._lfFor(canon, key);
+        return scan(ctx, self._newH, null, lf);
+      });
+    } else groupsP = Promise.resolve({});
+    return groupsP.then(function(groups){
+      var g = groups[canon];
+      if (!g){ g = newGroup(lf); groups[canon] = g; }
+      if (lf && !g.lf) g.lf = lf;
+      // the item's old folder(s): the app's key, the canonical one, the ITPs' 80-character one
+      var cands = [key];
+      var full = r ? itemKey(r.level, r.room, r.code) : null;
+      if (full && cands.indexOf(full) < 0) cands.push(full);
+      if (r){ var k80 = itpKey(r.level, r.room, r.code); if (cands.indexOf(k80) < 0) cands.push(k80); }
+      var have = {}; g.legacy.forEach(function(dh){ have[dh.name] = 1; });
+      cands = cands.filter(function(n){ return !have[n]; });
+      if (!self._legH || !cands.length) return g;
+      return legacyCache(ctx.id).then(function(L){
+        var known = (!ctx.force && L.data.rootNames && (now() - L.data.rootAt) < LEGACY_TTL) ? L.data.rootNames : null;
+        if (known) cands = cands.filter(function(n){ return known.indexOf(n) >= 0; });
+        return Promise.all(cands.map(function(n){ return self._legH.getDirectoryHandle(n, { create: false }).then(null, softNull); }));
+      }).then(function(found){
+        (found || []).forEach(function(dh){ if (dh && !have[dh.name]){ have[dh.name] = 1; g.legacy.push(dh); } });
+        return g;
+      });
+    }).then(function(g){
+      if (!create && !g.legacy.length && !Object.keys(g.entries).length) throw notFound(key);
+      return new ItemDir(self, canon, g, key);
+    });
+  };
+  Root.prototype.removeEntry = function(key){
+    return this.getDirectoryHandle(key, { create: false }).then(function(d){
+      return d._files().then(function(fs){ return Promise.all(fs.map(function(f){ return d.removeEntry(f.name); })); });
+    });
+  };
+
+  // o: { dir(segments, create) -> Promise<dir handle> under "Project Saves",
+  //      branch, create, cacheId (project identity), level (optional: only
+  //      that level's new-layout folder is listed), force }
+  function root(o){
+    var ctx = new Ctx(o);
+    var mNew = ctx.id + "\u0000new", mLeg = ctx.id + "\u0000leg", t = now();
+    function look(segs, create){
+      return ctx.dir(segs, create).then(function(h){ return { h: h }; }, function(err){ if (isNotFound(err)) return { h: null, miss: true }; throw err; });
+    }
+    // A missing new-layout folder is asked again after a few seconds; a
+    // missing old-layout folder is only taken as read for a minute on a
+    // project that already has the new one (only an out-of-date app could
+    // still make it).
+    var newP = (!o.create && !ctx.force && misses[mNew] && t - misses[mNew] < MISS_MS) ? Promise.resolve({ h: null, miss: true, memo: true }) : look([ROOT, o.branch], !!o.create);
+    var legP = (!ctx.force && misses[mLeg] && t - misses[mLeg] < LEG_MISS_MS) ? Promise.resolve({ h: null, miss: true, memo: true }) : look([o.branch], false);
+    return Promise.all([newP, legP]).then(function(r){
+      if (!r[0].memo){ if (r[0].miss) misses[mNew] = now(); else delete misses[mNew]; }
+      if (!r[1].memo){ if (r[1].miss && r[0].h) misses[mLeg] = now(); else delete misses[mLeg]; }
+      if (!r[0].h && !r[1].h && !o.create) throw notFound(o.branch);
+      return new Root(ctx, r[0].h, r[1].h, o);
+    });
+  }
+
+
+  // Forget the short-lived listings; with { old: true } also the device's
+  // remembered lists of old folders (they are listed again next time).
+  function refresh(o){
+    memos = {}; misses = {};
+    if (!(o && o.old)) return;
+    Object.keys(legacyMem).forEach(function(id){
+      var L = legacyMem[id];
+      L.p.then(function(){ L.data.rootAt = 0; Object.keys(L.data.folders).forEach(function(n){ L.data.folders[n].at = 0; }); });
+    });
+  }
+
+  // ---------- tidy-up: move old per-item records into the level folders ----------
+  function readText(fh){ return fh.getFile().then(function(f){ return f.text().then(function(t){ return { size: f.size, text: t }; }); }); }
+  function writeText(dirH, name, text){
+    return dirH.getFileHandle(name, { create: true }).then(function(fh){
+      return fh.createWritable().then(function(w){ return w.write(text).then(function(){ return w.close(); }); }).then(function(){ return fh; });
+    });
+  }
+  // o: { dir, cacheId, branches (default all), onProgress({ branch, done, total, moved }) }
+  // -> { moved, removedFolders, left: [{ branch, folder, name, why }] }
+  function tidy(o){
+    var out = { moved: 0, removedFolders: 0, left: [] };
+    var branches = o.branches || BRANCHES;
+    var chain = Promise.resolve();
+    branches.forEach(function(branch){
+      chain = chain.then(function(){ return tidyBranch(o, branch, out); });
+    });
+    return chain.then(function(){ refresh({ old: true }); return out; });
+  }
+  function tidyBranch(o, branch, out){
+    var id = String(o.cacheId || "") + "\u0000" + branch;
+    return o.dir([branch], false).then(function(legH){
+      return o.dir([ROOT, branch], true).then(function(newH){
+        var levelDirs = {};
+        function levelDir(lf){ return levelDirs[lf] || (levelDirs[lf] = newH.getDirectoryHandle(lf, { create: true })); }
+        return listAll(legH).then(function(es){
+          var folders = es.filter(function(e){ return e.kind === "directory"; });
+          var done = 0, total = folders.length;
+          function report(){ if (o.onProgress) try{ o.onProgress({ branch: branch, done: done, total: total, moved: out.moved }); }catch(e){} }
+          report();
+          function oneFile(dh, fh){
+            if (!/\.json$/i.test(fh.name)){ out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: "not a record" }); return Promise.resolve(false); }
+            return readText(fh).then(function(r){
+              if (!r.size || !r.text){ out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: "empty -- a save that never finished" }); return false; }
+              var ev;
+              try{ ev = JSON.parse(r.text); }catch(e){ ev = null; }
+              if (!ev || typeof ev !== "object" || ev.level == null){ out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: "couldn't be read" }); return false; }
+              var canon = nameKey(itemKey(ev.level, ev.room, ev.joineryId));
+              var target = canon + SEP + fh.name;
+              return levelDir(levelFolder(ev.level)).then(function(lh){
+                return lh.getFileHandle(target, { create: false }).then(function(th){
+                  return readText(th).then(function(t){
+                    if (t.text === r.text) return true;
+                    if (!t.size) return writeText(lh, target, r.text).then(function(){ return readText(th); }).then(function(t2){ return t2.text === r.text; });
+                    out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: "a different record with the same name is already in the new place" });
+                    return false;
+                  });
+                }, function(err){
+                  if (!isNotFound(err)) throw err;
+                  return writeText(lh, target, r.text).then(function(th){ return readText(th); }).then(function(t){ return t.text === r.text; });
+                });
+              }).then(function(ok){
+                if (!ok) return false;
+                return dh.removeEntry(fh.name).then(function(){ out.moved++; return true; });
+              });
+            }).catch(function(err){
+              out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: (err && (err.name || err.message)) || "error" });
+              return false;
+            });
+          }
+          function oneFolder(dh){
+            return listAll(dh).then(function(fs){
+              var files = fs.filter(function(f){ return f.kind === "file"; });
+              var c = Promise.resolve();
+              files.forEach(function(fh){ c = c.then(function(){ return oneFile(dh, fh); }); });
+              return c.then(function(){ return listAll(dh); }).then(function(rest){
+                if (rest.length) return;
+                return legH.removeEntry(dh.name).then(function(){ out.removedFolders++; }, function(){});
+              });
+            }).catch(function(err){
+              out.left.push({ branch: branch, folder: dh.name, name: "", why: (err && (err.name || err.message)) || "error" });
+            }).then(function(){ done++; report(); });
+          }
+          var i = 0;
+          function lane(){ if (i >= folders.length) return Promise.resolve(); var dh = folders[i++]; return oneFolder(dh).then(lane); }
+          return Promise.all([lane(), lane(), lane(), lane()]);
+        });
+      });
+    }, function(err){ if (isNotFound(err)) return; throw err; }).then(function(){
+      return legacyCache(id).then(function(L){ L.data.folders = {}; L.data.rootAt = 0; L.data.rootNames = null; legacySave(L, id); });
+    });
+  }
+  // How many old per-item folders a project still has (for the Projects hint).
+  function countLegacy(o){
+    var n = 0;
+    return Promise.all((o.branches || BRANCHES).map(function(branch){
+      return o.dir([branch], false).then(function(h){
+        return listAll(h).then(function(es){ n += es.filter(function(e){ return e.kind === "directory"; }).length; });
+      }, function(err){ if (!isNotFound(err)) throw err; });
+    })).then(function(){ return n; });
+  }
+
+  // A Refresh button always reads the folders afresh (not the few-second
+  // listing the last read left behind).
+  if (typeof document !== "undefined" && document.addEventListener){
+    document.addEventListener("click", function(e){
+      var el = e.target && e.target.closest ? e.target.closest("button, a, [role=button]") : null;
+      if (el && (/refresh/i.test(el.id || "") || /^\s*(\u21bb\s*)?Refresh\s*$/i.test(el.textContent || ""))) refresh();
+    }, true);
+  }
+
+  window.UtzEvents = {
+    version: 2,
+    ROOT: ROOT, SEP: SEP, BRANCHES: BRANCHES,
+    itemKey: itemKey, nameKey: nameKey, levelFolder: levelFolder, itpKey: itpKey,
+    remember: remember, root: root, refresh: refresh, tidy: tidy, countLegacy: countLegacy,
+    _registry: registry, _memos: function(){ return memos; }
+  };
+})();
+</script>
+<!-- UTZLINE-EVENT-STORE END -->
 <!-- UTZLINE-REWORK-MODULE BEGIN (generated from shared/utzline-rework.js -- don't edit here) -->
 <script>
 /* ==== UTZLINE shared rework module v1 (BEGIN) ====
@@ -3580,7 +4184,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v71";
+  var APP_VERSION = "v73";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -4463,6 +5067,8 @@
     autoBackupLabel.title = autoBackupLabelBaseTitle + " — " + suffix;
   }
   var autoBackupOn = true;
+  // (v73) a tablet or phone: auto-backup saves the level file only (see maybeAutoBackup)
+  var LIGHT_DEVICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "") || (/Macintosh/.test(navigator.userAgent || "") && navigator.maxTouchPoints > 1);
   try{ var storedAB = localStorage.getItem("redline_autobackup"); if (storedAB !== null) autoBackupOn = storedAB === "1"; }catch(e){}
   // Locking just disables the checkbox/interval controls so a stray tap on
   // a site tablet can't quietly turn backups off or stretch the interval —
@@ -4593,9 +5199,15 @@
     // and "a real history of snapshots to fall back to" both stay covered.
     if (activeLevelSavesHandle || activeLevelIsFlat){
       saveActiveLevelFile().then(function(){
+        // (v73) Andrew: "Is there anything we can strip out to speed it up".
+        // On a tablet or phone the level file is saved but no PNG + project
+        // snapshot is made: drawing the PNG is heavy on a 4 GB tablet, and
+        // every snapshot is synced up and down to every device. A PC still
+        // makes them (it opens the same level files).
+        if (LIGHT_DEVICE) return;
         return writeLevelBackupSnapshot();
       }).then(function(){
-        showToast("Backed up.");
+        showToast(LIGHT_DEVICE ? "Saved." : "Backed up.");
         autoBackupFailWarned = false;
         markBackupSucceeded();
       }).catch(function(err){
@@ -5139,8 +5751,10 @@
   // own joineryCode can even be blank (placed before a code was typed in),
   // so the room name is what keeps two blank-coded items in the same room
   // from colliding with each other.
+  // (event layout v2) every key is remembered with its item, so the event
+  // store knows the level folder and the shared key (see UTZLINE-EVENT-STORE).
   function joineryItemPageKey(levelName, roomName, joineryCode){
-    return sanitizeFileBase(levelName) + " - " + sanitizeFileBase(roomName) + (joineryCode ? " - " + sanitizeFileBase(joineryCode) : "");
+    return UtzEvents.remember(sanitizeFileBase(levelName) + " - " + sanitizeFileBase(roomName) + (joineryCode ? " - " + sanitizeFileBase(joineryCode) : ""), levelName, roomName, joineryCode);
   }
   function joineryItemPageDisplayName(levelName, roomName, joineryCode){
     return [levelName, roomName, joineryCode].filter(Boolean).join(" — ");
@@ -9653,10 +10267,25 @@
      directly so status/icons still show correctly, until a write-capable
      app performs the real migration. */
   function joineryStatusEventsBranchName(){ return "Joinery Status"; }
-  function getJoineryStatusEventsRootDir(projectHandle, create){
-    return projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create }).then(function(psH){
-      return psH.getDirectoryHandle(joineryStatusEventsBranchName(), { create: !!create });
+  /* (v73, event layout v2) Joinery Status is one folder per LEVEL now:
+     Project Saves/UTZLINE Events/Joinery Status/<Level>/<key> -- <name>.json.
+     This hands back the event store's stand-in for the old per-item
+     "Project Saves/Joinery Status" folder (old per-item folders are still
+     read), so everything below is unchanged. Found folders are remembered
+     for ten minutes (the old code looked them up on every read). See the
+     UTZLINE-EVENT-STORE block. */
+  var eventsDirMemo = {};
+  function eventsDir(projectHandle, segs, create){
+    var k = (projectsRootName || "") + "\u0000" + ((projectHandle && projectHandle.name) || "") + "\u0000" + segs.join("\u0000");
+    var hit = eventsDirMemo[k];
+    if (hit && hit.ph === projectHandle && Date.now() - hit.at < 600000) return Promise.resolve(hit.h);
+    return segs.reduce(function(p, s){ return p.then(function(d){ return d.getDirectoryHandle(s, { create: !!create }); }); }, projectHandle.getDirectoryHandle(projectSavesDirName(), { create: !!create })).then(function(h){
+      eventsDirMemo[k] = { ph: projectHandle, h: h, at: Date.now() };
+      return h;
     });
+  }
+  function getJoineryStatusEventsRootDir(projectHandle, create){
+    return UtzEvents.root({ dir: function(segs, c){ return eventsDir(projectHandle, segs, c); }, branch: joineryStatusEventsBranchName(), create: !!create, cacheId: (projectsRootName || "") + "\u0000" + ((projectHandle && projectHandle.name) || "") });
   }
   function getJoineryStatusItemDir(projectHandle, key, create){
     return getJoineryStatusEventsRootDir(projectHandle, create).then(function(rootH){
@@ -13737,6 +14366,12 @@
        - "Get ready for offline" opens every file in the ticked jobs (and the
          names & PINs list): anything online-only is downloaded now, while
          there's internet, and anything that won't open is listed;
+         (2026-09-30) on an ANDROID tablet it's a quick check instead -- the
+         ticked jobs and the names & PINs list are there. OneSync / Dropsync
+         keep a real copy of every file, so there's nothing to download, and
+         opening every file one by one took Andrew's tablet 10 minutes
+         ("it has taken 10 minutes to get ready for site"). "Open every
+         file (slow)" still does the full check;
        - a ticked job that isn't on the device at all shows as "not on this
          device yet" instead of just vanishing.
      Kept per main-folder name in this device's own storage (the same key in
@@ -13746,6 +14381,7 @@
   var deviceProjects = (function(){
     var LS_KEY = "utzline-device-projects", READY_KEY = "utzline-device-projects-ready";
     var A = null, showOthers = false, bar = null, run = null;
+    var ANDROID = /Android/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
     function lsGet(k){ try{ var v = JSON.parse(localStorage.getItem(k) || "{}"); return (v && typeof v === "object") ? v : {}; }catch(e){ return {}; } }
     function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
     function root(){ return A ? A.getRoot() : null; }
@@ -13819,7 +14455,7 @@
           '<div class="dp-actions"><button type="button" class="mbtn dp-choose">Choose my projects</button></div>';
       } else {
         var names = ch.map(function(n){ return "<b>" + esc(n) + "</b>"; }).join(", ");
-        var ready = rd && rd.at ? '<div class="dp-ready ' + (rd.ok ? "dp-ok" : "dp-bad") + '">' + (rd.ok ? "✓ Ready for offline" : "⚠ Not all on this device") + " — checked " + esc(when(rd.at)) + (rd.ok ? " (" + rd.files + " files)" : " (" + whyNot(rd) + ")") + "</div>" : "";
+        var ready = rd && rd.at ? '<div class="dp-ready ' + (rd.ok ? "dp-ok" : "dp-bad") + '">' + (rd.ok ? "✓ Ready for offline" : "⚠ Not all on this device") + " — checked " + esc(when(rd.at)) + (rd.ok ? (rd.quick ? " (quick check)" : " (" + rd.files + " files)") : " (" + whyNot(rd) + ")") + "</div>" : "";
         bar.innerHTML = '<div class="dp-text">On this device: ' + names + "</div>" + ready +
           '<div class="dp-actions"><button type="button" class="mbtn dp-choose">Change</button>' +
           '<button type="button" class="mbtn mbtn-accent dp-ready-btn">Get ready for offline</button>' +
@@ -13827,7 +14463,7 @@
       }
       var c = bar.querySelector(".dp-choose"), r = bar.querySelector(".dp-ready-btn"), h = bar.querySelector(".dp-help");
       if (c) c.addEventListener("click", openChooser);
-      if (r) r.addEventListener("click", getReady);
+      if (r) r.addEventListener("click", function(){ getReady(); });
       if (h) h.addEventListener("click", function(){ openHelp(false); });
     }
     /* ---- the dialogs ---- */
@@ -13894,7 +14530,8 @@
         "</ul><p>The other project folders don’t need to be on this device.</p>" +
         "<p><b>Windows tablet (OneDrive):</b> in File Explorer, right-click each folder above → <b>Always keep on this device</b>. Right-click the other project folders → <b>Free up space</b>.</p>" +
         "<p><b>Android tablet (OneSync / Dropsync):</b> set the folder pair to sync only the folders above — leave the other projects out.</p>" +
-        "<p>Then tap <b>Get ready for offline</b> while you still have internet.</p>" +
+        (ANDROID ? "<p>Let the sync app finish its sync (on Wi-Fi the first time), then tap <b>Get ready for offline</b> to check everything is here.</p>"
+                 : "<p>Then tap <b>Get ready for offline</b> while you still have internet.</p>") +
         '<div class="dp-btns"><span class="dp-grow"></span><button type="button" class="mbtn dp-close">Close</button><button type="button" class="mbtn mbtn-accent dp-go">Get ready for offline</button></div>');
       d.card.querySelector(".dp-close").addEventListener("click", d.close);
       d.card.querySelector(".dp-go").addEventListener("click", function(){ d.close(); getReady(); });
@@ -13908,7 +14545,49 @@
         return f && typeof f.text === "function" ? f.text() : null;
       });
     }
-    function getReady(){
+    // Android: the ticked jobs and the two files in the main folder are
+    // here -- a handful of lookups, not one per file.
+    function quickCheck(){
+      var ch = chosen(), r = root();
+      if (!r || !ch.length) return;
+      var d = dialog("Get ready for offline");
+      d.card.insertAdjacentHTML("beforeend", '<p class="dp-hint">On an Android tablet the sync app (OneSync / Dropsync) keeps a full copy of every file here, so there’s nothing to download. When it says it has finished syncing, you’re ready. This just checks your projects and the names &amp; PINs list are on the tablet.</p>' +
+        '<div class="dp-prog">Checking…</div><div class="dp-result"></div>' +
+        '<div class="dp-btns"><button type="button" class="mbtn dp-full">Open every file (slow)</button><span class="dp-grow"></span><button type="button" class="mbtn mbtn-accent dp-stop">Close</button></div>');
+      var prog = d.card.querySelector(".dp-prog"), out = d.card.querySelector(".dp-result");
+      d.card.querySelector(".dp-stop").addEventListener("click", d.close);
+      d.card.querySelector(".dp-full").addEventListener("click", function(){ d.close(); getReady(true); });
+      var jobs = [];
+      var users = r.getFileHandle("utzline-users.csv").then(function(){ return true; }, function(){ return false; });
+      var p = Promise.resolve();
+      ch.forEach(function(name){
+        p = p.then(function(){
+          return r.getDirectoryHandle(name).then(function(dirH){
+            return dirH.getDirectoryHandle("Project Saves").then(function(){ jobs.push({ name: name, ok: true }); }, function(){ jobs.push({ name: name, ok: true, noSaves: true }); });
+          }, function(){ jobs.push({ name: name, ok: false }); });
+        });
+      });
+      Promise.all([p, users]).then(function(res){
+        var usersOk = res[1], ok = usersOk, html = "";
+        jobs.forEach(function(j){
+          if (!j.ok){ ok = false; html += '<div class="dp-bad">✗ “' + esc(j.name) + "” isn’t on this device — add it to the sync app, or let it finish.</div>"; }
+          else html += '<div class="dp-ok">✓ “' + esc(j.name) + "” is on this device.</div>";
+        });
+        if (usersOk) html += '<div class="dp-ok">✓ Names &amp; PINs (utzline-users.csv) are on this device.</div>';
+        else html += '<div class="dp-bad">✗ utzline-users.csv (names &amp; PINs) isn’t here — sync the files in the main folder too, or nobody can sign anything.</div>';
+        var rd = lsGet(READY_KEY); rd[rootKey()] = { at: new Date().toISOString(), ok: ok, quick: true, files: 0, failed: 0,
+          missingJobs: jobs.filter(function(j){ return !j.ok; }).length, usersMissing: !usersOk }; lsSet(READY_KEY, rd);
+        prog.textContent = ok ? "Done — your projects are on this tablet. Check the sync app has finished, and you’re ready." : "Done — some things aren’t on this tablet yet.";
+        prog.className = "dp-prog " + (ok ? "dp-ok" : "dp-bad");
+        out.innerHTML = html;
+        renderBar();
+      }).catch(function(err){
+        console.error("Get ready for offline (quick) failed:", err);
+        prog.textContent = "Couldn’t finish the check (" + (err && err.message || err) + ").";
+      });
+    }
+    function getReady(full){
+      if (ANDROID && full !== true) return quickCheck();
       var ch = chosen(), r = root();
       if (!r || !ch.length) return;
       var d = dialog("Get ready for offline");
@@ -15136,7 +15815,9 @@
     return file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
   }
   function pdfImportLibsReady(){
-    return !!(window.pdfjsLib && typeof window.pdfjsLib.getDocument === "function");
+    var ok = !!(window.pdfjsLib && typeof window.pdfjsLib.getDocument === "function");
+    if (!ok && window.__utzNeedPdfImportLib) window.__utzNeedPdfImportLib(); // (v73) loaded on first use
+    return ok;
   }
   // Renders one page of a PDF to a plain <canvas> at a given scale and hands
   // back a data URL + pixel size -- shared by the full-resolution import
@@ -16968,7 +17649,9 @@
   // the actual svg2pdf-attached method (jsPDF.API.svg, where plugins hang
   // their methods) catches that case explicitly instead.
   function pdfLibsReady(){
-    return !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && typeof window.jspdf.jsPDF.API.svg === "function");
+    var ok = !!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && typeof window.jspdf.jsPDF.API.svg === "function");
+    if (!ok && window.__utzNeedPdfLibs) window.__utzNeedPdfLibs(); // (v73) loaded on first use
+    return ok;
   }
   // Safety cap on the PDF export's composited photo-backdrop canvas (see
   // renderExportPdfBlob) -- same reasoning and the same figure as the PNG

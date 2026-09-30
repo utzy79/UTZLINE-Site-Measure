@@ -1,10 +1,23 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v71 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v73 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v73 (2026-09-30) — RC 1.0: records are kept one folder per level — much faster on a tablet; less loaded at start.**
+
+- Andrew: *"how can we speed up schedule loading on the app android"* / *"all are slow"*. Every status, schedule date, cut, solid-surface tick, cutting file and note is still one small file per change (nothing is ever rewritten), but they now go in **one folder per level** — `Project Saves/UTZLINE Events/<record type>/<Level>/`, each file named `<Level> - <Room> - <Code> -- <name> - <time> - <kind>.json` — instead of one folder per joinery item. A schedule now lists a handful of level folders instead of hundreds of item folders; on the tablet each folder costs about a quarter of a second.
+- Records a project already has in the old item folders are still read, and both places are shown together (a record found in both counts once). UTZLINE Projects shows **Speed up this project** on a project that still has old folders and moves them — each record copied, checked, then its old copy removed.
+- **Update every tablet and PC.** An app older than this one doesn't look in the level folders, so it won't see records written by this one — and only press *Speed up this project* once every device is updated.
+- **The PDF tools load when they're first needed** (Andrew: *"Is there anything we can strip out to speed it up. Any bloat"*). jsPDF, svg2pdf and pdf.js used to load every time the app opened, about 1.2 MB of code parsed before anything showed; now it loads the first time a PDF is made or a PDF plan is opened. Offline it still comes from the app's own copy.
+- **On a tablet or phone, auto-backup just saves the level.** It used to also draw a PNG of the plan and write it with a full copy of the level into the level's backup folder (10 kept) every few minutes — heavy on a 4 GB tablet, and every snapshot then synced up and down to every device. A PC still makes the snapshots; the tablet shows "Saved." instead of "Backed up.".
+
+
+**v72 (2026-09-30) — RC 1.0: "Get ready for offline" is quick on Android.**
+
+- Andrew: *"it has taken 10 minutes to "get ready for site""*. The check opened every file in the ticked jobs one at a time, and on his tablet each open takes about a quarter of a second. On an Android tablet OneSync / Dropsync keep a real copy of every file, so there's nothing to download: it now just checks the ticked jobs and the names & PINs list are on the tablet (a few seconds) and says so. **Open every file (slow)** in that dialog still does the full check. Windows laptops (OneDrive "online-only" files) still get the full check, which downloads what's missing.
 
 **v71 (2026-09-29) — RC 1.0: shop drawing revisions start at REV 0.**
 
