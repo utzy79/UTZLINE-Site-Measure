@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v69">
+<link rel="manifest" href="./manifest.json?v=v71">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v69">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v69">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v71">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v71">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -3580,7 +3580,7 @@
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v69";
+  var APP_VERSION = "v71";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -3776,12 +3776,26 @@
         .then(function(){ return verifyWrittenSize(handle, expectedSize, attempt + 1); });
     });
   }
+  /* (v70) ... and the whole write is tried again when it fails (0.5 s, then
+     1.5 s later) -- including when the size never comes right. On Windows a
+     sync client or antivirus can hold a brand-new file for a moment and the
+     save fails as it finishes (UTZLINE Projects v43 found this). */
+  var SAVE_RETRY_MS = [500, 1500];
   function verifiedHandleWrite(handle, blob){
-    return handle.createWritable().then(function(w){
-      return w.write(blob).then(function(){ return w.close(); });
-    }).then(function(){
-      return verifyWrittenSize(handle, blob.size, 0);
-    }).then(function(f){
+    var tries = 0;
+    function attempt(){
+      return handle.createWritable().then(function(w){
+        return w.write(blob).then(function(){ return w.close(); });
+      }).then(function(){
+        return verifyWrittenSize(handle, blob.size, 0);
+      }).catch(function(err){
+        if (tries >= SAVE_RETRY_MS.length || (err && err.name === "AbortError")) return Promise.reject(err);
+        var wait = SAVE_RETRY_MS[tries++];
+        console.warn("Saving " + (handle && handle.name) + " failed (" + ((err && (err.name || err.code || err.message)) || err) + ") — trying again in " + wait + " ms");
+        return new Promise(function(r){ setTimeout(r, wait); }).then(attempt);
+      });
+    }
+    return attempt().then(function(f){
       // A cloud-sync client watching this folder (Dropbox, OneDrive, etc)
       // can still step in and rewrite or hollow out the file a moment
       // AFTER this check already passed -- outside anything the browser
@@ -5762,7 +5776,7 @@
       }, 2).then(function(){ if (seq === rwUi.loadSeq && !rwUi.detail) renderReworksList(); });
     }).catch(function(err){
       console.error("Reading reworks failed:", err);
-      rwBodyEl.innerHTML = "<p class=\"jobnote-empty\">Couldn't read rework data (still syncing?) — try again in a moment.</p>";
+      rwBodyEl.innerHTML = "<p class=\"jobnote-empty\">Couldn't read rework data just now — try again in a moment.</p>";
     });
   }
   function closeReworksScreen(){ rwScreen.hidden = true; rwUi.loadSeq++; rwUi.detail = null; rwBodyEl.innerHTML = ""; }
@@ -5819,7 +5833,7 @@
     intro.textContent = (open.length
       ? open.length + " outstanding rework" + (open.length === 1 ? "" : "s") + " — not yet delivered to site. Newest first in each room."
       : "No outstanding reworks" + (rwUi.filter ? " for this item." : " in this project.")) +
-      (rwUi.unreadable ? " " + rwUi.unreadable + " rework file" + (rwUi.unreadable === 1 ? "" : "s") + " couldn't be read (still syncing?) — close and reopen in a moment." : "");
+      (rwUi.unreadable ? " " + rwUi.unreadable + " rework file" + (rwUi.unreadable === 1 ? "" : "s") + " couldn't be read just now — close and reopen in a moment." : "");
     rwBodyEl.appendChild(intro);
     var lastGroup = null;
     open.forEach(function(r){
@@ -5943,7 +5957,7 @@
       ph.innerHTML = "";
       if (full && full.__err){
         var msg = document.createElement("p"); msg.className = "rw-hint";
-        msg.textContent = full.__err.code === "gone" ? "This rework isn't in the file any more (deleted in Install ITP?) — close and reopen the list." : "Couldn't read this rework's photos just now (still syncing?) — try again in a moment.";
+        msg.textContent = full.__err.code === "gone" ? "This rework isn't in the file any more (deleted in Install ITP?) — close and reopen the list." : "Couldn't read this rework's photos just now — try again in a moment.";
         ph.appendChild(msg);
       } else if (full){
         row.entry = RW.slimEntry(full);
@@ -6286,6 +6300,33 @@
     while (n > 0){ var r = (n - 1) % 26; out = String.fromCharCode(65 + r) + out; n = Math.floor((n - 1) / 26); }
     return out;
   }
+  /* (v71) Andrew: "all revisions start at REV 0  Not REV A  It goes 0 A B C D E etc...". A drawing's sent revisions are put in the
+     order they were saved (the saved-at in each file name; the first-day
+     "RevA - ..." files, which have none, first) and labelled by position:
+     the first is REV 0, the second REV A, then B, C ... -- whatever the file
+     name says (a first revision saved as "REV A" before today shows as
+     REV 0). Nothing on disk is renamed. A returned copy carries its sent
+     revision's name token and shows that revision's label. */
+  function shopRevDisplay(i){ return "REV " + (i === 0 ? "0" : shopRevLetters(i - 1)); }
+  function shopRevOrder(revs){
+    revs.sort(function(a, b){
+      var as = a.stamp || "", bs = b.stamp || "";
+      if (as && bs && as !== bs) return as < bs ? -1 : 1;
+      if (!as !== !bs) return as ? 1 : -1;
+      return revLabelValue(a.rawLabel) - revLabelValue(b.rawLabel);
+    });
+    revs.forEach(function(r, i){ r.revLabel = shopRevDisplay(i); r.revIndex = i; });
+    return revs;
+  }
+  function shopRevLabelReturned(ret, revs){
+    var same = revs.filter(function(r){ return r.rawLabel === ret.rawLabel; });
+    if (same.length > 1 && ret.stamp){ var before = same.filter(function(r){ return !r.stamp || r.stamp <= ret.stamp; }); if (before.length) same = before; }
+    if (same.length) return same[same.length - 1].revLabel;
+    // no sent file with that name: a copy saved before today carries the
+    // label it had then (A = the first), so go by that value
+    var v = revLabelValue(ret.rawLabel);
+    return v >= 0 ? shopRevDisplay(v) : (ret.rawLabel || "REV ?");
+  }
   function parseShopDrawingRevisionFileName(fileName){
     var m = /^REV ([A-Z]{1,3}|\d+) - /.exec(fileName), legacy = m ? null : /^Rev([A-Z]+) - /.exec(fileName);
     var revLabel = "REV ?";
@@ -6296,7 +6337,7 @@
     var idx = afterRev.indexOf(" - ");
     var displayName = idx >= 0 ? afterRev.slice(idx + 3) : afterRev;
     var stamp = idx >= 0 && /^\d{4}-\d{2}-\d{2}/.test(afterRev) ? afterRev.slice(0, idx) : ""; // when it was saved
-    return { revLabel: revLabel, displayName: displayName, stamp: stamp };
+    return { revLabel: revLabel, displayName: displayName, stamp: stamp, raw: m ? "REV " + m[1] : (legacy ? "Rev" + legacy[1] : "REV ?") }; // (v71) raw: the name token as saved
   }
 
   // Every revision inside ONE drawing group's own folder, oldest (RevA)
@@ -6309,14 +6350,13 @@
         if (res.done) return out;
         if (res.value && res.value.kind === "file" && /\.pdf$/i.test(res.value.name)){
           var parsed = parseShopDrawingRevisionFileName(res.value.name);
-          out.push({ fileName: res.value.name, handle: res.value, revLabel: parsed.revLabel, displayName: parsed.displayName });
+          out.push({ fileName: res.value.name, handle: res.value, revLabel: parsed.revLabel, rawLabel: parsed.raw, displayName: parsed.displayName, stamp: parsed.stamp });
         }
         return step();
       });
     }
     return step().then(function(list){
-      list.sort(function(a, b){ return revLabelValue(a.revLabel) - revLabelValue(b.revLabel); });
-      return list;
+      return shopRevOrder(list); // (v71) REV 0, A, B ... by the order they were saved
     });
   }
   // Every independent drawing for this item, newest drawing group first --
@@ -6340,6 +6380,7 @@
         return listShopDrawingRevisions(groupH).then(function(revisions){
           // (v64) the copies that came back, in the drawing's own "Returned" folder
           return groupH.getDirectoryHandle("Returned", { create: false }).then(listShopDrawingRevisions, function(){ return []; }).then(function(returned){
+            returned.forEach(function(x){ x.revLabel = shopRevLabelReturned(x, revisions); }); // (v71) the label of the revision it answers
             return { drawingId: groupH.name, revisions: revisions, returned: returned };
           });
         });
@@ -7473,7 +7514,7 @@
       if (err && err.code === "nav_cancelled") return; // declined the save-before-leaving confirm -- just stay put
       if (err && err.code === "read_failed"){
         // (v60) Read before leaving the plan, so nothing has changed.
-        showToast(err.message + " (still syncing?) — nothing was changed. Try again in a moment.", 7000);
+        showToast(err.message + " just now — nothing was changed. Try again in a moment.", 7000);
         return;
       }
       console.error("Open joinery item page failed:", err);
@@ -9536,7 +9577,10 @@
     if (rec.status === "manufactured") return "📦";
     if (rec.status === "machined") return "⚙️";
     if (rec.status === "in_manufacture") return "🏭";
-    if (rec.jobNote) return "🛠️";
+    // A job note means In manufacture (the rule since 2026-09-23) -- and
+    // Andrew: "i want the factory throguhout" (an item whose In manufacture
+    // step hadn't landed showed 🛠️ instead).
+    if (rec.jobNote) return "🏭";
     if (rec.status === "measured") return "📏";
     return "";
   }
@@ -14658,8 +14702,8 @@
     rows.forEach(function(r){ lines.push([r.name, r.pin, r.showInApps]); });
     var text = csvStringifyRows(lines);
     return projectsRootHandle.getFileHandle(USERS_CSV_NAME, { create: true }).then(function(fh){
-      return fh.createWritable();
-    }).then(function(w){ return w.write(text).then(function(){ return w.close(); }); });
+      return verifiedHandleWrite(fh, new Blob([text], { type: "text/csv" })); // (v70) retried + checked
+    });
   }
   function findUserRowCI(rows, name){
     var n = String(name || "").trim().toLowerCase();

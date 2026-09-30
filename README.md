@@ -1,10 +1,20 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v69 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v71 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v71 (2026-09-29) — RC 1.0: shop drawing revisions start at REV 0.**
+
+- Andrew: *"all revisions start at REV 0  Not REV A  It goes 0 A B C D E etc..."*. A drawing's revisions are put in the order they were saved and labelled by position: REV 0, then REV A, B, C … A first revision saved as "REV A" before today now shows as REV 0; nothing on disk is renamed. A returned copy shows the label of the revision it answers. The same in Projects, the Scheduler and Machine Schedule.
+
+**v70 (2026-09-29) — RC 1.0: the factory for In manufacture, every time; every save retried.**
+
+- **🏭 for a job note too.** Andrew: *"viewer is giving me different icond for in manufacture, some of it if th ehammer and spanner, others is the factory, i want the factory throguhout"*. A job note means In manufacture, but an item whose In manufacture step hadn't landed (the Scheduler's job-note bug, fixed in Scheduler v35) or that predates the rule showed 🛠️ on its marker. It now shows 🏭 like the rest.
+- **Every save is retried and checked.** Status events, check measures, overlays, backups, the names list and saved PDFs / PNGs: each is read back to check its size, and the whole write is tried again 0.5 s and 1.5 s later if it fails. On Windows, a sync client or antivirus holding a brand-new file for a moment used to fail the save and leave a 0-byte file with nothing said.
+- **No message says "still syncing?" any more.** It was a guess and usually wrong. Messages now say "couldn't read … just now".
 
 **v69 (2026-09-29) — RC 1.0: Projects on this device.** Andrew: *"the onsite apps need an option fo rthe user to pick the projectas they are working on to minimise the syunc on their device"*.
 

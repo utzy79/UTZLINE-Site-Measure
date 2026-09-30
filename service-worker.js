@@ -1207,7 +1207,9 @@
 // v67 (2026-09-29): RC 1.0 -- the version is shown as RC 1.0, with a small "RC 1.0" tag on the logo.
 // v68 (2026-09-29): RC 1.0 -- "Site measure not required"; the saved copy's title block is rows that scale; Yes/No "Mark check measure complete?"; inserted PDF pages can be cropped.
 // v69 (2026-09-29): RC 1.0 -- "Projects on this device": pick the jobs this device works on; sync help; get ready for offline.
-var CACHE_NAME = "utzline-sitemeasure-cache-v69";
+// v70 (2026-09-29): RC 1.0 -- 🏭 for a job note too; every save retried + checked; no "still syncing?" guesses.
+// v71 (2026-09-29): RC 1.0 -- shop drawing revisions REV 0, then A, B, C ...
+var CACHE_NAME = "utzline-sitemeasure-cache-v71";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
