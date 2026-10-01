@@ -1,10 +1,32 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v73 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v77 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v77 (2026-10-01) — RC 1.0: the Viewer's floor plan export carries a QR code (Site Measure only carries the code).**
+
+- Andrew: *"can that viewer export also generate and apply a qr code on the page, that the delivery itp can scan to open the relevant room / joinery item"* → *"All three ITPs"*. See the Viewer's README; nothing changes in Site Measure's own screens. Shared code now carried by both builds: the QR encoder (`shared/qr/qr-code.js`).
+
+**v76 (2026-10-01) — RC 1.0: Viewer round — joinery summary, Export floor plan after a job note (Site Measure only carries the code; its own menu is unchanged).**
+
+- Andrew: *"build that in the viewer, (export floor plan) plus the viewer to have the right click option to open the joinery summary"* / *"that should have been when job note is added. create the a3 plans"*. The new rows and the after-job-note popup are on the **Viewer** only — see the Viewer's README. Site Measure's menu is as before.
+- Shared code now carried by both builds: the ITP log reader and the item-extras cards (Cutting file / Notes / History).
+
+**v75 (2026-09-30) — RC 1.0: one-finger pan, blue markers 25% smaller, the room in the marker menu, the builder's logo, the drafter step on reworks (Viewer).**
+
+- Andrew: *"all floor plans should pan / zoom with the same functionality (1 finger scroll, pinch to zoom)"*: with the **Select** tool a drag that starts on empty plan now **pans** (a tap still selects the photo / deselects; dragging an object still moves it; the Pan tool, Space and the middle button work as before).
+- Andrew: *"all icons to have this fill colour as default"* + *"make the text and icons 25% smaller"*: plan markers are drawn the Site Measure way (white ring, black ring, **blue #0011ff** fill, whatever colour they were saved with), the dot and the label text 25% smaller (the status icon follows the dot).
+- The marker's right-click / long-press menu now shows the **room** as well as the joinery ID (Andrew: *"these menus to show the room number also ... across all apps that have these popups on right click"*).
+- The day / night button now shares its choice with the other UTZLINE apps on the device.
+- **Builder's logo** beside the project name in the top bar (set up once per builder in UTZLINE Projects).
+- **Drafter step on reworks** (Viewer; Andrew: *"under view reworks here put the names of the people that have uploaded drawings into this project, then in that flag the rework, within that rework the person can either mark it as resent to CNC, Not required ... or pass it onto another drafter"*): the reworks list names the drafters (the people the Scheduler has recorded uploading shop drawings into the project; the shared name list until then); a rework can be flagged to one; on the rework page the drafter answers **Resent to CNC**, **Not required** or **Pass on to…** -- each its own event file, shown in the status log everywhere and on the rework PDF ("Drafter").
+
+**v74 (2026-09-30) — RC 1.0: sign in every time the app is opened (tablets and phones).**
+
+- Andrew: *"on next update, when opening the apps, it should as[k] for you to login, currently it just loads to the last user that was logged in, some of these tablets will have multiple users (employees)"*. **On a tablet or phone the app now asks who is using it** -- a full-screen *Who's using this?* list (every name in `utzline-users.csv`, plus *+ Add a new name…*) each time the app is opened, and again when it has been in the background for **10 minutes or more**. Tap your name and enter your 4-digit PIN on the usual numberpad. The name saved on the device is only treated as "the last person" now; if another app on the device signs in as someone else, this one asks again when it comes back to the front. **A PC is unchanged** (it keeps the last user), and the PIN numberpad, the registry and the name stamped on saves are as before.
 
 **v73 (2026-09-30) — RC 1.0: records are kept one folder per level — much faster on a tablet; less loaded at start.**
 

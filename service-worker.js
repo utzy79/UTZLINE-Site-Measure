@@ -1211,7 +1211,11 @@
 // v71 (2026-09-29): RC 1.0 -- shop drawing revisions REV 0, then A, B, C ...
 // v72 (2026-09-30): RC 1.0 -- "Get ready for offline" is a quick check on an Android tablet (the sync app already keeps every file here); "Open every file (slow)" still does the full one.
 // v73 (2026-09-30): RC 1.0 -- event layout v2: status / schedule / cut / completion / cutting file / note records are one folder per LEVEL (Project Saves/UTZLINE Events/<branch>/<Level>/); old per-item folders are still read. PDF libraries load on first use.
-var CACHE_NAME = "utzline-sitemeasure-cache-v73";
+// v74 (2026-09-30): RC 1.0 -- sign in on open (tablets / phones).
+// v75 (2026-09-30): RC 1.0 -- one-finger pan, blue markers 25% smaller, the room in the marker menu, the builder's logo, the drafter step on reworks (Viewer).
+// v76 (2026-10-01): RC 1.0 -- Viewer: joinery summary, Add shop drawing, Export floor plan (2 x A3)
+// v77 (2026-10-01): RC 1.0 -- the Viewer's floor plan export carries a QR code the ITPs scan
+var CACHE_NAME = "utzline-sitemeasure-cache-v77";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
