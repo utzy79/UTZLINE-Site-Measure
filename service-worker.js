@@ -1216,7 +1216,7 @@
 // v76 (2026-10-01): RC 1.0 -- Viewer: joinery summary, Add shop drawing, Export floor plan (2 x A3)
 // v77 (2026-10-01): RC 1.0 -- the Viewer's floor plan export carries a QR code the ITPs scan
 // v78 (2026-10-01): RC 1.0 -- Windows' 260-character path limit: shorter record and backup names (see README)
-var CACHE_NAME = "utzline-sitemeasure-cache-v78";
+var CACHE_NAME = "utzline-sitemeasure-cache-v81";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

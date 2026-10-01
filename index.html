@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v78">
+<link rel="manifest" href="./manifest.json?v=v81">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v78">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v78">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v81">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v81">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1152,6 +1152,16 @@ window.__pdfImportLibFailed = false;
   /* .shopdrawing-pick-row removed 2026-09-24 along with the "which drawing
      is this a revision of?" picker it styled -- see the "Add shop drawing"
      removal comment further down. */
+  /* (2026-10-01) the Viewer's "Add shop drawing" dialog -- above the joinery summary screen (z-index 60) it's also opened from */
+  #shopDrawingAddBackdrop{ position:fixed; z-index:61; }
+  #shopDrawingAddSaveBtn:disabled{ opacity:.5; cursor:default; }
+  .shopdrawing-kind{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+  .shopdrawing-kind label{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--border-strong); border-radius:8px; font-size:13px; cursor:pointer; color:var(--text-primary); background:var(--surface-0); }
+  .shopdrawing-kind label.on{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .shopdrawing-kind input{ margin:0; }
+  .shopdrawing-add-info{ font-size:13px; color:var(--text-secondary); margin:0 0 10px; }
+  .shopdrawing-add-info select{ display:block; width:100%; margin-top:4px; }
+  .shopdrawing-add-info label{ font-size:12px; font-weight:600; color:var(--text-secondary); }
 
   /* ---------- in-page camera capture ----------
      Added in v37 (2026-09-19) so taking a photo to insert never leaves the
@@ -2115,8 +2125,13 @@ window.__pdfImportLibFailed = false;
         <div class="card"><h2 class="section-title">Site Measure (check measures)</h2><div id="vsOverlays" class="vs-list"></div></div>
         <div class="card" id="vsShopCard">
           <h2 class="section-title">Shop drawings</h2>
-          <p class="sub" style="font-weight:600;">Sent</p><div id="vsShopSent" class="vs-list"></div>
-          <p class="sub" style="font-weight:600;margin-top:12px;">Returned</p><div id="vsShopReturned" class="vs-list"></div>
+          <!-- (2026-10-01) Andrew: "the returned need to be split to returned to resubmit, or approved" -->
+          <p class="sub" style="font-weight:600;">Sent</p><div id="vsShopSent" class="vs-list" data-shop-kind="sent"></div>
+          <p class="sub" style="font-weight:600;margin-top:12px;">Returned to resubmit</p><div id="vsShopReturned" class="vs-list" data-shop-kind="returned"></div>
+          <p class="sub" style="font-weight:600;margin-top:12px;">Approved</p><div id="vsShopApproved" class="vs-list" data-shop-kind="approved"></div>
+          <!-- (2026-10-01) "make it so that drawings can be added there also": a PDF dropped anywhere on this card (on a part: that kind), or the button -->
+          <div class="vs-drop" id="vsShopDrop" tabindex="0" role="button">Drop a shop drawing PDF here, or tap to add one</div>
+          <div class="row" style="margin-top:10px;"><button class="btn" id="vsAddShopDrawingBtn" type="button">Add shop drawing</button></div>
         </div>
         <div class="card"><h2 class="section-title">Job notes</h2><div id="vsJobNotes" class="vs-list"></div></div>
         <div class="card"><h2 class="section-title">ITPs</h2><div id="vsItps" class="vs-itp"></div></div>
@@ -2224,6 +2239,37 @@ window.__pdfImportLibFailed = false;
          click (Keep view shop drawing)." See the "Shop drawings" JS
          comment for the full removal note; "View shop drawing" just below
          is untouched. -->
+    <!-- (2026-10-01) "Add shop drawing" is BACK, Viewer only -- Andrew: "on
+         next update, we need to bring the upload shop drawings back into
+         viewer. put it at the top of the menu, also in the viewer joinery
+         summary, make it so that drawings can be added there also". The
+         Scheduler's three kinds (Sent / Returned to resubmit / Approved), its
+         file names and its .json beside each file -- see addShopDrawingFile. -->
+    <div class="modal-backdrop" id="shopDrawingAddBackdrop" hidden>
+      <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="shopDrawingAddTitle">
+        <p id="shopDrawingAddTitle" class="joinery-item-title">Add shop drawing</p>
+        <p id="shopDrawingAddSubtitle" class="joinery-item-subtitle"></p>
+        <div class="shopdrawing-kind" id="shopDrawingKindRow" role="radiogroup" aria-label="What this drawing is">
+          <label data-kind="sent"><input type="radio" name="shopDrawingKind" value="sent" checked>Sent</label>
+          <label data-kind="returned"><input type="radio" name="shopDrawingKind" value="returned">Returned to resubmit</label>
+          <label data-kind="approved"><input type="radio" name="shopDrawingKind" value="approved">Approved</label>
+        </div>
+        <p class="shopdrawing-add-info" id="shopDrawingSentInfo"></p>
+        <div class="shopdrawing-add-info" id="shopDrawingReturnInfo" hidden></div>
+        <div class="jobnote-dropzone" id="shopDrawingDropzone" tabindex="0" role="button" aria-label="Drag a PDF here, or tap to choose a file">
+          <svg viewBox="0 0 20 20" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 15v1.5A1.5 1.5 0 0 0 5.5 18h9a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+          <span class="jobnote-dropzone-title" id="shopDrawingDropTitle">Drag a PDF here</span>
+          <span id="shopDrawingDropSub">or tap to choose a file</span>
+        </div>
+        <p class="jobnote-status" id="shopDrawingAddStatus"></p>
+        <p class="jobnote-empty" id="shopDrawingNameNote" style="padding:4px 2px 0;"></p>
+        <input type="file" id="shopDrawingFileInput" accept="application/pdf,.pdf" style="display:none;">
+        <div class="modal-actions">
+          <button class="mbtn" id="shopDrawingAddCancel">Close</button>
+          <button class="mbtn mbtn-accent" id="shopDrawingAddSaveBtn" disabled>Save as sent</button>
+        </div>
+      </div>
+    </div>
 
     <!-- "View shop drawing" (2026-09-23) -- read-only list, one row per
          independent drawing (never per revision) with its own revision
@@ -2313,6 +2359,137 @@ window.__pdfImportLibFailed = false;
 })();
 </script>
 <!-- UTZLINE-PLAN-MARKER END -->
+<!-- UTZLINE-ITEM-FILES BEGIN (generated from shared/item-files -- don't edit here) -->
+<script>
+/* ============================== UTZLINE item file names (2026-10-01) ==============================
+   Andrew: "have a real good think about how we can minimise filepaths, maybe we
+   need to lose the joinery descriptions and just have joinery codes. give me a
+   solid solution" -- then "I have no actual current files so dont care if I
+   need to start again".
+
+   Every folder and file an app keeps for ONE joinery item is named by that
+   item's FILE NAME ("fileKey"): its joinery code, e.g.
+       Project Saves/Shop Drawings/JG.33.1/...
+       Project Saves/UTZLINE Events/Joinery Schedule/Ground Floor/JG.33.1 -- AU - 26-10-01 16-25-35-281 - set.json
+   instead of "<Level> - <Room> - <Code>" (64 characters for the pilot's
+   "Ground Floor - G.33 - Change Cubical & Patient Consent - JG.33.1"). The
+   level, room and description stay inside the records and joinery-items.json,
+   so every screen still shows them.
+
+   The file name is chosen ONCE, by UTZLINE Projects, when the item is made
+   (or imported), and saved on the item in joinery-items.json ("fileKey"):
+     - the code, cleaned of the characters Windows refuses and cut to 40;
+     - a code the project already uses (one work order dropped in two rooms,
+       which Projects allows) gets " (2)", " (3)" ...; Windows sees "JG.1"
+       and "jg.1" as one name, so the check ignores case;
+     - an item with no code: its room, else "Item".
+   It never changes afterwards -- an item moved to another room, or a code
+   edited later, keeps its file name, so nothing is ever left behind.
+
+   Every other app reads joinery-items.json and register()s it; fileKey()
+   then gives an item's file name from its level, room and code. An item it
+   doesn't know (an older joinery-items.json without file names) gets the
+   same rule as Projects' first choice -- the cleaned code.
+
+   Generated into each app between UTZLINE-ITEM-FILES markers from
+   shared/item-files/item-files.js -- edit it there. */
+(function(){
+  "use strict";
+  var MAX = 40;
+  function clean(s, max){
+    var c = String(s == null ? "" : s).replace(/[<>:"/\\|?*\x00-\x1f]/g, "").replace(/\s+/g, " ").trim()
+      .replace(/^[._ ]+|[._ ]+$/g, "").replace(/-{2,}/g, "-");
+    max = max || MAX;
+    if (c.length > max) c = c.slice(0, max).replace(/[ ._-]+$/, "");
+    return c;
+  }
+  // The file name an item would get if nothing else in the project had it.
+  function baseOf(code, room){ return clean(code) || clean(room, 30) || "Item"; }
+  function low(s){ return String(s == null ? "" : s).trim().toLowerCase(); }
+  function tripleKey(level, room, code){ return low(level) + "\u0000" + low(room) + "\u0000" + low(code); }
+  // A file name that can go on disk as given (what assign() would have made).
+  function valid(k){ return typeof k === "string" && k.length > 0 && k.length <= MAX + 6 && clean(k, MAX + 6) === k; }
+
+  // UTZLINE Projects: give every item that has none its file name (in the
+  // order the items are listed). Items that already have one keep it.
+  // -> how many were given one.
+  function assign(items){
+    if (!Array.isArray(items)) return 0;
+    var used = {}, byTriple = {}, n = 0;
+    // a file name two DIFFERENT items both carry (a deleted item put back
+    // after its name was given out again): the later one gets a fresh name.
+    // The same item twice (same level, room and code -- an import's
+    // duplicate record) is one item to every app, so it keeps one name.
+    items.forEach(function(it){
+      if (!it || !valid(it.fileKey)) return;
+      var k = it.fileKey.toLowerCase(), t = tripleKey(it.level, it.room, it.joineryId);
+      if (used[k] && used[k] !== t) it.fileKey = ""; else { used[k] = t; if (!byTriple[t]) byTriple[t] = it.fileKey; }
+    });
+    items.forEach(function(it){
+      if (!it || typeof it !== "object" || valid(it.fileKey)) return;
+      var t = tripleKey(it.level, it.room, it.joineryId);
+      if (byTriple[t]){ it.fileKey = byTriple[t]; n++; return; }
+      var b = baseOf(it.joineryId, it.room), k = b, i = 2;
+      while (used[k.toLowerCase()]){ k = b + " (" + i + ")"; i++; }
+      it.fileKey = k; used[k.toLowerCase()] = t; byTriple[t] = k; n++;
+    });
+    return n;
+  }
+
+  // Each project's items, as read by the app: project (its folder name) ->
+  // { triple -> fileKey }. The project read last is the "current" one.
+  var maps = {}, current = null;
+  function register(project, items){
+    var m = {};
+    (Array.isArray(items) ? items : []).forEach(function(it){
+      if (!it || typeof it !== "object") return;
+      var t = tripleKey(it.level, it.room, it.joineryId);
+      if (!(t in m)) m[t] = valid(it.fileKey) ? it.fileKey : baseOf(it.joineryId, it.room); // the first of a duplicated record decides
+    });
+    project = String(project || "");
+    maps[project] = m; current = project;
+    return m;
+  }
+  // An item's file name from its level, room and code (project: its folder
+  // name, when the app knows it -- the schedules' Overall views hold several).
+  function fileKey(level, room, code, project){
+    var t = tripleKey(level, room, code), hit;
+    if (project != null && maps[String(project)]){
+      hit = maps[String(project)][t];
+      if (hit) return hit;
+    } else {
+      if (current != null && maps[current] && maps[current][t]) return maps[current][t];
+      var found = null, clash = false;
+      Object.keys(maps).forEach(function(p){ var v = maps[p][t]; if (v){ if (found && found !== v) clash = true; found = found || v; } });
+      if (found && !clash) return found;
+    }
+    return baseOf(code, room);
+  }
+
+  // A user's initials for a file name: the first letter of up to three
+  // words ("Andrew Utz" -> "AU"); a one-word name keeps its first three
+  // letters ("Cara" -> "Car"); none -> "U".
+  function initials(name){
+    var words = String(name || "").split(/[\s_-]+/).filter(function(w){ return /[A-Za-z0-9]/.test(w); });
+    var ini = words.length >= 2 ? words.slice(0, 3).map(function(w){ return w.charAt(0).toUpperCase(); }).join("") : (words[0] || "U").slice(0, 3);
+    return clean(ini, 3) || "U";
+  }
+  // "26-10-01 16-25-35" (+ "-281" with ms) -- local time, two-digit year.
+  function stamp(d, ms){
+    d = d || new Date();
+    function p(n, w){ n = String(n); while (n.length < (w || 2)) n = "0" + n; return n; }
+    return p(d.getFullYear() % 100) + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + "-" + p(d.getMinutes()) + "-" + p(d.getSeconds()) + (ms ? "-" + p(d.getMilliseconds(), 3) : "");
+  }
+
+  window.UtzItemFiles = {
+    version: 1, MAX: MAX,
+    clean: clean, baseOf: baseOf, valid: valid, assign: assign, register: register, fileKey: fileKey,
+    initials: initials, stamp: stamp, tripleKey: tripleKey,
+    _maps: function(){ return maps; }
+  };
+})();
+</script>
+<!-- UTZLINE-ITEM-FILES END -->
 <!-- UTZLINE-EVENT-STORE BEGIN (generated from shared/event-store -- don't edit here) -->
 <script>
 /* ============================== UTZLINE event store v2 (2026-09-30) ==============================
@@ -2355,16 +2532,46 @@ window.__pdfImportLibFailed = false;
    the save reported a failure. Now:
      - a new record's name no longer repeats the level that its folder already
        names:  <Level>/<Room> - <Code> -- <name> - <stamp> - <kind>.json
-       (the room-and-code part is capped at 70 characters, "~hash" when cut);
-       every file already on disk under the long name still reads;
+       (the room-and-code part is capped at 70 characters, "_hash" when cut),
+       and the name part an app gives is compacted: the user's initials, a
+       two-digit year ("AU - 26-10-01 13-09-18-862 - set.json"; Andrew:
+       "change usernames to initials, year from 2026 to 26") -- the body
+       still carries the full name and time; every file already on disk
+       under the long name still reads;
      - when even that can't be written (the empty file is removed first), the
-       record goes under a 9-character "~hash" name instead, and a banner
-       tells the user the folder path is the reason;
+       record goes under a 9-character "_hash" name instead -- quietly: it is
+       saved and read like any other (a "utz-path-limit" event and a console
+       note, no banner); only a record that can't be saved at all raises the
+       banner;
      - on Windows, the first write to a project measures how many characters
        its folder path leaves (a few empty probe files, created and removed
-       again under UTZLINE Events), and the banner shows early when that is
-       less than long room names need; UtzEvents.pathBudget() gives the
-       number to an app (UTZLINE Projects shows it when a project is opened).
+       again under UTZLINE Events); the banner shows early only when that is
+       less than even the shortest names need (NEEDS_REL = 135; Andrew's
+       pilot folder leaves 163 and shows nothing -- "what can we do, im
+       already in the root folder for onedrive");
+       UtzEvents.pathBudget() gives the number to an app (UTZLINE Projects
+       measures it when a project is opened).
+
+   Note: Chrome's File System Access API refuses any name with a "~" in it
+   (base::i18n::IsFilenameLegal treats the tilde as reserved on Windows), so
+   the markers here are "_", never "~".
+
+   v3 (2026-10-01) -- names by joinery code. Andrew: "have a real good think
+   about how we can minimise filepaths, maybe we need to lose the joinery
+   descriptions and just have joinery codes. give me a solid solution", then
+   "I have no actual current files so dont care if I need to start again".
+   The key an app remembers an item by IS now the item's file name -- its
+   joinery code, chosen once by UTZLINE Projects (UtzItemFiles, saved as
+   "fileKey" in joinery-items.json) -- and a record's name is
+       <Level>/<file name> -- <initials> - <yy-mm-dd hh-mm-ss-mmm> - <kind>.json
+       Ground Floor/JG.33.1 -- AU - 26-10-01 16-25-35-281 - set.json
+   (121 characters after the project folder for the longest branch, was
+   163). The level folder is cut to 30 characters. A record whose leading
+   part no app has named yet belongs to the item of that name (no level is
+   put in front any more), and an item the app hasn't named is looked for in
+   every level folder. The old layouts are still read as before, but their
+   items keep their old long keys (a clean start: Andrew's pilot is set up
+   again).
 
    Generated into each app between UTZLINE-EVENT-STORE markers from
    shared/event-store/event-store.js -- edit it there. */
@@ -2374,9 +2581,15 @@ window.__pdfImportLibFailed = false;
   var BRANCHES = ["Joinery Status", "Joinery Schedule", "Machining Flags", "Solid Surface Completion", "Solid Surface Schedule", "Joinery Cutting File", "Joinery Notes"];
   var MEMO_MS = 4000, LEGACY_TTL = 12 * 3600 * 1000, MISS_MS = 5000, LEG_MISS_MS = 60000, NAME_KEY_MAX = 150;
   // The room-and-code part that leads a new record's name (the level is its
-  // folder), and what long room names need of a Windows path after the
-  // project folder (branch + level folder + record name, with the swap file).
-  var ITEM_MAX = 70, NEEDS_REL = 170, WIN_FULL = 252;
+  // folder), and what the shortest record names need of a Windows path after
+  // the project folder: "Project Saves\UTZLINE Events\" (29) + the longest
+  // branch (24) + a 20-character level folder + the "_hash" record name
+  // (about 56) = about 135. A typical record (room and code 30-60 characters)
+  // needs 120-165, and one that doesn't fit takes the "_hash" name by itself,
+  // so only a project folder leaving less than 135 is worth a warning.
+  var ITEM_MAX = 70, NEEDS_REL = 135, WIN_FULL = 252;
+  // v3: a level folder's name is cut to this (a "_hash" of the whole name at the end)
+  var LEVEL_MAX = 30;
 
   // ---------- names ----------
   function sanitize(name, max, fallback){
@@ -2404,9 +2617,19 @@ window.__pdfImportLibFailed = false;
   function nameKey(key){
     key = String(key || "").replace(/-{2,}/g, "-");
     if (key.length <= NAME_KEY_MAX) return key;
-    return key.slice(0, NAME_KEY_MAX - 12).replace(/[ .]+$/, "") + " ~" + hash(key);
+    return key.slice(0, NAME_KEY_MAX - 12).replace(/[ .]+$/, "") + " _" + hash(key);
   }
-  function levelFolder(level){ return sanitize(level, 120, "No level"); }
+  function levelFolder(level){
+    var s = sanitize(level, 120, "No level");
+    if (s.length <= LEVEL_MAX) return s;
+    return s.slice(0, LEVEL_MAX - 10).replace(/[ .]+$/, "") + " _" + hash(s);
+  }
+  // v3: what leads a record's name for an item -- its key (the item's file
+  // name), cut to ITEM_MAX with a "_hash" of the whole key when longer.
+  function leadOf(canon){
+    if (canon.length <= ITEM_MAX) return canon;
+    return canon.slice(0, ITEM_MAX - 10).replace(/[ .]+$/, "") + " _" + hash(canon);
+  }
   function splitName(n){
     var i = n.indexOf(SEP);
     if (i <= 0) return null;
@@ -2414,24 +2637,46 @@ window.__pdfImportLibFailed = false;
   }
 
   // The part of a canonical key after its level: what leads a new record's
-  // name inside the level folder (capped, "~hash" of the whole key when cut).
+  // name inside the level folder (capped, "_hash" of the whole key when cut).
   function shortOf(canon, lf){
     var s = canon;
     if (lf && (canon.indexOf(lf + " - ") === 0)) s = canon.slice(lf.length + 3);
     else if (lf === "No level" && canon.indexOf("plan - ") === 0) s = canon.slice(7);
     if (!s) s = canon;
     if (s.length <= ITEM_MAX) return s;
-    return s.slice(0, ITEM_MAX - 10).replace(/[ .]+$/, "") + " ~" + hash(canon);
+    return s.slice(0, ITEM_MAX - 10).replace(/[ .]+$/, "") + " _" + hash(canon);
   }
-  function tinyOf(canon){ return "~" + hash(canon); }
+  var TINY_RE = /^_[0-9a-f]{8}$/;
+  function tinyOf(canon){ return "_" + hash(canon); }
+  // The name part an app gives a record ("<user> - <YYYY-MM-DD HH-mm-ss-mmm> - <kind>.json")
+  // made shorter on disk: the user's initials (up to three; a one-word name
+  // keeps its first three letters) and a two-digit year. The milliseconds
+  // stay: two saves in the same second must never land on one name.
+  // Anything not in that shape is kept as given.
+  function compactBase(name){
+    var m = /^(.+?) - (\d{4})-(\d\d)-(\d\d) (\d\d)-(\d\d)-(\d\d)(-\d{3})? - (.+)$/.exec(String(name || ""));
+    if (!m) return name;
+    var words = m[1].split(/[\s_-]+/).filter(function(w){ return /[A-Za-z0-9]/.test(w); }), ini;
+    if (words.length >= 2) ini = words.slice(0, 3).map(function(w){ return w.charAt(0).toUpperCase(); }).join("");
+    else ini = (words[0] || "U").slice(0, 3);
+    return ini + " - " + m[2].slice(2) + "-" + m[3] + "-" + m[4] + " " + m[5] + "-" + m[6] + "-" + m[7] + (m[8] || "") + " - " + m[9];
+  }
 
   // Every key an app makes is remembered with the item it names, so a
   // stand-in folder asked for by key knows its level and its canonical key,
-  // and a record file's leading part (long, short or "~hash") finds its item.
+  // and a record file's leading part (long, short or "_hash") finds its item.
   var registry = {}, alias = {}, canonKnown = {}, byShort = {}, byTiny = {}, regVersion = 0;
   function remember(key, level, room, code){
-    if (!key || registry[key]) return key;
-    var canon = nameKey(itemKey(level, room, code)), lf = levelFolder(level), short = shortOf(canon, lf), tiny = tinyOf(canon);
+    if (!key) return key;
+    var lf = levelFolder(level);
+    if (registry[key]){
+      // v3: the same file name told with another level (an item moved): new
+      // records go to the level it is on now
+      if (registry[key].lf !== lf){ registry[key].lf = lf; registry[key].level = level == null ? "" : String(level); byShort[lf + "\u0000" + registry[key].short] = registry[key].canon; regVersion++; }
+      return key;
+    }
+    // v3: the app's key IS the item -- its file name (UtzItemFiles)
+    var canon = nameKey(key), short = leadOf(canon), tiny = tinyOf(canon);
     registry[key] = { level: level == null ? "" : String(level), room: room == null ? "" : String(room), code: code == null ? "" : String(code), canon: canon, lf: lf, short: short, tiny: tiny };
     if (key !== canon && !alias[canon]) alias[canon] = key;
     canonKnown[canon] = 1; byShort[lf + "\u0000" + short] = canon; byTiny[tiny] = canon;
@@ -2441,15 +2686,15 @@ window.__pdfImportLibFailed = false;
   function canonOf(key){ var r = registry[key]; return r ? r.canon : nameKey(key); }
   // The item (canonical key) a record file in level folder lf belongs to,
   // from the part before " -- ": an old level-led name, a new short name, a
-  // "~hash" name, or -- for an item no app has named yet -- the level folder
+  // "_hash" name, or -- for an item no app has named yet -- the level folder
   // put back in front of a short name.
   function resolvePrefix(lf, prefix){
     var c = byShort[lf + "\u0000" + prefix];
     if (c) return c;
     if (canonKnown[prefix]) return prefix;
-    if (prefix.charAt(0) === "~") return byTiny[prefix] || prefix;
-    if (prefix === lf || prefix.indexOf(lf + " - ") === 0) return prefix;
-    return nameKey((lf === "No level" ? "plan" : lf) + " - " + prefix);
+    if (TINY_RE.test(prefix)) return byTiny[prefix] || prefix;
+    // v3: a name no app has named yet is its own item (its file name)
+    return prefix;
   }
 
   // ---------- small helpers ----------
@@ -2536,7 +2781,7 @@ window.__pdfImportLibFailed = false;
   }
   function newGroup(lf){ return { entries: {}, legacy: [], lf: lf || null }; }
   // A listing's files grouped per item. The grouping is redone when an app
-  // has named more items since (registry), so a short or "~hash" record
+  // has named more items since (registry), so a short or "_hash" record
   // name listed before its item was known still lands with its item.
   function groupsOf(m){
     if (m.g && m.ver === regVersion) return m.g;
@@ -2645,7 +2890,7 @@ window.__pdfImportLibFailed = false;
   // ---------- Windows' 260-character path limit ----------
   var tinyNeeded = {}, probes = {}, warned = {};
   var IS_WIN = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent || "");
-  var PROBE = "~ UTZLINE path check (safe to delete) ";
+  var PROBE = "UTZLINE path check (safe to delete)";
   function projectOf(ctx){ return String(ctx.id).split("\u0000")[0]; }
   function repeat(ch, n){ return n > 0 ? new Array(n + 1).join(ch) : ""; }
   // How many characters a Windows path leaves after this project's folder
@@ -2707,11 +2952,11 @@ window.__pdfImportLibFailed = false;
     if (warned[pid + "\u0000" + why]) return;
     warned[pid + "\u0000" + why] = 1;
     var msg;
-    if (why === "budget") msg = "Windows limits a file's full path to 260 characters, and this project's folder path leaves only " + rel + " for UTZLINE's own files (long room names need about " + NEEDS_REL + "). Records that don't fit are kept under short names, but PDFs and exports with long names can still fail." + ADVICE;
-    else if (why === "fallback") msg = "A record for an item with a long name didn't fit Windows' 260-character path limit here, so it was saved under a short name instead. PDFs and exports with long names can still fail." + ADVICE;
+    if (why === "budget") msg = "Windows limits a file's full path to 260 characters, and this project's folder path leaves only " + rel + " for UTZLINE's own files (even the shortest record names need about " + NEEDS_REL + "), so some records may not save." + ADVICE;
+    else if (why === "fallback") msg = "A record for an item with a long name didn't fit Windows' 260-character path limit here, so it was saved under a short name instead (nothing is lost; the record reads as usual).";
     else msg = "A record couldn't be saved: its full path is past Windows' 260-character limit." + ADVICE;
     try{ if (typeof console !== "undefined") console.warn("UTZLINE events: " + msg); }catch(e){}
-    banner(msg);
+    if (why !== "fallback") banner(msg);   // a record kept under a short name is saved: no alarm
     try{ window.dispatchEvent(new CustomEvent("utz-path-limit", { detail: { why: why, rel: rel == null ? null : rel, message: msg } })); }catch(e){}
   }
   function banner(msg){
@@ -2754,7 +2999,7 @@ window.__pdfImportLibFailed = false;
   // A record file this session just created but whose writer can't be
   // opened (on Windows: the full path, plus Chrome's ".crswap" swap file, is
   // past 259 characters -- the file is left empty) is made again under its
-  // item's "~hash" name; the empty file goes first.
+  // item's "_hash" name; the empty file goes first.
   FileWrap.prototype.createWritable = function(o){
     var rec = this._rec;
     return this._real().then(function(h){
@@ -2805,13 +3050,14 @@ window.__pdfImportLibFailed = false;
       return levelDir(nh, lf, create);
     });
   };
-  // The on-disk name of a new record: "<Room> - <Code> -- <name>" inside the
-  // level folder (the registry's short part, else the canonical key with the
-  // level folder taken off the front); "~hash -- <name>" when tiny.
+  // The on-disk name of a new record: "<Room> - <Code> -- <compact name>"
+  // inside the level folder (the registry's short part, else the canonical
+  // key with the level folder taken off the front); "_hash -- <compact
+  // name>" when tiny.
   ItemDir.prototype._realName = function(name, tiny){
     var r = registry[this.name] || null, canon = this._canon, lf = this._g.lf;
-    if (tiny) return (r ? r.tiny : tinyOf(canon)) + SEP + name;
-    return (r ? r.short : shortOf(canon, lf)) + SEP + name;
+    if (tiny) return (r ? r.tiny : tinyOf(canon)) + SEP + compactBase(name);
+    return (r ? r.short : leadOf(canon)) + SEP + compactBase(name);
   };
   ItemDir.prototype.getFileHandle = function(name, opts){
     var self = this, create = !!(opts && opts.create), g = this._g;
@@ -2835,7 +3081,7 @@ window.__pdfImportLibFailed = false;
         }
         var real = self._realName(name, tiny);
         return lh.getFileHandle(real, { create: true }).then(function(h){ return made(h, real, tiny); }, function(err){
-          // not even the empty file could be made: straight to the "~hash" name
+          // not even the empty file could be made: straight to the "_hash" name
           if (tiny || isNotFound(err) || !lengthy(ctx, lh.name, real)) throw err;
           var real2 = self._realName(name, true);
           return lh.getFileHandle(real2, { create: true }).then(function(h){
@@ -2849,7 +3095,7 @@ window.__pdfImportLibFailed = false;
   };
   // createWritable failed on a record this session just made: if the file
   // is empty (nothing was ever written), remove it and make the record
-  // under its "~hash" name instead -> that handle. Anything else rethrows.
+  // under its "_hash" name instead -> that handle. Anything else rethrows.
   ItemDir.prototype._retryTiny = function(rec, err){
     var self = this, ctx = this._root._ctx, g = this._g;
     if (!lengthy(ctx, rec.parent.name, rec.real)) return Promise.reject(err);
@@ -2910,7 +3156,8 @@ window.__pdfImportLibFailed = false;
     if (m && m.names) m.names.forEach(function(n){ if ((key.indexOf(n + " - ") === 0 || key === n) && (!best || n.length > best.length)) best = n; });
     if (best) return best;
     if (typeof console !== "undefined") console.warn("UTZLINE events: no level known for " + key);
-    return levelFolder(String(key).split(" - ")[0]);
+    // v3: keys are file names now -- an unknown one has no level in it
+    return String(key).indexOf(" - ") > 0 ? levelFolder(String(key).split(" - ")[0]) : levelFolder("");
   };
   Root.prototype.getDirectoryHandle = function(key, opts){
     var self = this, ctx = this._ctx, create = !!(opts && opts.create);
@@ -2922,10 +3169,11 @@ window.__pdfImportLibFailed = false;
     if (all && all.newH === this._newH && all.legH === this._legH) memoP = all.p;
     else if (lf != null && this._newH) memoP = scan(ctx, this._newH, null, r.level);
     else if (this._newH){
-      memoP = ctx.levelDirs(this._newH).then(function(dirs){
-        var m = memos[ctx.id + "\u0001levels"]; if (m) m.names = dirs.map(function(d){ return d.name; });
-        lf = self._lfFor(canon, key);
-        return scan(ctx, self._newH, null, lf);
+      // v3: an item no app has named here -- its records may be in any level folder
+      memoP = scan(ctx, this._newH, null, null).then(function(m){
+        var g = m.groups()[canon];
+        lf = (g && g.lf) || self._lfFor(canon, key);
+        return m;
       });
     } else memoP = Promise.resolve(null);
     var memo = null;
@@ -3037,8 +3285,11 @@ window.__pdfImportLibFailed = false;
               var ev;
               try{ ev = JSON.parse(r.text); }catch(e){ ev = null; }
               if (!ev || typeof ev !== "object" || ev.level == null){ out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: "couldn't be read" }); return false; }
-              var canon = nameKey(itemKey(ev.level, ev.room, ev.joineryId)), lf = levelFolder(ev.level);
-              var target = shortOf(canon, lf) + SEP + fh.name, longName = canon + SEP + fh.name;
+              // v3 (2026-10-01, code-only file names): an old per-item folder is named by the item's app key
+              // (its file name), so its records go under that name, as every new record does
+              var lf = levelFolder(ev.level), known = registry[dh.name];
+              var canon = known ? known.canon : nameKey(itemKey(ev.level, ev.room, ev.joineryId));
+              var target = (known ? leadOf(canon) : shortOf(canon, lf)) + SEP + fh.name, longName = canon + SEP + fh.name;
               return levelDir(lf).then(function(lh){
                 // already moved under the long (pre-v2.1) name?
                 return lh.getFileHandle(longName, { create: false }).then(function(th){ return readText(th).then(function(t){ return t.text === r.text; }); }, function(err){ if (!isNotFound(err)) throw err; return false; }).then(function(there){
@@ -3111,9 +3362,9 @@ window.__pdfImportLibFailed = false;
   function pathBudget(o){ return pathProbe(new Ctx({ dir: o.dir, branch: BRANCHES[0], cacheId: o.cacheId }), !!o.force); }
 
   window.UtzEvents = {
-    version: 2.1,
+    version: 3,
     ROOT: ROOT, SEP: SEP, BRANCHES: BRANCHES, NEEDS_REL: NEEDS_REL, WIN_FULL: WIN_FULL,
-    itemKey: itemKey, nameKey: nameKey, levelFolder: levelFolder, itpKey: itpKey, shortOf: shortOf, tinyOf: tinyOf,
+    itemKey: itemKey, nameKey: nameKey, levelFolder: levelFolder, itpKey: itpKey, shortOf: shortOf, leadOf: leadOf, tinyOf: tinyOf, compactBase: compactBase, LEVEL_MAX: LEVEL_MAX,
     remember: remember, root: root, refresh: refresh, tidy: tidy, countLegacy: countLegacy, pathBudget: pathBudget,
     _registry: registry, _memos: function(){ return memos; }, _probes: probes
   };
@@ -3131,9 +3382,11 @@ window.__pdfImportLibFailed = false;
    is that every save ALSO writes one small, never-rewritten event file
    holding just what that save changed:
 
-     flat:   Project Saves/UTZLINE ITP/<App> Log/<Level> - <Room> - <Code>/
+     flat:   Project Saves/UTZLINE ITP/<App> Log/<file name>/
+             (2026-10-01: the item's FILE NAME -- its joinery code, UtzItemFiles --
+             was "<Level> - <Room> - <Code>"; Windows' 260-character path limit)
      legacy: <app's room folder>/<Code> log/
-       "<name> - <YYYY-MM-DD HH-mm-ss-mmm> - change.json"
+       "<initials> - <yy-mm-dd HH-mm-ss-mmm> - change.json"   (2026-10-01; was "<name> - <YYYY-...>")
        { kind: "change", app, by, at, level, room, joineryId, fileBase,
          rows?: { "<index>": row }, signoff?: { "<role>": obj|null },
          fields?: { "<key>": value }, removed?: [key],
@@ -3258,7 +3511,10 @@ window.__pdfImportLibFailed = false;
     var ev = { kind: "change", app: meta.app || "", by: meta.by || "", at: d.toISOString(),
       level: meta.level || "", room: meta.room || "", joineryId: meta.joineryId || "", fileBase: meta.fileBase || "" };
     Object.keys(ch).forEach(function(k){ ev[k] = ch[k]; });
-    return { name: userSlug(meta.by) + " - " + stamp(d) + " - change.json", ev: ev };
+    // (2026-10-01) initials and a two-digit year -- the body keeps the full name and time
+    var who = global.UtzItemFiles ? global.UtzItemFiles.initials(meta.by) : userSlug(meta.by);
+    var when = global.UtzItemFiles ? global.UtzItemFiles.stamp(d, true) : stamp(d);
+    return { name: who + " - " + when + " - change.json", ev: ev };
   }
   // After the event file has landed: the base about to be written records
   // it as seen and as the latest writer of every part it changed.
@@ -4119,10 +4375,14 @@ window.__pdfImportLibFailed = false;
         .then(function(itemDir){
           return listDir(itemDir).then(function(groups){
             return Promise.all(groups.filter(function(g){ return g.kind === "directory"; }).map(function(g){
-              return Promise.all([listPart(g), g.getDirectoryHandle("Returned", { create: false }).then(listPart, function(){ return []; })]).then(function(r){
+              // (2026-10-01) Andrew: "the returned need to be split to returned to resubmit, or approved" --
+              // Returned/ is "Returned to resubmit", Approved/ (new) is "Approved"
+              return Promise.all([listPart(g), g.getDirectoryHandle("Returned", { create: false }).then(listPart, function(){ return []; }),
+                g.getDirectoryHandle("Approved", { create: false }).then(listPart, function(){ return []; })]).then(function(r){
                 var sent = labelRevisions(r[0]), out = [];
                 sent.forEach(function(x){ out.push({ at: (x.info && x.info.at) || stampToIso(x.stamp), by: (x.info && x.info.by) || "", cat: "Shop drawing", cls: "", text: "Sent " + x.revLabel, detail: [esc(x.displayName)] }); });
-                r[1].forEach(function(x){ out.push({ at: (x.info && x.info.at) || stampToIso(x.stamp), by: (x.info && x.info.by) || "", cat: "Shop drawing", cls: "", text: "Returned " + labelReturned(x, sent), detail: [esc(x.displayName)] }); });
+                r[1].forEach(function(x){ out.push({ at: (x.info && x.info.at) || stampToIso(x.stamp), by: (x.info && x.info.by) || "", cat: "Shop drawing", cls: "", text: "Returned to resubmit " + labelReturned(x, sent), detail: [esc(x.displayName)] }); });
+                r[2].forEach(function(x){ out.push({ at: (x.info && x.info.at) || stampToIso(x.stamp), by: (x.info && x.info.by) || "", cat: "Shop drawing", cls: "c-created", text: "Approved " + labelReturned(x, sent), detail: [esc(x.displayName)] }); });
                 return out;
               });
             }));
@@ -4159,8 +4419,10 @@ window.__pdfImportLibFailed = false;
     }
     function attachJobNoteNames(entries, notes){
       var files = (notes || []).map(function(n){
-        var m = / - (\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})\.pdf$/i.exec(n.fileName || "");
-        return { name: n.fileName, at: m ? stampToIso(m[1]) : "", used: false };
+        // (2026-10-01, code-only file names) "Job note - <stamp> - <code>.pdf" (the original name is in the
+        // sidecar the app passes as `original`); older notes "<original> - <stamp>.pdf"
+        var m = /(\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})/.exec(n.fileName || "");
+        return { name: n.original || n.displayName || n.fileName, at: m ? stampToIso(m[1]) : "", used: false };
       });
       entries.filter(function(e){ return e.jobNote; }).forEach(function(e){
         var t = new Date(e.at).getTime(), best = null, bestD = Infinity;
@@ -6953,7 +7215,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
    folder)".
 
    WHERE REWORKS LIVE (written by Install ITP, which creates them):
-     flat:   <Project>/Project Saves/UTZLINE ITP/Install ITP Rework/<Level> - <Room> - <Code>.json
+     flat:   <Project>/Project Saves/UTZLINE ITP/Install ITP Rework/<file name>.json
+             (2026-10-01: the item's FILE NAME -- its joinery code, UtzItemFiles --
+             was "<Level> - <Room> - <Code>"; Windows' 260-character path limit)
      legacy: <Project>/itp-install-rework/<Level>/<Room>/<Code>.json
    One shared JSON per item: { joineryNo, level, room, reworks:[entry...] }.
    Install ITP and Delivery ITP rewrite that whole file, which is how
@@ -6964,7 +7228,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
      flat:   Project Saves/UTZLINE ITP/Install ITP Rework Log/<fileBase>/
      legacy: itp-install-rework/<Level>/<Room>/<fileBase> log/
    (the same folder the Viewer's comments already use, v61). Each event is
-     "<name> - <YYYY-MM-DD HH-mm-ss-mmm> - <kind>.json"
+     "<initials> - <yy-mm-dd HH-mm-ss-mmm> - <kind>.json"   (2026-10-01; was "<name> - <YYYY-...>")
      { kind, reworkId, level, room, joineryId, fileBase, cabinetNumber, at, by, app, ... }
    kinds:
      comment    { text }
@@ -6981,7 +7245,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
    wins; closed likewise. Events with a reworkId only apply to that entry.
 
    PER-REWORK PDF: one rework per PDF, named by who made it and when
-     <fileBase> - <Cab X | Rework yyyy-mm-dd> - <name> - <YYYY-MM-DD HH-mm-ss>.pdf
+     <fileBase> - <Cab X | Rework> - <initials> - <yy-mm-dd HH-mm-ss>.pdf   (2026-10-01, shorter)
    saved beside the item's other rework PDFs (flat: PDF Files/UTZLINE ITP/
    Install ITP Rework/; legacy: the item's itp-install-rework room folder),
    so two people printing at once can never write the same file. It has the
@@ -7027,6 +7291,14 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     var clean = String(name || "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().replace(/^[._]+|[._\s]+$/g, "").slice(0, 60);
     return clean || "Unnamed";
   }
+  // (2026-10-01, code-only file names) a flat item file's name: the item's
+  // FILE NAME (UtzItemFiles -- its joinery code), and the short name parts.
+  function flatBase(level, room, code, project){
+    if (global.UtzItemFiles) return global.UtzItemFiles.fileKey(level, room, code, project);
+    return sanitizeFileBase(level) + " - " + sanitizeFileBase(room) + " - " + sanitizeFileBase(code);
+  }
+  function nameInitials(by){ return global.UtzItemFiles ? global.UtzItemFiles.initials(by) : userSlug(by); }
+  function shortStamp(d, ms){ return global.UtzItemFiles ? global.UtzItemFiles.stamp(d, ms) : (ms ? stamp(d) : stampSeconds(d)); }
   function isNotFound(err){ return !!(err && (err.name === "NotFoundError" || err.name === "TypeMismatchError" || /NotFound/.test(String(err.message || "")))); }
   function escapeHtml(s){
     return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
@@ -7138,12 +7410,16 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     }
     var flat = dirPath(projectHandle, FLAT_DATA, false).then(jsonFiles, function(){ return []; }).then(function(files){
       return runQueue(files, function(fh){
+        // (2026-10-01, code-only file names) the file is "<file name>.json" -- the item's code; its level and
+        // room come from the body (rowsFromData prefers them). An old "<Level> - <Room> - <Code>.json" still
+        // reads: its parts are only a fallback for a body without them.
         var base = fh.name.replace(/\.json$/i, "");
         var parts = base.split(" - ");
+        var old = parts.length >= 3 && !(global.UtzItemFiles && global.UtzItemFiles.valid && global.UtzItemFiles.valid(base) && base.length <= 46);
         return readFile(fh, {
           project: projectName, fileBase: base, fileName: fh.name, isFlat: true,
-          level: parts.length >= 3 ? parts[0] : "", room: parts.length >= 3 ? parts[1] : "",
-          code: parts.length >= 3 ? parts.slice(2).join(" - ") : base
+          level: old ? parts[0] : "", room: old ? parts[1] : "",
+          code: old ? parts.slice(2).join(" - ") : base
         });
       }, 1);
     });
@@ -7169,7 +7445,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   }
   // The reworks of ONE joinery item (level/room/code), both locations.
   function listItemReworks(projectHandle, projectName, level, room, code){
-    var flatName = sanitizeFileBase(level) + " - " + sanitizeFileBase(room) + " - " + sanitizeFileBase(code) + ".json";
+    var flatName = flatBase(level, room, code, projectName) + ".json";
     var legacyName = sanitizeFileBase(code) + ".json";
     var rows = [], unreadable = 0;
     var flat = dirPath(projectHandle, FLAT_DATA, false).then(function(d){ return d.getFileHandle(flatName, { create: false }); }).then(function(fh){
@@ -7190,7 +7466,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   }
   // A row for the item an ITP app has open (it knows where it is already).
   function rowFor(isFlat, level, room, code, entry, projectName){
-    var fileBase = isFlat ? sanitizeFileBase(level) + " - " + sanitizeFileBase(room) + " - " + sanitizeFileBase(code) : sanitizeFileBase(code);
+    var fileBase = isFlat ? flatBase(level, room, code, projectName) : sanitizeFileBase(code);
     return { project: projectName || "", level: level, room: room, code: code, fileBase: fileBase, fileName: fileBase + ".json", isFlat: !!isFlat,
       levelDir: isFlat ? "" : level, roomDir: isFlat ? "" : room, entry: entry || {} };
   }
@@ -7260,7 +7536,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       cabinetNumber: row.entry.cabinetNumber || "", at: at.toISOString(), by: by || "", app: app || ""
     };
     Object.keys(fields || {}).forEach(function(k){ ev[k] = fields[k]; });
-    var name = userSlug(by) + " - " + stamp(at) + " - " + kind + ".json";
+    var name = nameInitials(by) + " - " + shortStamp(at, true) + " - " + kind + ".json";
     var text = JSON.stringify(ev);
     return logDir(projectHandle, row, true).then(function(dirH){
       return writeVerified(dirH, name, text);
@@ -7380,12 +7656,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     return dataDir(projectHandle, row);
   }
   function pdfPartFor(entry){
-    if (entry.cabinetNumber) return "Cab " + sanitizeFileBase(entry.cabinetNumber);
+    if (entry.cabinetNumber) return "Cab " + sanitizeFileBase(entry.cabinetNumber).slice(0, 20).replace(/[ .]+$/, "");
     var d = entry.createdAt ? new Date(entry.createdAt) : null;
-    return "Rework" + (d && !isNaN(d.getTime()) ? " " + d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) : "");
+    return "Rework" + (d && !isNaN(d.getTime()) ? " " + p2(d.getFullYear() % 100) + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) : ""); // (2026-10-01) two-digit year
   }
   function pdfFileName(row, entry, by, when){
-    return row.fileBase + " - " + pdfPartFor(entry) + " - " + userSlug(by) + " - " + stampSeconds(when || new Date()) + ".pdf";
+    return row.fileBase + " - " + pdfPartFor(entry) + " - " + nameInitials(by) + " - " + shortStamp(when || new Date(), false) + ".pdf"; // (2026-10-01) initials, two-digit year
   }
   // Rework PDFs for one item file, newest first: [{name, handle, perRework, when}]
   function listItemPdfs(projectHandle, row){
@@ -7396,8 +7672,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         if (e.kind !== "file" || !/\.pdf$/i.test(e.name)) return;
         if (e.name === row.fileBase + ".pdf") out.push({ name: e.name, handle: e, perRework: false, when: "" });
         else if (e.name.indexOf(prefix) === 0){
-          var m = e.name.match(/(\d{4}-\d\d-\d\d \d\d-\d\d-\d\d)\.pdf$/i);
-          out.push({ name: e.name, handle: e, perRework: true, when: m ? m[1] : "" });
+          var m = e.name.match(/(\d{2}(?:\d\d)?-\d\d-\d\d \d\d-\d\d-\d\d)\.pdf$/i); // (2026-10-01) "26-10-01 ..." too
+          out.push({ name: e.name, handle: e, perRework: true, when: m ? (m[1].length === 17 ? "20" + m[1] : m[1]) : "" });
         }
       });
       out.sort(function(a, b){
@@ -8576,7 +8852,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v78";
+  var APP_VERSION = "v81";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -10157,160 +10433,64 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // from colliding with each other.
   // (event layout v2) every key is remembered with its item, so the event
   // store knows the level folder and the shared key (see UTZLINE-EVENT-STORE).
-  function joineryItemPageKey(levelName, roomName, joineryCode){
-    return UtzEvents.remember(sanitizeFileBase(levelName) + " - " + sanitizeFileBase(roomName) + (joineryCode ? " - " + sanitizeFileBase(joineryCode) : ""), levelName, roomName, joineryCode);
+  function joineryItemPageKey(levelName, roomName, joineryCode, project){
+    // (2026-10-01, code-only file names) the item's FILE NAME -- its joinery
+    // code, chosen once by UTZLINE Projects (UtzItemFiles) -- never
+    // "<Level> - <Room> - <Code>" (Windows' 260-character path limit).
+    return UtzEvents.remember(UtzItemFiles.fileKey(levelName, roomName, joineryCode, project), levelName, roomName, joineryCode);
   }
   function joineryItemPageDisplayName(levelName, roomName, joineryCode){
     return [levelName, roomName, joineryCode].filter(Boolean).join(" — ");
   }
   function joineryItemPageFileName(key){ return key + ".json"; }
-  // Two joinery items can genuinely end up with the exact same (Level,
-  // Room, code) -- typed by hand, a duplicate code is an easy real mistake
-  // (a placeholder re-used by habit, a copy-pasted value, two items nobody
-  // has gotten around to giving distinct codes yet), and joineryItemPageKey
-  // above has no way to tell them apart on its own: both markers would
-  // silently resolve to the SAME page file, so opening either one shows
-  // (and, once a photo's inserted, silently shares) the exact same content
-  // -- a real report from Andrew right after v44.3 ("the selector dot gets
-  // confused if there are 2 items with the same room code").
-  //
-  // Fixed by disambiguating, but ONLY when a real collision exists on this
-  // level's own plan right now: every OTHER roomlink marker sharing this
-  // exact base key (the only place a sibling could ever be -- a roomlink
-  // only ever lives on its level's own plan) is sorted into a stable,
-  // fully-reproducible order (top-to-bottom, then left-to-right, then by
-  // its own object id as a last-resort tiebreaker -- all fields already on
-  // the marker, nothing new to store or keep in sync), and every marker
-  // past the first in that order gets a numbered suffix appended to its
-  // key. The first-sorted marker keeps the plain, un-suffixed key, so a
-  // level with no collisions at all (by far the common case) is completely
-  // unaffected, and whichever colliding marker sorts first keeps whatever
-  // was already saved under the old shared key -- the other(s) start a
-  // fresh, separate, blank page of their own from here on, which is
-  // exactly the "each item gets its own page" guarantee v44.3 was for.
-  //
-  // (v45.11, 2026-09-24) The "known limitation" above was the real,
-  // long-anticipated bug, not a theoretical one: Andrew's report that the
-  // Site Measure layers panel "only gives you one name to exclude, needs
-  // to show all names" traced back to exactly this instability, just
-  // triggered a much easier way than "someone deletes/drags a marker" --
-  // real crews sync a level file via Dropbox at different times (see
-  // next-version-notes.md's own "two-tier" usage note), so two devices can
-  // easily hold different local sets of a level's duplicate-coded markers
-  // at the moment either one opens an item. A device that hasn't yet
-  // synced a sibling computes a DIFFERENT index/suffix than one that has --
-  // confirmed directly (repro_duplicate_key_divergence.js): two people
-  // "measuring the same K-01" end up writing their Site Measure overlays
-  // (and job notes, and shop drawings -- every consumer of this same key)
-  // into two entirely separate storage folders, so neither ever sees the
-  // other listed as a layer at all. The exact same instability could even
-  // bite a single device across two calls in the same session if a sibling
-  // was added or removed in between (see openViewJobNoteDialogCore's own
-  // older comment about working around this for exactly that reason).
-  //
-  // Fixed with the "real, permanent per-item ID" this comment already
-  // flagged as the proper eventual fix: once resolved, the disambiguated
-  // key is cached directly on the marker itself as obj.pageKey, which rides
-  // along in the level file's own JSON save exactly like roomName/
-  // joineryCode always have (no format/schema migration -- it's just
-  // another field on an object already saved wholesale). Every later call
-  // for this same marker -- on any device, in any session, regardless of
-  // what else is or isn't currently loaded -- returns the cached value
-  // directly, without ever touching `siblings` again. Only the very first
-  // resolution for a given marker still depends on a complete sibling set
-  // (unavoidable -- it's the one moment the disambiguation actually has to
-  // be decided), a far narrower window than recomputing unconditionally on
-  // every single open forever. Silently re-saves the level file the moment
-  // a new key is assigned (best-effort, and skipped entirely in the
-  // read-only Viewer) so the assignment survives even if the user never
-  // otherwise touches this level again before navigating away -- without
-  // that, the cache would only ever help within a single already-open
-  // session.
-  //
-  // Deliberately scoped to ONLY the colliding case (siblings.length > 1) --
-  // a level with no duplicate-coded markers at all (the overwhelming
-  // majority of items, always) has nothing unstable to fix here in the
-  // first place, so it takes the exact same plain, side-effect-free
-  // baseKey return this function always gave it, no caching, no extra
-  // background disk write on every single item open. Every marker actually
-  // involved in a real collision gets cached and persisted, including the
-  // one that keeps the bare, un-suffixed key -- so if a THIRD duplicate is
-  // added later, neither existing one's already-settled key can shift
-  // again either.
-  function resolveJoineryItemPageKey(levelName, obj){
-    if (obj.pageKey) return obj.pageKey;
-    var roomName = obj.roomName || "";
-    var joineryCode = obj.joineryCode || "";
-    var baseKey = joineryItemPageKey(levelName, roomName, joineryCode);
-    var siblings = state.objects.filter(function(o){
-      return o && o.type === "roomlink" && (o.roomName || "") === roomName && (o.joineryCode || "") === joineryCode;
-    });
-    if (siblings.length <= 1) return baseKey;
-    siblings.sort(function(a, b){
-      if (a.y !== b.y) return a.y - b.y;
-      if (a.x !== b.x) return a.x - b.x;
-      return String(a.id).localeCompare(String(b.id));
-    });
-    var index = siblings.indexOf(obj);
-    var key = (index > 0) ? (baseKey + "-" + (index + 1)) : baseKey;
-    obj.pageKey = key;
-    if (!VIEW_ONLY_MODE) persistFreshPageKeyAssignment();
-    return key;
-  }
-  // Dedicated, minimal, race-safe persistence for the obj.pageKey
-  // assignment above -- deliberately NOT just "call saveActiveLevelFile(
-  // false)" here, even though that's the function every other silent
-  // level-file write in this app already goes through. Caught directly by
-  // run_joinery_item_dialog.js's flat-level regression test before this
-  // shipped: resolveJoineryItemPageKey runs partway through
-  // openJoineryItemPage's own promise chain, a few lines before that same
-  // chain reassigns state.objects to the just-opened item's own (often
-  // blank) content. saveActiveLevelFile/saveFlatLevelFile both read the
-  // LIVE state.objects global from inside an async .then() callback --
-  // fine for every other call site, which never has a state.objects swap
-  // already in flight, but here the callback often didn't fire until
-  // AFTER that swap, silently overwriting the level's real markers/
-  // objects with the item's blank canvas. This instead captures every
-  // field the write needs synchronously, before returning control to the
-  // rest of openJoineryItemPage, and only the actual disk I/O happens
-  // asynchronously afterward -- immune to whatever state.objects becomes
-  // moments later. Best-effort and silent either way, same as
-  // scheduleAutosave elsewhere: a background bookkeeping write failing
-  // should never surface an error to the person trying to open an item.
-  function persistFreshPageKeyAssignment(){
-    if (!activeProjectHandle || !activeLevelName) return;
-    var objectsSnapshot = state.objects.slice();
-    if (activeLevelIsFlat && !activeRoomName){
-      var imageDataURL = state.imageDataURL, imageTiles = state.imageTiles || null,
-          imageW = state.imageW, imageH = state.imageH, savedBy = deviceUserName || "",
-          projectName = activeProjectName, levelName2 = activeLevelName, projectHandle = activeProjectHandle;
-      readFlatLevelFile(projectHandle, projectName, levelName2).then(function(existing){
-        var markers = objectsSnapshot.filter(function(o){ return o && o.type === "roomlink"; });
-        var objects = objectsSnapshot.filter(function(o){ return !(o && o.type === "roomlink"); });
-        return writeFlatLevelFile(projectHandle, projectName, levelName2, {
-          imageDataURL: imageDataURL, imageTiles: imageTiles, imageW: imageW, imageH: imageH,
-          rooms: existing ? existing.rooms : [], markers: markers, objects: objects, savedBy: savedBy
-        });
-      }).catch(function(){});
-      return;
+  /* (2026-10-01, code-only file names) Andrew: "have a real good think about
+     how we can minimise filepaths, maybe we need to lose the joinery
+     descriptions and just have joinery codes. give me a solid solution".
+     Every per-item folder and file is named by the item's FILE NAME
+     ("fileKey" -- its joinery code, chosen once by UTZLINE Projects and saved
+     in joinery-items.json; a code the project already uses is "X (2)"). This
+     app's markers carry only level/room/code, so the project's
+     joinery-items.json is read and register()ed with UtzItemFiles when a
+     project is opened (and again, at most once a minute, when a level is
+     opened -- Projects may have added items meanwhile) BEFORE anything works
+     out an item's key. A read that fails (mid-sync) keeps the last good list,
+     so a key never falls back to the bare code because of a sync hiccup. */
+  var itemFilesMemo = {}; // project folder name -> { at, items }
+  function registerProjectItemFiles(projectHandle, opts){
+    if (!projectHandle || !window.UtzItemFiles) return Promise.resolve(null);
+    var name = projectHandle.name || activeProjectName || "";
+    var memo = itemFilesMemo[name];
+    if (memo && opts && opts.maxAgeMs && (Date.now() - memo.at) < opts.maxAgeMs){
+      UtzItemFiles.register(name, memo.items);
+      return Promise.resolve(memo.items);
     }
-    var savesHandle = activeWorkSavesHandle();
-    if (!savesHandle) return;
-    var payload, blob;
-    try{
-      payload = {
-        utzlineProject: 1,
-        imageDataURL: state.imageDataURL, imageW: state.imageW, imageH: state.imageH,
-        imageTiles: state.imageTiles || null,
-        fileBase: state.fileBase, objects: objectsSnapshot, style: defaultStyle(),
-        savedBy: deviceUserName || ""
-      };
-      blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
-    }catch(e){ return; }
-    var fileName = projectSaveFilename(activeWorkName());
-    savesHandle.getFileHandle(fileName, { create: true }).then(function(fh){
-      return verifiedHandleWrite(fh, blob);
-    }).catch(function(){});
+    return projectHandle.getFileHandle("joinery-items.json", { create: false }).then(function(fh){
+      return readJsonFileHandle(fh).then(function(arr){
+        if (!Array.isArray(arr)){ var e = new Error("joinery-items.json isn't readable just now"); e.name = "Unreadable"; throw e; }
+        return arr;
+      });
+    }, function(err){
+      if (err && err.name === "NotFoundError") return []; // no items yet: every key is the cleaned code
+      throw err;
+    }).then(function(items){
+      itemFilesMemo[name] = { at: Date.now(), items: items };
+      UtzItemFiles.register(name, items);
+      return items;
+    }).catch(function(err){
+      var keep = itemFilesMemo[name] ? itemFilesMemo[name].items : [];
+      console.warn("Couldn't read joinery-items.json just now (keeping the last list read):", err);
+      UtzItemFiles.register(name, keep);
+      return keep;
+    });
+  }
+  // A marker's key. (2026-10-01, code-only file names) simply the item's
+  // file name: two markers with the same room and code are the same item.
+  // The old "-n" suffix for a second marker sharing a room+code (v44.3/
+  // v45.11, cached on the marker as obj.pageKey) is gone -- UTZLINE Projects
+  // gives a repeated code its own file name ("X (2)") in joinery-items.json,
+  // and a pageKey saved on an older marker is ignored.
+  function resolveJoineryItemPageKey(levelName, obj){
+    return joineryItemPageKey(levelName, (obj && obj.roomName) || "", (obj && obj.joineryCode) || "");
   }
   function readJoineryItemPage(projectHandle, key){
     return getSiteMeasuresDir(projectHandle, false).then(function(dirH){
@@ -10399,9 +10579,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
      here, means has at least one OPEN entry (entry.closed is falsy) --
      matching Install ITP's own "Outstanding reworks" page semantics
      (listAllOpenReworks there), not "has ever had any rework logged". */
+  // (2026-10-01, code-only file names) a flat project's rework file is the
+  // item's file name (its joinery code -- UtzRework, Install ITP), was
+  // "<Level> - <Room> - <Code>.json".
   function reworkFileNameFor(levelName, roomName, joineryCode, isFlat){
     return isFlat
-      ? sanitizeFileBase(levelName) + " - " + sanitizeFileBase(roomName) + " - " + sanitizeFileBase(joineryCode) + ".json"
+      ? joineryItemPageKey(levelName, roomName, joineryCode) + ".json"
       : sanitizeFileBase(joineryCode) + ".json";
   }
   function getReworkDirFlatReadOnly(projectHandle){
@@ -10592,6 +10775,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         var data = null;
         try{ data = JSON.parse(text); }catch(e){ data = null; }
         var entries = (data && Array.isArray(data.reworks)) ? data.reworks : [];
+        if (data && isFlat){ level = data.level || level; room = data.room || room; code = data.joineryNo || code; } // (2026-10-01) the body says where it is
         return openReworkEntriesOf(entries).map(function(e){
           return { loc: [level, room, code].filter(Boolean).join(" — "), cabinetNumber: e.cabinetNumber, text: e.text, createdAt: e.createdAt, createdBy: e.createdBy };
         });
@@ -10605,10 +10789,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           return iter.next().then(function(res){
             if (res.done) return out;
             if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)){
-              // Flat filenames are "<Level> - <Room> - <Code>.json" -- best-
-              // effort split back into level/room/code for display; if a
-              // name doesn't fit the pattern (shouldn't happen), just show
-              // the filename itself rather than failing the whole scan.
+              // (2026-10-01, code-only file names) a flat file is named by the
+              // item's code now, so its level/room/code come from the file's
+              // own body ({ level, room, joineryNo }); an old
+              // "<Level> - <Room> - <Code>.json" name is still split as before
+              // when the body doesn't say.
               var base = res.value.name.replace(/\.json$/i, "");
               var parts = base.split(" - ");
               var level = parts.length >= 3 ? parts[0] : "";
@@ -11229,11 +11414,61 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // renamed/migrated) -- jobNoteSortKey below finds the stamp wherever it
   // sits in the name, so old and new files both keep sorting correctly
   // together.
-  function jobNoteFileName(originalName){
-    // (2026-10-01) the original name is cut to 40 characters: Windows' 260-character path limit
-    // (Project Saves/Job Notes/<Level - Room - Code>/ is ~80 before the file on Andrew's PC)
-    var base = sanitizeFileBase(String(originalName || "note").replace(/\.pdf$/i, "")).slice(0, 40).replace(/[\s._-]+$/, "") || "note";
-    return base + " - " + overlayTimestampStamp() + ".pdf";
+  /* (2026-10-01, code-only file names) Andrew: "drawings should be renamed to
+     suit when imported. not use the old filenames" -- the same for a job
+     note: it is saved as
+       Project Saves/Job Notes/<item file name>/Job note - <YYYY-MM-DD HH-mm-ss> - <item file name>.pdf
+     whatever the PDF was called (the 4-digit-year stamp is what the lists
+     sort by), with a .json beside it under the same name
+       { kind: "jobNote", file, original, by, at }
+     keeping the original name (the lists show it) and who added it. Every
+     app lists only the .pdf files. room: how many characters Windows leaves
+     for a name in that folder (null: no limit met) -- a long code is cut to
+     fit (the .json is a character longer than the .pdf). */
+  function jobNoteFileName(key, d, room){
+    var stamp = overlayTimestampStamp(d);
+    var fixed = "Job note - ".length + stamp.length + 3 + 4;
+    var code = String(key || "note");
+    if (room != null){
+      var avail = room - 1 - fixed;
+      if (avail < 1){ var e = new Error("path too long"); e.code = "path_long"; throw e; }
+      if (code.length > avail) code = code.slice(0, avail).replace(/[\s._(\[-]+$/, "") || code.slice(0, avail);
+    }
+    return "Job note - " + stamp + " - " + code + ".pdf";
+  }
+  // (2026-10-01) how many characters Windows leaves for a file name in
+  // <project>/<segs...>/ -- the event store's probe, measured once per
+  // project (null: not Windows, or no limit met). Same as the Scheduler's
+  // uploadPathRoom.
+  function pathRoomFor(projectHandle, segs){
+    if (!projectHandle || !window.UtzEvents || !UtzEvents.pathBudget) return Promise.resolve(null);
+    return UtzEvents.pathBudget({ dir: function(sg, c){ return eventsDir(projectHandle, sg, c); }, cacheId: (projectsRootName || "") + "\u0000" + (projectHandle.name || "") }).then(function(r){
+      if (!r || r.rel == null) return null;
+      var used = 0; segs.forEach(function(sg){ used += String(sg).length + 1; }); // each folder name and its "\"
+      return Math.max(0, r.rel - used);
+    }, function(){ return null; });
+  }
+  // A name not already in the folder ("x.pdf" -> "x (2).pdf"): two adds in
+  // the same second never overwrite each other.
+  function freeFileName(dirH, name){
+    var dot = name.lastIndexOf("."), stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : "";
+    function tryN(n){
+      var candidate = n === 1 ? name : stem + " (" + n + ")" + ext;
+      return dirH.getFileHandle(candidate, { create: false }).then(function(){ return n > 50 ? Promise.reject(new Error("too many copies")) : tryN(n + 1); }, function(err){
+        if (err && (err.name === "NotFoundError" || err.name === "TypeMismatchError")) return candidate;
+        return Promise.reject(err);
+      });
+    }
+    return tryN(1);
+  }
+  // Writes a NEW file (and verifies it); a failed write leaves no empty file.
+  function writeNewFile(dirH, name, blob){
+    return dirH.getFileHandle(name, { create: true }).then(function(fh){
+      return verifiedHandleWrite(fh, blob);
+    }).catch(function(err){ return removeIfEmpty(dirH, name).then(function(){ throw err; }); });
+  }
+  function pathLongMessage(){
+    return "Windows can't store a file this deep in the project folder (its path would pass 260 characters) — nothing was changed. Move the Projects folder nearer the drive root (for example C:\\UTZLINE Projects), or shorten the project folder's name.";
   }
   // Pulls the "yyyy-mm-dd hh-mm-ss" stamp out of a job note filename
   // wherever it happens to sit (prefix, per the old format, or suffix, per
@@ -11244,20 +11479,26 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // plain filename fallback below.
   function jobNoteSortKey(fileName){
     var m = /\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}/.exec(fileName || "");
-    return m ? m[0] : "";
+    if (!m) return "";
+    // (2026-10-01) a second note added in the same second is "... (2).pdf" -- it comes after
+    var c = / \((\d{1,3})\)\.pdf$/i.exec(fileName || "");
+    return m[0] + "#" + ("00" + (c ? c[1] : "1")).slice(-3);
   }
   // Every note for this item, newest first -- an item nobody's ever added
   // one for simply has no folder yet, which is not an error, just an empty
   // list (same convention listJoineryOverlays already uses).
+  // (2026-10-01) only the .pdf files are notes; a note's .json (same name)
+  // is handed along as .sidecar for readJobNoteSidecars.
   function listJobNotes(projectHandle, key){
     return getJobNotesDirForItem(projectHandle, key, false).then(function(dirH){
       if (!dirH || typeof dirH.values !== "function") return [];
-      var out = [];
+      var out = [], side = {};
       var iter = dirH.values();
       function step(){
         return iter.next().then(function(res){
-          if (res.done) return out;
+          if (res.done){ out.forEach(function(n){ n.sidecar = side[n.fileName.replace(/\.pdf$/i, "")] || null; }); return out; }
           if (res.value && res.value.kind === "file" && /\.pdf$/i.test(res.value.name)) out.push({ fileName: res.value.name, handle: res.value });
+          else if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) side[res.value.name.replace(/\.json$/i, "")] = res.value;
           return step();
         });
       }
@@ -11271,6 +11512,17 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       return list;
     });
   }
+  // (2026-10-01) each note's original name / who / when, from its .json
+  // (a note without one -- added before today -- shows its file name).
+  function readJobNoteSidecars(notes){
+    return Promise.all((notes || []).map(function(n){
+      if (!n.sidecar) return null;
+      return readJsonFileHandle(n.sidecar).then(function(info){
+        if (info && info.kind === "jobNote"){ n.original = info.original || ""; n.by = info.by || ""; n.at = info.at || ""; }
+      }, function(){});
+    })).then(function(){ return notes; });
+  }
+  function jobNoteDisplayName(n){ return (n && n.original) || (n && n.fileName) || ""; }
   // Writes the file, marks the shared record's independent "has a job note"
   // flag (see markJobNoteAdded's own comment), AND advances the forward-only
   // status pipeline to "in_manufacture". History, same day (2026-09-23):
@@ -11350,16 +11602,27 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // Resolves { stamped } -- false when the PDF couldn't take the watermark
   // and was saved as it is (v65).
   function addJobNote(projectHandle, level, room, joineryId, key, file, updatedBy){
-    var stamped = true;
+    var stamped = true, savedName = "";
     return stampForConstruction(file).then(null, function(err){
       console.error("Couldn't add the For Construction watermark to " + (file.name || "a job note") + ":", err);
       stamped = false;
       return file;
     }).then(function(data){
-      return getJobNotesDirForItem(projectHandle, key, true).then(function(dirH){
-        return dirH.getFileHandle(jobNoteFileName(file.name), { create: true });
-      }).then(function(fh){
-        return verifiedHandleWrite(fh, data);
+      // (2026-10-01, code-only file names) "Job note - <saved> - <item file name>.pdf" + its .json
+      var now = new Date();
+      return pathRoomFor(projectHandle, [projectSavesDirName(), jobNotesBranchName(), key]).then(function(roomLeft){
+        var name = jobNoteFileName(key, now, roomLeft);
+        return getJobNotesDirForItem(projectHandle, key, true).then(function(dirH){
+          return freeFileName(dirH, name).then(function(free){
+            savedName = free;
+            return writeNewFile(dirH, free, data).then(function(){
+              var info = { kind: "jobNote", file: free, original: file.name || "", by: updatedBy || "", at: now.toISOString(), level: level || "", room: room || "", joineryId: joineryId || "", stamped: stamped };
+              return writeNewFile(dirH, free.replace(/\.pdf$/i, "") + ".json", new Blob([JSON.stringify(info)], { type: "application/json" })).then(null, function(err){
+                console.error("Couldn't save the job note's details beside it (the note itself is saved):", err);
+              });
+            });
+          });
+        });
       });
     }).then(function(){
       // Sequential rather than Promise.all -- kept that way for simplicity,
@@ -11374,7 +11637,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       return markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy).then(function(){
         return setJoineryStatusForward(projectHandle, level, room, joineryId, "in_manufacture", updatedBy);
       });
-    }).then(function(){ return { stamped: stamped }; });
+    }).then(function(){ return { stamped: stamped, fileName: savedName }; });
   }
   function jobNoteKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
 
@@ -11490,27 +11753,52 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
 
   // Every revision inside ONE drawing group's own folder, oldest (RevA)
   // first.
+  // (2026-10-01) A drawing saved since the code-only file names is called
+  // "REV n - <saved> - <item file name>.pdf" whatever the PDF was called; its
+  // .json (same name) keeps the original name, who and when -- the lists
+  // show the original name (displayName) when there is one.
   function listShopDrawingRevisions(groupHandle){
-    var out = [];
+    var out = [], side = {};
     var iter = groupHandle.values();
     function step(){
       return iter.next().then(function(res){
         if (res.done) return out;
         if (res.value && res.value.kind === "file" && /\.pdf$/i.test(res.value.name)){
           var parsed = parseShopDrawingRevisionFileName(res.value.name);
-          out.push({ fileName: res.value.name, handle: res.value, revLabel: parsed.revLabel, rawLabel: parsed.raw, displayName: parsed.displayName, stamp: parsed.stamp });
-        }
+          out.push({ fileName: res.value.name, handle: res.value, revLabel: parsed.revLabel, rawLabel: parsed.raw, displayName: parsed.displayName, stamp: parsed.stamp, drawingId: groupHandle.name });
+        } else if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)) side[res.value.name.replace(/\.json$/i, "")] = res.value;
         return step();
       });
     }
     return step().then(function(list){
-      return shopRevOrder(list); // (v71) REV 0, A, B ... by the order they were saved
+      return Promise.all(list.map(function(r){
+        var sc = side[r.fileName.replace(/\.pdf$/i, "")];
+        if (!sc) return null;
+        return readJsonFileHandle(sc).then(function(info){
+          if (!info || info.kind !== "shopDrawing") return;
+          if (info.original) r.displayName = info.original;
+          r.by = info.by || ""; r.at = info.at || ""; r.part = info.part || "";
+        }, function(){});
+      })).then(function(){ return shopRevOrder(list); }); // (v71) REV 0, A, B ... by the order they were saved
     });
   }
   // Every independent drawing for this item, newest drawing group first --
   // each with its own revisions array (oldest first, so revisions[revisions.length-1]
-  // is always "the latest revision of this drawing").
-  function listShopDrawings(projectHandle, key){
+  // is always "the latest revision of this drawing"), its returned copies
+  // and (2026-10-01) its approved ones.
+  // (2026-10-01) Andrew: "the returned need to be split to returned to
+  // resubmit, or approved": a drawing's Returned/ folder is shown as
+  // "Returned to resubmit", its Approved/ folder (new) as "Approved"; both
+  // carry the token of the sent revision they answer.
+  // strict: a folder that can't be read (mid-sync) rejects instead of
+  // reading as empty -- what a save works its next revision out from.
+  function listShopDrawings(projectHandle, key, strict){
+    function sub(groupH, folder){
+      return groupH.getDirectoryHandle(folder, { create: false }).then(listShopDrawingRevisions, function(err){
+        if (strict && !isNotFoundErrSM(err)) throw err;
+        return [];
+      });
+    }
     return getShopDrawingsDirForItem(projectHandle, key, false).then(function(dirH){
       if (!dirH || typeof dirH.values !== "function") return [];
       var groupHandles = [];
@@ -11523,18 +11811,22 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         });
       }
       return step();
-    }, function(){ return []; }).then(function(groupHandles){
+    }, function(err){
+      if (strict && !isNotFoundErrSM(err)){ var e = new Error("Couldn't read the shop drawings for " + key); e.code = "read_failed"; e.cause = err; throw e; }
+      return [];
+    }).then(function(groupHandles){
       return Promise.all(groupHandles.map(function(groupH){
         return listShopDrawingRevisions(groupH).then(function(revisions){
           // (v64) the copies that came back, in the drawing's own "Returned" folder
-          return groupH.getDirectoryHandle("Returned", { create: false }).then(listShopDrawingRevisions, function(){ return []; }).then(function(returned){
-            returned.forEach(function(x){ x.revLabel = shopRevLabelReturned(x, revisions); }); // (v71) the label of the revision it answers
-            return { drawingId: groupH.name, revisions: revisions, returned: returned };
+          return Promise.all([sub(groupH, "Returned"), sub(groupH, "Approved")]).then(function(r){
+            var returned = r[0], approved = r[1];
+            returned.concat(approved).forEach(function(x){ x.revLabel = shopRevLabelReturned(x, revisions); }); // (v71) the label of the revision it answers
+            return { drawingId: groupH.name, revisions: revisions, returned: returned, approved: approved };
           });
         });
       }));
     }).then(function(groups){
-      groups = groups.filter(function(g){ return g.revisions.length > 0 || g.returned.length > 0; });
+      groups = groups.filter(function(g){ return g.revisions.length > 0 || g.returned.length > 0 || g.approved.length > 0; });
       groups.sort(function(a, b){ return b.drawingId.localeCompare(a.drawingId); });
       return groups;
     });
@@ -11543,6 +11835,145 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // was removed 2026-09-24 along with the popover's own "Add shop drawing"
   // row; see this file's own "Shop drawings" comment above.
   function shopDrawingKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
+
+  /* ---- (2026-10-01) Viewer: "Add shop drawing" is back ----
+     Andrew: "on next update, we need to bring the upload shop drawings back
+     into viewer. put it at the top of the menu, also in the viewer joinery
+     summary, make it so that drawings can be added there also". Viewer only
+     (Site Measure still has none -- taken out 2026-09-24). Files are written
+     EXACTLY as the Scheduler (v44+) writes them, so every app reads them
+     with no change:
+       Project Saves/Shop Drawings/<item file name>/<drawing folder>/REV n - <YYYY-MM-DD HH-mm-ss> - <item file name>.pdf
+         sent: the item's next revision (REV 0, then A, B ...) in its newest
+         drawing folder ("g<base-36 time>", 12 characters, for a first one);
+       .../<drawing folder>/Returned/REV n - ...pdf   "Returned to resubmit"
+       .../<drawing folder>/Approved/REV n - ...pdf   "Approved"
+         filed under the token of the sent revision they answer (the latest
+         unless another is picked: "Returned copy of / Approved copy of");
+     and beside each PDF a .json under the same name
+       { kind: "shopDrawing", part: "sent" | "returned" | "approved", revLabel, file, original, by, at }.
+     A sent upload records who uploaded it (Project Saves/Shop Drawing
+     Uploaders/<name>.json, once per person) -- the reworks' drafter list.
+     The next revision is worked out from a fresh, strict listing at Save
+     (never from a folder that's mid-sync); a name too long for Windows'
+     260-character path limit is cut to fit (or refused), and a write that
+     fails leaves no empty file behind. A name (and PIN) is needed, like
+     every other Viewer write. Drawing groups ("Merge with other pins",
+     UTZLINE Projects): the Viewer doesn't carry the drawing-groups module,
+     so a drawing is saved on the item it was added to; if that module is
+     ever pasted in, the same drawing goes on every member as the Scheduler
+     does. Not wired to the status pipeline (a shop drawing never was). */
+  function shopKindOf(k){ return k === "returned" || k === "approved" ? k : "sent"; }
+  function shopKindWord(k){ return k === "returned" ? "returned to resubmit" : k === "approved" ? "approved" : "sent"; }
+  function shopNewGroupId(){ return "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+  // the item's next sent revision: the next one after the newest drawing's own revisions
+  function shopSentTarget(groups){
+    return { groupId: groups.length ? groups[0].drawingId : null, revLabel: shopRevDisplay(groups.length ? groups[0].revisions.length : 0) };
+  }
+  // every sent revision (newest first), every returned-to-resubmit copy and every approved copy (newest first)
+  function shopDrawingParts(groups){
+    var sent = [], ret = [], appr = [];
+    (groups || []).forEach(function(g){
+      g.revisions.forEach(function(r){ var c = {}; for (var k in r) if (r.hasOwnProperty(k)) c[k] = r[k]; c.drawingId = g.drawingId; sent.push(c); });
+      (g.returned || []).forEach(function(r){ ret.push(r); });
+      (g.approved || []).forEach(function(r){ appr.push(r); });
+    });
+    function byRev(a, b){ return ((b.revIndex || 0) - (a.revIndex || 0)) || String(b.stamp || "").localeCompare(String(a.stamp || "")); }
+    function byStamp(a, b){ return String(b.stamp || "").localeCompare(String(a.stamp || "")) || byRev(a, b); }
+    sent.sort(byRev); ret.sort(byStamp); appr.sort(byStamp);
+    return { sent: sent, returned: ret, approved: appr };
+  }
+  // A name part, cleaned of what Windows refuses and cut (at a word) to max.
+  function shopNamePart(name, fallback, max){
+    var cleaned = String(name || "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().replace(/^[._]+|[._\s]+$/g, "");
+    max = max || 80;
+    if (cleaned.length > max){
+      var cut = cleaned.slice(0, max), sp = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("-"), cut.lastIndexOf("_"));
+      cleaned = (sp >= Math.floor(max * 0.4) ? cut.slice(0, sp) : cut).replace(/[\s._(\[-]+$/, "");
+    }
+    return cleaned || fallback;
+  }
+  // "REV n - <YYYY-MM-DD HH-mm-ss> - <item file name>.pdf"; room: how many
+  // characters the folder leaves for a name (null: no limit) -- the .json
+  // beside it is a character longer.
+  function shopFileName(fileToken, key, room, d){
+    var stamp = overlayTimestampStamp(d);
+    var fixed = fileToken.length + 3 + stamp.length + 3 + 4;
+    var disp = shopNamePart(key, "drawing", 46);
+    if (room != null){
+      var avail = room - 1 - fixed;
+      if (avail < 1){ var e = new Error("path too long"); e.code = "path_long"; throw e; }
+      if (disp.length > avail) disp = disp.slice(0, avail).replace(/[\s._(\[-]+$/, "") || disp.slice(0, avail);
+    }
+    return fileToken + " - " + stamp + " - " + disp + ".pdf";
+  }
+  function shopDirFor(projectHandle, segs){
+    return segs.reduce(function(p, sg){ return p.then(function(h){ return h.getDirectoryHandle(sg, { create: true }); }); }, Promise.resolve(projectHandle));
+  }
+  // kind: "sent" | "returned" | "approved"; returnOf: { drawingId, fileName } of
+  // the sent revision a returned / approved copy answers (null: the latest).
+  // -> { revLabel, name, kind }
+  function addShopDrawingFile(projectHandle, key, file, kind, returnOf, by){
+    kind = shopKindOf(kind);
+    return listShopDrawings(projectHandle, key, true).then(function(groups){
+      var groupId, revLabel, fileToken;
+      if (kind !== "sent"){
+        var parts = shopDrawingParts(groups).sent;
+        var target = returnOf ? parts.filter(function(r){ return r.drawingId === returnOf.drawingId && (returnOf.fileName ? r.fileName === returnOf.fileName : r.revLabel === returnOf.revLabel); })[0] : parts[0];
+        // the picked sent revision has gone since the dialog opened: never file it under another one
+        if (returnOf && !target){ var gone = new Error("sent revision no longer there"); gone.code = "shop_rev_gone"; return Promise.reject(gone); }
+        groupId = target ? target.drawingId : (groups.length ? groups[0].drawingId : null);
+        revLabel = target ? target.revLabel : "REV 0";
+        fileToken = target ? (target.rawLabel || target.revLabel) : "REV 0";
+      } else {
+        var t = shopSentTarget(groups);
+        groupId = t.groupId; revLabel = t.revLabel; fileToken = revLabel;
+      }
+      var newGroup = !groupId;
+      groupId = groupId || shopNewGroupId();
+      var segs = [projectSavesDirName(), shopDrawingsBranchName(), key, groupId].concat(kind === "returned" ? ["Returned"] : kind === "approved" ? ["Approved"] : []);
+      var now = new Date();
+      // a brand-new drawing folder left empty by a failed write is taken away again
+      // (non-recursive: a folder with anything in it is never removed)
+      function dropEmptyNewGroup(err){
+        if (!newGroup) throw err;
+        return shopDirFor(projectHandle, segs.slice(0, 3)).then(function(itemH){ return itemH.removeEntry(groupId); }).then(null, function(){}).then(function(){ throw err; });
+      }
+      return pathRoomFor(projectHandle, segs).then(function(room){
+        var wanted = shopFileName(fileToken, key, room, now);
+        return shopDirFor(projectHandle, segs).then(function(dirH){
+          return freeFileName(dirH, wanted).then(function(name){
+            return writeNewFile(dirH, name, file).catch(dropEmptyNewGroup).then(function(){
+              var info = { kind: "shopDrawing", part: kind, revLabel: revLabel, file: name, original: file.name || "", by: by || "", at: now.toISOString() };
+              return writeNewFile(dirH, name.replace(/\.pdf$/i, "") + ".json", new Blob([JSON.stringify(info)], { type: "application/json" })).then(null, function(err){
+                console.error("Couldn't save who added the shop drawing (the drawing itself is saved):", err);
+              });
+            }).then(function(){ return { revLabel: revLabel, name: name, kind: kind }; });
+          });
+        });
+      });
+    });
+  }
+  // Project Saves/Shop Drawing Uploaders/<name>.json -- one file per person (idempotent)
+  function recordShopDrawingUploader(projectHandle, by){
+    if (!by || !projectHandle) return Promise.resolve();
+    return shopDirFor(projectHandle, [projectSavesDirName(), "Shop Drawing Uploaders"]).then(function(dh){
+      var name = shopNamePart(by, "Unnamed") + ".json";
+      return dh.getFileHandle(name, { create: false }).then(function(){}, function(){
+        return writeNewFile(dh, name, new Blob([JSON.stringify({ kind: "shopDrawingUploader", name: by, at: new Date().toISOString(), app: "Viewer" })], { type: "application/json" }));
+      });
+    }).catch(function(err){ console.warn("Couldn't record the drawing's uploader:", err); });
+  }
+  // the other items in this item's drawing group (none when the Viewer has no drawing-groups module)
+  function shopDrawingGroupOthers(level, room, code){
+    if (!window.UtzDrawingGroups || !activeProjectHandle) return Promise.resolve([]);
+    return UtzDrawingGroups.read(activeProjectHandle).then(function(st){
+      var g = UtzDrawingGroups.groupFor(st, level, room, code);
+      if (!g) return [];
+      var me = UtzDrawingGroups.key(level, room, code);
+      return g.members.filter(function(m){ return UtzDrawingGroups.key(m.level, m.room, m.joineryId) !== me; });
+    }, function(err){ console.warn("Drawing groups couldn't be read just now:", err); return []; });
+  }
   // A person's name, filesystem-sanitised the same way the identity
   // dialog's own sanitizeUserName already does (NOT sanitizeFileBase --
   // that one's own empty-input fallback is the word "plan", which would
@@ -11572,18 +12003,44 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + " " +
       p2(d.getHours()) + "-" + p2(d.getMinutes()) + "-" + p2(d.getSeconds());
   }
+  // A draft stays one per PERSON (the full-name slug, so two people with
+  // the same initials never share -- and overwrite -- one draft file).
   function joineryDraftFileName(user){ return overlayUserSlug(user) + ".json"; }
-  function joineryOverlayFileName(user, stamp){ return overlayUserSlug(user) + " - " + stamp + ".json"; }
-  // The inverse of joineryOverlayFileName -- the filename itself, not
-  // anything inside the file, is treated as the source of truth for
-  // who/when (same convention UTZLINE Data Standard v1 §5 sets out), so a
-  // file that somehow got renamed or copied in from elsewhere still
-  // groups/sorts sensibly by whatever its name actually says.
+  /* (2026-10-01, code-only file names) Windows' 260-character path limit: a
+     saved check measure is
+       Project Saves/Site Measures/<item file name>/overlays/<initials> - <yy-mm-dd HH-mm-ss-mmm>.json
+     (was "<full name, up to 60> - <YYYY-MM-DD HH-mm-ss>.json" under the
+     "<Level> - <Room> - <Code>" folder). The full name is in the file
+     ("savedBy", "savedAt"); the milliseconds keep two saves in one second
+     apart. `d`: the moment (a Date). */
+  function joineryOverlayFileName(user, d){
+    return UtzItemFiles.initials(user) + " - " + UtzItemFiles.stamp(d || new Date(), true) + ".json";
+  }
+  // The inverse of joineryOverlayFileName: who (initials -- or the full name
+  // on an older file) and when, as "YYYY-MM-DD HH-mm-ss" (+ "-mmm" on a new
+  // file), so plain string order is time order across old and new names.
+  // The full name of a new file's author is in its body (savedBy) -- the
+  // layer list takes it from there once the file is read.
   function parseJoineryOverlayFileName(fileName){
     var base = fileName.replace(/\.json$/i, "");
+    var m = /^(.+?) - (\d{2})-(\d{2})-(\d{2}) (\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?$/.exec(base);
+    if (m) return { user: m[1], stamp: "20" + m[2] + "-" + m[3] + "-" + m[4] + " " + m[5] + "-" + m[6] + "-" + m[7] + (m[8] ? "-" + m[8] : ""), short: true };
     var idx = base.lastIndexOf(" - ");
     if (idx < 0) return { user: base, stamp: "" };
     return { user: base.slice(0, idx), stamp: base.slice(idx + 3) };
+  }
+  // Is this listed overlay (maybe) mine? An old file names its author in
+  // full; a new one only by initials, so it's mine-by-name until its body
+  // (savedBy) says otherwise -- see loadCheckMeasureBase.
+  function overlayEntryMaybeMine(entry, user){
+    if (!entry || !user) return false;
+    var u = String(entry.user || "").toLowerCase();
+    if (entry.short) return u === UtzItemFiles.initials(user).toLowerCase();
+    return u === overlayUserSlug(user).toLowerCase();
+  }
+  function overlaySavedByIsMe(data, user){
+    var by = data && data.savedBy ? String(data.savedBy).trim().toLowerCase() : "";
+    return !by || by === String(user || "").trim().toLowerCase() || by === overlayUserSlug(user).toLowerCase();
   }
   /* (v60) Andrew, on v59: "when opening an existing site measure, it's
      bringing up the popup with the crop plan instead. we need to decipher
@@ -11614,7 +12071,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         if (res.done) return out;
         if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)){
           var parsed = parseJoineryOverlayFileName(res.value.name);
-          out.push({ fileName: res.value.name, user: parsed.user, stamp: parsed.stamp, handle: res.value });
+          out.push({ fileName: res.value.name, user: parsed.user, stamp: parsed.stamp, short: !!parsed.short, handle: res.value });
         }
         return step();
       });
@@ -11718,10 +12175,31 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function loadCheckMeasureBase(projectHandle, key){
     return readCheckMeasureState(projectHandle, key, deviceUserName).then(function(st){
       var overlays = st.overlays;
-      var mySlugLower = overlayUserSlug(deviceUserName).toLowerCase();
       function latest(list){ var b = null; list.forEach(function(o){ if (!b || o.stamp > b.stamp) b = o; }); return b; }
-      var baseEntry = null, bgEntry = null, startedFrom = null;
-      if (!VIEW_ONLY_MODE) baseEntry = latest(overlays.filter(function(o){ return String(o.user).toLowerCase() === mySlugLower; }));
+      // (2026-10-01, code-only file names) a new save is named by initials
+      // only, so "my latest save" is the newest one with my initials whose
+      // body (savedBy) is me -- someone else with the same initials stays a
+      // layer of their own (read once here, handed to the layer as is).
+      function pickMine(){
+        if (VIEW_ONLY_MODE || !deviceUserName) return Promise.resolve(null);
+        var cands = overlays.filter(function(o){ return overlayEntryMaybeMine(o, deviceUserName); }).sort(function(a, b){ return (b.stamp || "").localeCompare(a.stamp || ""); });
+        var i = 0;
+        function next(){
+          if (i >= cands.length) return null;
+          var c = cands[i++];
+          if (!c.short) return c;
+          return readJsonFileHandleRetry(c.handle).then(function(data){
+            if (!data) throw checkMeasureReadFailed("the saved check measure");
+            c.data = data;
+            if (overlaySavedByIsMe(data, deviceUserName)) return c;
+            if (data.savedBy) c.user = String(data.savedBy);
+            return next();
+          });
+        }
+        return Promise.resolve().then(next);
+      }
+      return pickMine().then(function(baseEntry){
+      var bgEntry = null, startedFrom = null;
       var mineOnPage = !VIEW_ONLY_MODE && (st.ownDraft || baseEntry);
       if (!mineOnPage){
         bgEntry = latest(overlays);
@@ -11731,19 +12209,22 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         return (a.stamp || "").localeCompare(b.stamp || "") || String(a.user).localeCompare(String(b.user));
       });
       var res = { exists: st.exists, ownDraft: st.ownDraft, baseEntry: baseEntry, baseData: null, startedFrom: startedFrom, otherEntries: others };
-      if (st.ownDraft) return res;
+      if (st.ownDraft){ if (baseEntry) baseEntry.data = null; return res; }
       if (baseEntry){
-        return readJsonFileHandleRetry(baseEntry.handle).then(function(data){
+        var baseP = baseEntry.data ? Promise.resolve(baseEntry.data) : readJsonFileHandleRetry(baseEntry.handle);
+        baseEntry.data = null;
+        return baseP.then(function(data){
           if (!data) throw checkMeasureReadFailed("the saved check measure");
           res.baseData = data;
           return res;
         });
       }
       if (bgEntry){
-        return readJsonFileHandleRetry(bgEntry.handle).then(function(data){
+        return (bgEntry.data ? Promise.resolve(bgEntry.data) : readJsonFileHandleRetry(bgEntry.handle)).then(function(data){
           if (!data) throw checkMeasureReadFailed("the saved check measure");
           res.baseData = checkMeasureBackgroundOnly(data);
           bgEntry.data = data; // its layer reuses this read instead of reading the file twice
+          if (data.savedBy){ bgEntry.user = String(data.savedBy); if (startedFrom) startedFrom.user = bgEntry.user; } // (2026-10-01) the full name, not the file's initials
           return res;
         });
       }
@@ -11758,6 +12239,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         });
       }
       return res;
+      });
     });
   }
 
@@ -11818,7 +12300,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           if (res.done) return out;
           if (res.value && res.value.kind === "file" && /\.json$/i.test(res.value.name)){
             var parsed = parseJoineryOverlayFileName(res.value.name);
-            out.push({ fileName: res.value.name, user: parsed.user, stamp: parsed.stamp, handle: res.value });
+            out.push({ fileName: res.value.name, user: parsed.user, stamp: parsed.stamp, short: !!parsed.short, handle: res.value });
           }
           return step();
         });
@@ -11862,15 +12344,29 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // person minutes apart become two distinct layers rather than one file
   // overwriting the other -- the same "layered over each other" behaviour
   // Andrew asked for, now for one person's own successive Saves too.
+  // (2026-10-01, code-only file names) named "<initials> - <yy-mm-dd HH-mm-ss-mmm>.json"
+  // (see joineryOverlayFileName); who and when in full ride in the file
+  // (savedBy, savedAt). A write that fails leaves no empty file behind.
   function writeJoineryOverlay(projectHandle, key, user, data){
-    var stamp = overlayTimestampStamp();
+    var now = new Date();
+    if (data && typeof data === "object"){ if (!data.savedBy) data.savedBy = user || ""; data.savedAt = now.toISOString(); }
     var payload = JSON.stringify(data);
+    var name = joineryOverlayFileName(user, now);
     if (checkMeasureKeySet) checkMeasureKeySet.add(key); // (v54) now "Open", not "Add"
     return getJoineryOverlaysDir(projectHandle, key, true).then(function(dirH){
-      return dirH.getFileHandle(joineryOverlayFileName(user, stamp), { create: true });
-    }).then(function(fh){
-      return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
+      return dirH.getFileHandle(name, { create: true }).then(function(fh){
+        return verifiedHandleWrite(fh, new Blob([payload], { type: "application/json" }));
+      }).catch(function(err){ return removeIfEmpty(dirH, name).then(function(){ throw err; }); });
     });
+  }
+  // (2026-10-01) Windows' 260-character path limit: Chrome writes through
+  // "<name>.crswap" and a path past the limit is left as an EMPTY file. A
+  // file this app just created that couldn't be written is taken away again
+  // -- only ever an empty one, never one with bytes in it.
+  function removeIfEmpty(dirH, name){
+    return dirH.getFileHandle(name, { create: false }).then(function(fh){ return fh.getFile(); }).then(function(f){
+      return f.size === 0 ? dirH.removeEntry(name) : null;
+    }).then(null, function(){});
   }
   // Blocks an explicit Save until a name is actually set -- every overlay
   // filename embeds who made it (that's the whole point: it's what lets a
@@ -12163,7 +12659,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function openProjectFromHandle(dirH, name){
     activeProjectName = name;
     activeProjectHandle = dirH;
-    return populateLevelList().then(function(){
+    // (2026-10-01, code-only file names) the items' file names, before any key is worked out
+    return registerProjectItemFiles(dirH).then(function(){ return populateLevelList(); }).then(function(){
       gateLevelsLabel.textContent = "“" + activeProjectName + "” — choose a level.";
       if (backToProjectsBtn) backToProjectsBtn.style.display = projectsRootHandle ? "" : "none";
       showGateState("levels");
@@ -12190,7 +12687,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       activeRoomName = ""; activeRoomHandle = null;
       activeRoomSavesHandle = null; activeRoomPdfsHandle = null; activeRoomBackupsHandle = null;
       activeJoineryItemPage = null;
-      return isFlatProject(activeProjectHandle);
+      // (2026-10-01, code-only file names) items Projects added since the
+      // project was opened get their file names too (read at most once a minute)
+      return Promise.all([isFlatProject(activeProjectHandle), registerProjectItemFiles(activeProjectHandle, { maxAgeMs: 60000 })]).then(function(r){ return r[0]; });
     }).then(function(flat){
       if (flat) return openFlatLevel(name, opts);
       return activeProjectHandle.getDirectoryHandle(name, { create: !VIEW_ONLY_MODE }).then(function(dirH){
@@ -12264,7 +12763,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         startBlankPlan(name);
       }
     }).then(function(){
-      state.fileBase = sanitizeFileBase(activeProjectName + "_" + name);
+      state.fileBase = projectExportBase(UtzItemFiles.clean(name, 40)); // (2026-10-01) "<project ≤40> - <level>"
       updateFileNameBtn();
       refreshBrandSubtitle();
       history = [deepClone(state.objects)]; historyIndex = 0;
@@ -12353,7 +12852,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       // identity, so it's set last, after everything else has settled. No
       // known project (a bare level folder opened directly) falls back to
       // just the level's own name, rather than a leading "_" or "— ".
-      state.fileBase = sanitizeFileBase((activeProjectName ? activeProjectName + "_" : "") + name);
+      state.fileBase = activeProjectName ? projectExportBase(UtzItemFiles.clean(name, 40)) : sanitizeFileBase(name); // (2026-10-01) "<project ≤40> - <level>"
       updateFileNameBtn();
       refreshBrandSubtitle();
       history = [deepClone(state.objects)]; historyIndex = 0;
@@ -12454,7 +12953,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       entry.data = null; // (v61) drop the preloaded copy once handed over (4 GB tablets)
       return dataP.then(function(data){
         if (activeJoineryItemPage !== page) return;
-        page.layers.push({ user: entry.user, stamp: entry.stamp, fileName: entry.fileName, unsaved: !!entry.unsaved, visible: true, objects: (data && data.objects) || [] });
+        page.layers.push({ user: (data && data.savedBy && !entry.unsaved) ? String(data.savedBy) : entry.user, stamp: entry.stamp, fileName: entry.fileName, unsaved: !!entry.unsaved, visible: true, objects: (data && data.objects) || [] }); // (2026-10-01) the saver's full name from the file (its name has initials only)
         renderOverlayLayers(); // (v56) appends just this layer -- see renderOverlayLayers
         renderOverlayLayersPanel();
       }, function(err){
@@ -12524,9 +13023,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var levelName = activeLevelName;
       var roomName = obj.roomName || "";
       var joineryCode = obj.joineryCode || "";
-      // resolveJoineryItemPageKey (not the plain joineryItemPageKey) --
-      // see its own comment: this is what keeps two items that happen to
-      // share the same room+code from silently landing on the same page.
+      // resolveJoineryItemPageKey (2026-10-01: simply the item's file name --
+      // a code used twice in the project is "X (2)" in joinery-items.json).
       var key = resolveJoineryItemPageKey(levelName, obj);
       var displayName = joineryItemPageDisplayName(levelName, roomName, joineryCode);
       var create = !VIEW_ONLY_MODE;
@@ -12607,7 +13105,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       // Set last, same reasoning openLevel/openRoom's own comments give --
       // never clobbered by whatever applyRestoredState/startBlankPlan set
       // fileBase to along the way.
-      state.fileBase = sanitizeFileBase((activeProjectName ? activeProjectName + "_" : "") + activeJoineryItemPage.key);
+      // (2026-10-01, code-only file names) "<project, cut to 40> - <item file name>":
+      // its PDFs are "<that> - <YYYY-MM-DD HH-mm-ss>.pdf" (suggestFilename)
+      state.fileBase = activeProjectName ? projectExportBase(activeJoineryItemPage.key) : sanitizeFileBase(activeJoineryItemPage.key);
       updateFileNameBtn();
       refreshBrandSubtitle();
       history = [deepClone(state.objects)]; historyIndex = 0;
@@ -12726,7 +13226,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       // plan, same reasoning as openLevel: set last, after
       // applyRestoredState/startBlankPlan, so it's never clobbered by
       // whatever they set fileBase to along the way.
-      state.fileBase = sanitizeFileBase(activeProjectName + "_" + activeLevelName + "_" + name);
+      state.fileBase = projectExportBase(UtzItemFiles.clean(activeLevelName, 30) + " - " + UtzItemFiles.clean(name, 40)); // (2026-10-01) "<project ≤40> - <level> - <room>"
       updateFileNameBtn();
       refreshBrandSubtitle();
       history = [deepClone(state.objects)]; historyIndex = 0;
@@ -13029,7 +13529,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       });
     }).catch(function(err){
       console.error("Add job note failed:", err);
-      jobNoteAddStatusEl.textContent = "Couldn't save that file — try again.";
+      jobNoteAddStatusEl.textContent = err && err.code === "path_long" ? pathLongMessage() : "Couldn't save that file — try again.";
     });
   }
   // Real bug Andrew hit in the field: every dialog in this app (including
@@ -13083,7 +13583,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     jobNoteListEl.innerHTML = "<p class=\"jobnote-empty\">Loading…</p>";
     jobNoteViewBackdrop.hidden = false;
     fgBegin(); // (v57) scans stand aside while this list loads
-    var jnP = takeJobNotesList(key);
+    var jnP = takeJobNotesList(key).then(readJobNoteSidecars); // (2026-10-01) the original names
     jnP.then(fgEnd, fgEnd);
     jnP.then(function(notes){
       jobNoteListEl.innerHTML = "";
@@ -13096,7 +13596,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         row.className = "jobnote-row";
         var nameSpan = document.createElement("span");
         nameSpan.className = "jobnote-row-name";
-        nameSpan.textContent = note.fileName;
+        nameSpan.textContent = jobNoteDisplayName(note); // (2026-10-01) the PDF's own name (its file is "Job note - <saved> - <code>.pdf")
+        if (note.original) nameSpan.title = note.fileName;
         row.appendChild(nameSpan);
         var openBtn = document.createElement("button");
         openBtn.type = "button"; openBtn.className = "mbtn";
@@ -13159,6 +13660,197 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
      parseShopDrawingRevisionFileName and listShopDrawings all stay, since
      View still reads through every one of them. */
 
+  /* ---- (2026-10-01) Viewer: the "Add shop drawing" dialog ----
+     Opened from the marker menu's first row and from the joinery summary's
+     Shop drawings card (its button, or a PDF dropped on the card -- on a
+     part, that part is chosen). Pick the kind (Sent / Returned to resubmit /
+     Approved -- for the last two, which sent revision it answers), choose
+     or drop the PDF, Save. The file is written by addShopDrawingFile (the
+     Scheduler's names); a name + PIN is needed first, like every Viewer
+     write. Nothing of the PDF is kept once it's saved (4 GB tablets). */
+  var sdAddBackdrop = document.getElementById("shopDrawingAddBackdrop");
+  var sdAddTitleEl = document.getElementById("shopDrawingAddTitle");
+  var sdAddSubtitleEl = document.getElementById("shopDrawingAddSubtitle");
+  var sdAddSentInfoEl = document.getElementById("shopDrawingSentInfo");
+  var sdAddReturnInfoEl = document.getElementById("shopDrawingReturnInfo");
+  var sdAddDropzone = document.getElementById("shopDrawingDropzone");
+  var sdAddDropTitle = document.getElementById("shopDrawingDropTitle");
+  var sdAddDropSub = document.getElementById("shopDrawingDropSub");
+  var sdAddStatusEl = document.getElementById("shopDrawingAddStatus");
+  var sdAddNameNoteEl = document.getElementById("shopDrawingNameNote");
+  var sdAddFileInput = document.getElementById("shopDrawingFileInput");
+  var sdAddSaveBtn = document.getElementById("shopDrawingAddSaveBtn");
+  var SD_TITLES = { sent: "Add sent shop drawing", returned: "Add returned-to-resubmit shop drawing", approved: "Add approved shop drawing" };
+  var SD_SAVES = { sent: "Save as sent", returned: "Save as returned to resubmit", approved: "Save as approved" };
+  var sdAdd = null; // { obj, key, level, room, code, file, sentRevs, next, readOk, busy, seq }
+  var sdAddSeq = 0;
+  function shopStampDate(stamp){
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(stamp || ""));
+    if (!m) return "";
+    try{ return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }); }
+    catch(e){ return m[3] + "/" + m[2] + "/" + m[1]; }
+  }
+  function sdIsPdf(f){ return !!f && ((f.type || "").toLowerCase() === "application/pdf" || /\.pdf$/i.test(f.name || "")); }
+  function sdAddKind(){ var r = sdAddBackdrop.querySelector("input[name=shopDrawingKind]:checked"); return shopKindOf(r ? r.value : "sent"); }
+  function sdAddSync(){
+    if (!sdAdd) return;
+    var k = sdAddKind();
+    sdAddTitleEl.textContent = SD_TITLES[k];
+    sdAddSaveBtn.textContent = SD_SAVES[k];
+    Array.prototype.forEach.call(sdAddBackdrop.querySelectorAll(".shopdrawing-kind label"), function(l){ l.classList.toggle("on", l.getAttribute("data-kind") === k); });
+    sdAddSentInfoEl.hidden = k !== "sent";
+    sdAddReturnInfoEl.hidden = k === "sent";
+    var lab = document.getElementById("shopDrawingReturnOfLabel"), alone = document.getElementById("shopDrawingAloneWord");
+    if (lab) lab.textContent = k === "approved" ? "Approved copy of" : "Returned copy of";
+    if (alone) alone.textContent = shopKindWord(k);
+    if (sdAdd.file){
+      sdAddDropTitle.textContent = sdAdd.file.name || "drawing.pdf";
+      sdAddDropSub.textContent = "tap to choose another";
+    } else {
+      sdAddDropTitle.textContent = "Drag a PDF here";
+      sdAddDropSub.textContent = "or tap to choose a file";
+    }
+    sdAddSaveBtn.disabled = !!(sdAdd.busy || !sdAdd.file || !sdAdd.readOk);
+  }
+  function sdAddRenderParts(){
+    var esc = vsEsc;
+    var sentRevs = sdAdd.sentRevs || [];
+    sdAddSentInfoEl.innerHTML = "Saved as <b>" + esc(sdAdd.next) + "</b>" + (sentRevs.length ? " — the next revision (latest sent: " + esc(sentRevs[0].revLabel) + ")." : " — the first for this item.");
+    sdAddReturnInfoEl.innerHTML = sentRevs.length
+      ? "<label for=\"shopDrawingReturnOf\" id=\"shopDrawingReturnOfLabel\">Returned copy of</label><select id=\"shopDrawingReturnOf\" class=\"shopdrawing-rev-select\">" +
+          sentRevs.map(function(r, i){
+            // the option's value is its index in sentRevs (the Scheduler's v32 fix)
+            return "<option value=\"" + i + "\">" + esc(r.revLabel + " — " + r.displayName + (r.stamp ? " (sent " + shopStampDate(r.stamp) + ")" : "") + (i === 0 ? " · latest" : "")) + "</option>";
+          }).join("") + "</select>"
+      : "Nothing's been sent for this item yet — it's saved as <span id=\"shopDrawingAloneWord\">returned to resubmit</span> on its own (REV 0).";
+  }
+  // obj: the marker; opts: { file, kind }
+  function openAddShopDrawingDialog(obj, opts){
+    opts = opts || {};
+    if (!activeProjectHandle || !obj){ showToast("Open this level from its project first."); return Promise.resolve(false); }
+    if (opts.file && !sdIsPdf(opts.file)){ showToast("A shop drawing has to be a PDF."); return Promise.resolve(false); }
+    var nameP = deviceUserName ? Promise.resolve(deviceUserName) : ensureDeviceUserNameForSave("Shop drawings are saved with your name — choose it first (and enter your PIN).");
+    return nameP.then(function(){
+      var seq = ++sdAddSeq;
+      var level = activeLevelName, room = obj.roomName || "", code = obj.joineryCode || "";
+      var key = resolveJoineryItemPageKey(level, obj);
+      sdAdd = { obj: obj, key: key, level: level, room: room, code: code, file: opts.file || null, sentRevs: [], next: "REV 0", readOk: false, busy: false, seq: seq };
+      var kind = shopKindOf(opts.kind);
+      Array.prototype.forEach.call(sdAddBackdrop.querySelectorAll("input[name=shopDrawingKind]"), function(r){ r.checked = r.value === kind; });
+      sdAddSubtitleEl.textContent = [code || roomlinkDisplayText(obj), level, room].filter(Boolean).join(" · ");
+      sdAddNameNoteEl.innerHTML = "Saved under this item's own name (<b>" + vsEsc(shopNamePart(key, "drawing", 46)) + "</b>) — the file's original name is kept beside it.";
+      sdAddStatusEl.textContent = "Reading this item's shop drawings…";
+      sdAddSentInfoEl.textContent = ""; sdAddReturnInfoEl.innerHTML = "";
+      sdAddDropzone.classList.remove("dragover");
+      sdAddBackdrop.hidden = false;
+      sdAddSync();
+      return listShopDrawings(activeProjectHandle, key, true).then(function(groups){
+        if (!sdAdd || sdAdd.seq !== seq) return true;
+        sdAdd.sentRevs = shopDrawingParts(groups).sent;
+        sdAdd.next = shopSentTarget(groups).revLabel;
+        sdAdd.readOk = true;
+        sdAddStatusEl.textContent = "";
+        sdAddRenderParts();
+        sdAddSync();
+        return true;
+      }, function(err){
+        console.error("Reading shop drawings failed:", err);
+        if (sdAdd && sdAdd.seq === seq) sdAddStatusEl.textContent = "Couldn't read this item's shop drawings just now — nothing was changed. Close and try again in a moment.";
+        return true;
+      });
+    }, function(err){
+      if (!(err && err.code === "name_required")) console.error("Add shop drawing: no name:", err);
+      return false;
+    });
+  }
+  function closeAddShopDrawingDialog(){
+    sdAddBackdrop.hidden = true;
+    sdAdd = null; sdAddSeq++;
+    sdAddDropzone.classList.remove("dragover");
+  }
+  function sdAddPickFile(file){
+    if (!sdAdd || !file) return;
+    if (!sdIsPdf(file)){ sdAddStatusEl.textContent = "A shop drawing has to be a PDF."; return; }
+    sdAdd.file = file;
+    if (sdAdd.readOk) sdAddStatusEl.textContent = "";
+    sdAddSync();
+  }
+  // Saves the chosen file (the Save button). Resolves the save's result, or null.
+  function saveAddShopDrawing(){
+    if (!sdAdd || sdAdd.busy || !sdAdd.file || !sdAdd.readOk) return Promise.resolve(null);
+    var st = sdAdd, k = sdAddKind();
+    var sel = document.getElementById("shopDrawingReturnOf");
+    var picked = (k !== "sent" && sel && st.sentRevs.length) ? st.sentRevs[parseInt(sel.value, 10)] : null;
+    var returnOf = picked ? { drawingId: picked.drawingId, revLabel: picked.revLabel, fileName: picked.fileName } : null; // the file itself, not its label
+    st.busy = true; sdAddSync();
+    sdAddStatusEl.textContent = "Saving “" + (st.file.name || "drawing.pdf") + "”…";
+    var by = deviceUserName || "", others = [];
+    return ensureProjectWritePermission().then(function(ok){
+      if (!ok){ var e = new Error("no permission"); e.code = "no_permission"; throw e; }
+      return addShopDrawingFile(activeProjectHandle, st.key, st.file, k, returnOf, by);
+    }).then(function(res){
+      // the same drawing on every other item of its drawing group (when the Viewer can see them), then the uploader record
+      return shopDrawingGroupOthers(st.level, st.room, st.code).then(function(list){
+        others = list;
+        var p = Promise.resolve();
+        list.forEach(function(m){
+          p = p.then(function(){
+            var mk = joineryItemPageKey(m.level, m.room, m.joineryId);
+            return addShopDrawingFile(activeProjectHandle, mk, st.file, k, null, by).then(function(){ if (shopDrawingKeySet) shopDrawingKeySet.add(mk); }, function(err){
+              console.error("Copying the drawing to " + m.joineryId + " failed:", err);
+              showToast("Saved on " + (st.code || "this item") + ", but not on " + m.joineryId + " — try again on that item.", 6000);
+            });
+          });
+        });
+        return p.then(function(){ return k === "sent" ? recordShopDrawingUploader(activeProjectHandle, by) : null; }).then(function(){ return res; });
+      });
+    }).then(function(res){
+      // what a Scheduler upload shows on the next read, shown now: the marker's
+      // "View shop drawing", the summary's card, the reworks' drafter list
+      if (shopDrawingKeySet) shopDrawingKeySet.add(st.key);
+      if (k === "sent"){ rwDrafters.p = null; rwDrafters.ph = null; }
+      if (sdAdd === st) closeAddShopDrawingDialog();
+      if (vsState && vsState.key === st.key) vsRenderShopDrawings();
+      try{ renderAll(); }catch(e){}
+      var also = others.length ? " Also on " + others.map(function(m){ return m.joineryId; }).join(", ") + " (same drawing)." : "";
+      showToast((res.kind === "returned" ? "Saved as returned to resubmit (" + res.revLabel + ")." : res.kind === "approved" ? "Saved as approved (" + res.revLabel + ")." : "Saved as sent — " + res.revLabel + ".") + also, others.length ? 6000 : undefined);
+      return res;
+    }).catch(function(err){
+      console.error("Add shop drawing failed:", err);
+      st.busy = false;
+      if (sdAdd === st){
+        sdAddStatusEl.textContent = err && err.code === "path_long" ? pathLongMessage()
+          : err && err.code === "shop_rev_gone" ? "That sent revision isn't in the folder any more — nothing was changed. Close and add the file again."
+          : err && err.code === "read_failed" ? "Couldn't read the existing drawings just now — nothing was changed. Try again in a moment."
+          : err && err.code === "no_permission" ? "Couldn't get permission to save here — try again."
+          : "Couldn't save that file — try again.";
+        sdAddSync();
+      }
+      return null;
+    });
+  }
+  Array.prototype.forEach.call(sdAddBackdrop.querySelectorAll("input[name=shopDrawingKind]"), function(r){ r.addEventListener("change", sdAddSync); });
+  document.getElementById("shopDrawingAddCancel").addEventListener("click", closeAddShopDrawingDialog);
+  sdAddBackdrop.addEventListener("click", function(e){ if (e.target === sdAddBackdrop && !(sdAdd && sdAdd.busy)) closeAddShopDrawingDialog(); });
+  sdAddSaveBtn.addEventListener("click", function(){ saveAddShopDrawing(); });
+  // (the same "don't let the drop reach #stage's insert-a-photo listener" care as the job note dropzone)
+  sdAddDropzone.addEventListener("click", function(){ sdAddFileInput.click(); });
+  sdAddDropzone.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); sdAddFileInput.click(); } });
+  sdAddDropzone.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); sdAddDropzone.classList.add("dragover"); });
+  sdAddDropzone.addEventListener("dragleave", function(e){ e.stopPropagation(); sdAddDropzone.classList.remove("dragover"); });
+  sdAddDropzone.addEventListener("drop", function(e){
+    e.preventDefault(); e.stopPropagation();
+    sdAddDropzone.classList.remove("dragover");
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) sdAddPickFile(files[0]);
+  });
+  sdAddBackdrop.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); });
+  sdAddBackdrop.addEventListener("drop", function(e){ e.preventDefault(); e.stopPropagation(); var files = e.dataTransfer && e.dataTransfer.files; if (files && files.length) sdAddPickFile(files[0]); });
+  sdAddFileInput.addEventListener("change", function(){
+    if (sdAddFileInput.files && sdAddFileInput.files.length) sdAddPickFile(sdAddFileInput.files[0]);
+    sdAddFileInput.value = "";
+  });
+
   // "View shop drawing" -- pure read. One row per independent drawing, each
   // with its own revision <select> (defaulting to the latest) and an Open
   // button that opens whichever revision is currently selected.
@@ -13194,7 +13886,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         list.forEach(function(revs){ shopDrawingListEl.appendChild(shopDrawingRow(revs)); });
       }
       part("Sent", groups.filter(function(g){ return g.revisions.length; }).map(function(g){ return g.revisions; }), "Nothing sent yet.");
-      part("Returned", groups.filter(function(g){ return g.returned.length; }).map(function(g){ return g.returned; }), "Nothing returned yet.");
+      // (2026-10-01) Andrew: "the returned need to be split to returned to resubmit, or approved"
+      part("Returned to resubmit", groups.filter(function(g){ return g.returned.length; }).map(function(g){ return g.returned; }), "Nothing returned to resubmit yet.");
+      part("Approved", groups.filter(function(g){ return g.approved && g.approved.length; }).map(function(g){ return g.approved; }), "Nothing approved yet.");
     }).catch(function(err){
       console.error("List shop drawings failed:", err);
       shopDrawingListEl.innerHTML = "<p class=\"jobnote-empty\">Couldn't load shop drawings — try again.</p>";
@@ -14035,7 +14729,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           }).then(function(subs){
             return readSavedPayloadIfAny(subs.savesHandle, roomName).then(function(saved){
               if (!saved){ results.push({ name: roomName, ok: false, skipped: true }); return; }
-              var fileBaseForName = sanitizeFileBase(projectName + "_" + levelName + "_" + roomName);
+              var fileBaseForName = projectExportBase(UtzItemFiles.clean(levelName, 30) + " - " + UtzItemFiles.clean(roomName, 40), projectName); // (2026-10-01)
               return renderAndWriteBatchPdf(subs.pdfsHandle, saved, fileBaseForName).then(function(res){
                 results.push({ name: roomName, ok: true, filename: res.filename });
               }).catch(function(err){
@@ -14065,7 +14759,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     return ensureWorkFolders(levelHandle).then(function(subs){
       return readSavedPayloadIfAny(subs.savesHandle, levelName).then(function(saved){
         if (!saved) return { name: levelName, ok: false, skipped: true };
-        var fileBaseForName = sanitizeFileBase(projectName + "_" + levelName);
+        var fileBaseForName = projectExportBase(UtzItemFiles.clean(levelName, 40), projectName); // (2026-10-01)
         return renderAndWriteBatchPdf(subs.pdfsHandle, saved, fileBaseForName).then(function(res){
           return { name: levelName, ok: true, filename: res.filename };
         }).catch(function(err){
@@ -14849,8 +15543,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (isNaN(d.getTime())) d = new Date(0);
     return statusEventStamp(d);
   }
+  // (2026-10-01, code-only file names) "<initials> - <yy-mm-dd HH-mm-ss-mmm> - <kind>.json"
+  // (was the full name and a four-digit year; the event store made it this
+  // short on disk anyway) -- who and when in full are in the file.
   function statusEventFileName(user, stamp, kind){
-    return overlayUserSlug(user) + " - " + stamp + " - " + kind + ".json";
+    var st = /^\d{4}-/.test(stamp || "") ? String(stamp).slice(2) : String(stamp || "");
+    return UtzItemFiles.initials(user) + " - " + st + " - " + kind + ".json";
   }
   function listJoineryStatusEventsForItem(projectHandle, key){
     return getJoineryStatusItemDir(projectHandle, key, false).then(function(dirH){
@@ -17207,6 +17905,17 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     titleEl.textContent = lockPopoverTitleFor(obj, isBaseImage);
     box.appendChild(titleEl);
 
+    // (2026-10-01, Viewer only) "Add shop drawing" is back, FIRST -- Andrew:
+    // "on next update, we need to bring the upload shop drawings back into
+    // viewer. put it at the top of the menu". Site Measure still has none
+    // (removed there 2026-09-24). See openAddShopDrawingDialog.
+    if (VIEW_ONLY_MODE && isRealObject && obj.type === "roomlink"){
+      popoverRow(box, SHOPDRAWING_ICON + "<span>Add shop drawing</span>", function(){
+        hideLockPopover();
+        openAddShopDrawingDialog(obj);
+      });
+    }
+
     // "Delete on right click" -- REMOVED (2026-09-24), Andrew, verbatim:
     // "remove the following buttons from the site measure app. delete on
     // right click." This row used to sit right here (top of the menu,
@@ -17982,7 +18691,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // label -- purely cosmetic, the hyphenated form in the actual filename
   // (and everywhere else in this code) is unaffected.
   function formatOverlayStamp(stamp){
-    var m = /^(\d{4}-\d{2}-\d{2}) (\d{2})-(\d{2})-(\d{2})$/.exec(stamp || "");
+    var m = /^(\d{4}-\d{2}-\d{2}) (\d{2})-(\d{2})-(\d{2})(?:-\d{3})?$/.exec(stamp || ""); // (2026-10-01) new names carry milliseconds
     if (!m) return stamp || "";
     return m[1] + " " + m[2] + ":" + m[3];
   }
@@ -21791,9 +22500,25 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // a DIFFERENT kind of flattened output (a crop of whatever's on screen,
   // not the whole plan) and worth telling apart if someone ends up with
   // both in their downloads.
+  /* (2026-10-01, code-only file names) Windows' 260-character path limit: in a
+     project, a plan's name is "<project, cut to 40> - <item file name>" (an
+     item's check measure) or "- <level>" (a level's plan), was
+     "<Project>_<Level - Room - Code>", and its exported PDF/PNG is
+       PDF Files/UTZLINE Site Measure/<that> - <YYYY-MM-DD HH-mm-ss>.pdf
+     (was "<name>_UTZLINE <YYYY_MM_DD> <HH-mm-ss>.pdf"). */
+  function projectExportBase(part, projectName){
+    var proj = UtzItemFiles.clean(projectName != null ? projectName : (activeProjectName || ""), 40);
+    return [proj, part].filter(Boolean).join(" - ") || "plan";
+  }
   function suggestFilename(ext, flattened){
     var d = new Date();
     var pad = function(n){ return String(n).padStart(2, "0"); };
+    if (flattened && activeProjectName){
+      // (2026-10-01) in a project: "<plan name> - <YYYY-MM-DD HH-mm-ss>.<ext>" (a "share current view"
+      // snapshot: "<plan name> - VIEW - <...>"); no "_UTZLINE" -- they sit in PDF Files/UTZLINE Site Measure/
+      return (state.fileBase || "plan") + (flattened === true ? "" : " - " + flattened) + " - " + d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " +
+        pad(d.getHours()) + "-" + pad(d.getMinutes()) + "-" + pad(d.getSeconds()) + "." + ext;
+    }
     var datePart = d.getFullYear() + "_" + pad(d.getMonth() + 1) + "_" + pad(d.getDate());
     // Hyphens, not colons. THIS is the real cause of the "PDF export fails
     // on real hardware but never in testing" reports: a real
@@ -23132,18 +23857,20 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
      JOINERY SUMMARY (openJoinerySummary): a full-screen page like the reworks screen, read-only, with the
      same cards the schedules' / Projects' "joinery summary" has -- Details (joinery-items.json + the
      folded status with its history + the schedule dates from the Joinery Schedule events), Site Measure
-     check measures, Shop drawings (Sent / Returned, Open each),
+     check measures, Shop drawings (Sent / Returned to resubmit / Approved -- 2026-10-01 -- Open each),
      Job notes, ITPs (each app's checklist through the shared UTZLINE-ITP-LOG reader: answered / signed /
      needs, its PDFs), Rework (the shared rework module's fold per entry; Open reworks goes to the reworks
      screen filtered to this item), Delivery location (the Delivery ITP's pin snapshot), Sub orders (the
      UTZLINE Sub Orders records for this item, Open each file), and the shared item-extras cards (Cutting
      file, Notes, History) after Details. Everything is read fresh on open; nothing is cached across items.
-     Shop drawings here are read-only (Sent / Returned, Open each).
+     Shop drawings here are read-only (Sent / Returned, Open each). (2026-10-01: drawings can be
+     added here too -- the card's "Add shop drawing" button, or a PDF dropped on it; see openAddShopDrawingDialog.)
 
      AFTER ADD JOB NOTE (Andrew: "that should have been when job note is added. create the a3 plans"): once
      the Viewer's own Add job note has saved its PDF, the popup asks Export floor plan? / Not now (fxAsk).
      Shop drawings are still added in the Scheduler only (taken out of Site Measure 2026-09-24, never in
-     the Viewer); the summary lists them read-only.
+     the Viewer); the summary lists them read-only. (2026-10-01: the Viewer adds them again -- the marker
+     menu's first row and this summary's Shop drawings card.)
 
      EXPORT FLOOR PLAN (exportFloorPlanPdf): two A3 landscape pages -- page 1 a tight close-up of the plan
      around the item's marker (about 28 marker radii / an eighth of the plan's width, A3 aspect), page 2 the
@@ -23152,9 +23879,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
      level / room / code, who and when. Rendered from the live SVG like the check measure's plan snapshot (cloneWorldForExport, the
      base-plan tiles outside the region dropped first, 4 GB tablets), rasterised to JPEG and placed with
      jsPDF. Saved as PDF Files/Floor Plans/<Level> - <Room> - <Code> - Floor plan - <name> - <stamp>.pdf
-     and offered to open / share. */
+     and offered to open / share. (2026-10-01, code-only file names: now
+     "<item file name> - Floor plan - <initials> - <stamp>.pdf".) */
   var vsScreen = document.getElementById("vsScreen"), vsBody = document.getElementById("vsBody"), vsTitle = document.getElementById("vsTitle");
-  var vsMeta = document.getElementById("vsMeta"), vsOverlays = document.getElementById("vsOverlays"), vsShopSent = document.getElementById("vsShopSent"), vsShopReturned = document.getElementById("vsShopReturned");
+  var vsMeta = document.getElementById("vsMeta"), vsOverlays = document.getElementById("vsOverlays"), vsShopSent = document.getElementById("vsShopSent"), vsShopReturned = document.getElementById("vsShopReturned"), vsShopApproved = document.getElementById("vsShopApproved");
   var vsJobNotes = document.getElementById("vsJobNotes"), vsItps = document.getElementById("vsItps");
   var vsRework = document.getElementById("vsRework"), vsOpenReworksBtn = document.getElementById("vsOpenReworksBtn"), vsDelivery = document.getElementById("vsDelivery"), vsSubOrders = document.getElementById("vsSubOrders");
   var vsOpenCheckMeasureBtn = document.getElementById("vsOpenCheckMeasureBtn"), vsExportPlanBtn = document.getElementById("vsExportPlanBtn"), vsCloseBtn = document.getElementById("vsCloseBtn");
@@ -23196,6 +23924,18 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     return row;
   }
   function vsEmpty(el, text){ el.innerHTML = "<p class=\"vs-empty\">" + vsEsc(text) + "</p>"; }
+  // (2026-10-01, code-only file names) a check measure's file names its saver
+  // by initials only -- shown as the person's name when exactly one name in
+  // utzline-users.csv has those initials (else the initials).
+  function vsNamesForInitials(list){
+    if (!list || !list.some(function(o){ return o.short; })) return Promise.resolve(list || []);
+    return readUsersCsv().then(function(rows){
+      var by = {};
+      rows.forEach(function(r){ if (!r || !r.name) return; var k = UtzItemFiles.initials(r.name).toLowerCase(); (by[k] = by[k] || []).push(r.name); });
+      list.forEach(function(o){ if (!o.short) return; var hit = by[String(o.user || "").toLowerCase()]; if (hit && hit.length === 1) o.user = hit[0]; });
+      return list;
+    }, function(){ return list; });
+  }
   // ---- readers ----
   function vsReadJoineryItem(level, room, code){
     return activeProjectHandle.getFileHandle("joinery-items.json", { create: false }).then(readJsonFileHandle).then(function(arr){
@@ -23231,17 +23971,22 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     });
     return out;
   }
-  function vsItpFileName(level, room, code){ return vsNamePart(level, "item") + " - " + vsNamePart(room, "item") + " - " + vsNamePart(code, "item") + ".json"; } // the ITPs' own 80-character key
+  function vsItpFileName(level, room, code){ return vsNamePart(level, "item") + " - " + vsNamePart(room, "item") + " - " + vsNamePart(code, "item") + ".json"; } // the ITPs' own 80-character key (before 2026-10-01)
+  // (2026-10-01, code-only file names) an ITP's file is the item's file name
+  // ("<code>.json", its log folder "<code>"); one saved under the older
+  // 80-character "<Level> - <Room> - <Code>" name is still read.
   function vsReadItpRaw(appBranch, level, room, code){
-    var fileName = vsItpFileName(level, room, code);
     var itpP = activeProjectHandle.getDirectoryHandle(projectSavesDirName(), { create: false }).then(function(ps){ return ps.getDirectoryHandle("UTZLINE ITP", { create: false }); });
     itpP.catch(function(){});
     if (!window.UtzItpLog) return Promise.resolve(null);
-    return UtzItpLog.load({
-      readBase: function(){ return itpP.then(function(b){ return b.getDirectoryHandle(appBranch, { create: false }); }).then(function(d){ return d.getFileHandle(fileName, { create: false }); }).then(function(fh){ return fh.getFile(); }).then(function(f){ return f.text(); }); },
-      logDir: function(){ return itpP.then(function(b){ return b.getDirectoryHandle(appBranch + " Log", { create: false }); }).then(function(h){ return h.getDirectoryHandle(fileName.replace(/\.json$/i, ""), { create: false }); }); },
-      slim: true
-    }).then(function(res){ return res.data; }, function(){ return null; });
+    function loadAs(fileName){
+      return UtzItpLog.load({
+        readBase: function(){ return itpP.then(function(b){ return b.getDirectoryHandle(appBranch, { create: false }); }).then(function(d){ return d.getFileHandle(fileName, { create: false }); }).then(function(fh){ return fh.getFile(); }).then(function(f){ return f.text(); }); },
+        logDir: function(){ return itpP.then(function(b){ return b.getDirectoryHandle(appBranch + " Log", { create: false }); }).then(function(h){ return h.getDirectoryHandle(fileName.replace(/\.json$/i, ""), { create: false }); }); },
+        slim: true
+      }).then(function(res){ return res.data; }, function(){ return null; });
+    }
+    return loadAs(joineryItemPageKey(level, room, code) + ".json").then(function(data){ return data || loadAs(vsItpFileName(level, room, code)); });
   }
   function vsItpSummary(appBranch, roleKeys, data){
     if (!data) return { started: false };
@@ -23268,9 +24013,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   }
   function vsListItpPdfs(appBranch, level, room, code){
     var prefix = vsNamePart(level, "item") + " - " + vsNamePart(room, "item") + " - " + vsNamePart(code, "item") + "_";
+    // (2026-10-01, code-only file names) "<item file name>_<when>.pdf" now (the "<when>" starts with a digit,
+    // so "X" never picks up "X_2"'s PDFs)
+    var p1 = joineryItemPageKey(level, room, code) + "_";
     return activeProjectHandle.getDirectoryHandle("PDF Files", { create: false }).then(function(pf){ return pf.getDirectoryHandle("UTZLINE ITP", { create: false }); })
       .then(function(b){ return b.getDirectoryHandle(appBranch, { create: false }); })
-      .then(function(d){ return vsListDirFiles(d, function(n){ return n.indexOf(prefix) === 0 && /\.pdf$/i.test(n); }); }, function(){ return []; });
+      .then(function(d){ return vsListDirFiles(d, function(n){ return (n.indexOf(prefix) === 0 || (n.indexOf(p1) === 0 && /^\d/.test(n.slice(p1.length)))) && /\.pdf$/i.test(n); }); }, function(){ return []; });
   }
   function vsSubOrdersNamePart(name){ var c = String(name || "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().replace(/^[._]+|[._\s]+$/g, ""); return c.slice(0, 80) || "item"; }
   var VS_SUB_ORDER_TYPES = { steel: "Steel", upholstery: "Upholstery", timber: "Timber", aluminium: "Aluminium" };
@@ -23278,7 +24026,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     var fname = vsSubOrdersNamePart(level) + " - " + vsSubOrdersNamePart(room) + " - " + vsSubOrdersNamePart(code) + ".json";
     var soP = activeProjectHandle.getDirectoryHandle(projectSavesDirName(), { create: false }).then(function(ps){ return ps.getDirectoryHandle("UTZLINE Sub Orders", { create: false }); });
     soP.catch(function(){});
-    return soP.then(function(so){ return so.getDirectoryHandle("Orders", { create: false }); }).then(function(d){ return d.getFileHandle(fname, { create: false }); }).then(readJsonFileHandle).then(function(arr){
+    // (2026-10-01, code-only file names) Orders/<item file name>.json now; the older "<Level> - <Room> - <Id>.json" still read
+    var ordersP = soP.then(function(so){ return so.getDirectoryHandle("Orders", { create: false }); });
+    return ordersP.then(function(d){
+      return d.getFileHandle(joineryItemPageKey(level, room, code) + ".json", { create: false }).then(null, function(){ return d.getFileHandle(fname, { create: false }); });
+    }).then(readJsonFileHandle).then(function(arr){
       var orders = Array.isArray(arr) ? arr.filter(Boolean) : [];
       if (!orders.length) return [];
       return soP.then(function(so){ return so.getDirectoryHandle("Files", { create: false }); }).then(function(filesH){
@@ -23298,7 +24050,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     vsState = { obj: obj, key: key, level: level, room: room, code: code, seq: seq };
     vsTitle.textContent = [code || "(no code)", room, level].filter(Boolean).join(" · ");
     vsMeta.innerHTML = "<dt>Level</dt><dd>" + vsEsc(level) + "</dd><dt>Room</dt><dd>" + vsEsc(room) + "</dd><dt>Joinery ID</dt><dd>" + vsEsc(code) + "</dd><dt>Status</dt><dd>Loading…</dd>";
-    [vsOverlays, vsShopSent, vsShopReturned, vsJobNotes, vsRework, vsSubOrders].forEach(function(el){ vsEmpty(el, "Loading…"); });
+    [vsOverlays, vsShopSent, vsShopReturned, vsShopApproved, vsJobNotes, vsRework, vsSubOrders].forEach(function(el){ vsEmpty(el, "Loading…"); });
     vsItps.innerHTML = "<span class=\"vs-empty\">Loading…</span>";
     vsDelivery.innerHTML = "<p class=\"vs-empty\">Loading…</p>";
     vsOpenReworksBtn.hidden = true;
@@ -23339,25 +24091,27 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           confirmPin: function(name, why){ return readUsersCsv().then(function(rows){ var r = findUserRowCI(rows, name); if (!r) return false; return openNumberpad({ title: "Confirm PIN", subtitle: why || "", verify: function(pin){ return Promise.resolve(r.pin === pin); } }).then(function(p){ return p !== null; }); }, function(){ return false; }); },
           statusLabel: vsStatusLabel, formatWhen: vsWhen, formatDate: vsDate,
           readOrders: function(row, h){ return vsReadSubOrders(row.level, row.room, row.joineryId).then(function(list){ return list.map(function(e){ return e.order; }); }); },
-          listOverlays: function(row, h){ return listJoineryOverlays(h, joineryItemPageKey(row.level, row.room, row.joineryId)); },
-          listJobNotes: function(row, h){ return listJobNotes(h, joineryItemPageKey(row.level, row.room, row.joineryId)); } });
+          listOverlays: function(row, h){ return listJoineryOverlays(h, joineryItemPageKey(row.level, row.room, row.joineryId)).then(vsNamesForInitials); },
+          listJobNotes: function(row, h){ return listJobNotes(h, joineryItemPageKey(row.level, row.room, row.joineryId)).then(readJobNoteSidecars); } }); // (2026-10-01) + .original/.by/.at from each note's .json
       }
       var old = vsBody.querySelector(".ix-cards"); if (old) old.remove();
       if (vsItemExtras) vsItemExtras.renderItemCards(vsBody, { project: activeProjectName, level: level, room: room, joineryId: code });
     }catch(e){ console.error("Item extras cards failed:", e); }
     // Site Measure check measures
-    listJoineryOverlays(activeProjectHandle, key).then(function(list){
+    listJoineryOverlays(activeProjectHandle, key).then(vsNamesForInitials).then(function(list){
       if (!live()) return;
       vsOverlays.innerHTML = "";
       if (!list.length){ vsEmpty(vsOverlays, "No check measure saved yet for this item."); return; }
-      list.slice().reverse().forEach(function(o){ vsOverlays.appendChild(vsRowEl(o.user || "Unnamed", o.stamp ? o.stamp.replace(/ (\d{2})-(\d{2})-(\d{2})$/, " $1:$2:$3") : "", null)); });
+      // (2026-10-01: a new save's stamp has milliseconds, not shown)
+      list.slice().reverse().forEach(function(o){ vsOverlays.appendChild(vsRowEl(o.user || "Unnamed", o.stamp ? o.stamp.replace(/ (\d{2})-(\d{2})-(\d{2})(?:-\d{3})?$/, " $1:$2:$3") : "", null)); });
     }, function(err){ console.error(err); if (live()) vsEmpty(vsOverlays, "Couldn't read the check measures."); });
     vsRenderShopDrawings();
-    listJobNotes(activeProjectHandle, key).then(function(notes){
+    listJobNotes(activeProjectHandle, key).then(readJobNoteSidecars).then(function(notes){
       if (!live()) return;
       vsJobNotes.innerHTML = "";
       if (!notes.length){ vsEmpty(vsJobNotes, "No job notes yet for this item."); return; }
-      notes.forEach(function(n){ vsJobNotes.appendChild(vsRowEl(n.fileName, "", n.handle)); });
+      // (2026-10-01) the PDF's own name and who added it (from the note's .json)
+      notes.forEach(function(n){ vsJobNotes.appendChild(vsRowEl(jobNoteDisplayName(n), [n.by, n.at ? vsWhen(n.at) : ""].filter(Boolean).join(", "), n.handle)); });
     }, function(err){ console.error(err); if (live()) vsEmpty(vsJobNotes, "Couldn't read the job notes."); });
     // ITPs
     var apps = [{ branch: "Manufacture ITP", roles: ["builder", "supervisor"] }, { branch: "Install ITP", roles: ["installer", "supervisor"] }, { branch: "Delivery ITP", roles: ["driver", "supervisor"] }];
@@ -23421,17 +24175,43 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   vsOpenCheckMeasureBtn.addEventListener("click", function(){ if (!vsState) return; var obj = vsState.obj; closeJoinerySummary(); openJoineryItemPage(obj); });
   vsExportPlanBtn.addEventListener("click", function(){ if (!vsState) return; exportFloorPlanPdf(vsState.obj); });
   vsOpenReworksBtn.addEventListener("click", function(){ if (!vsState) return; var st = vsState; closeJoinerySummary(); openReworksScreen({ level: st.level, room: st.room, code: st.code }); });
+  // (2026-10-01) Sent / Returned to resubmit / Approved (Andrew: "the returned need to be split to returned to resubmit, or approved")
   function vsRenderShopDrawings(){
     var st = vsState; if (!st) return;
     var seq = st.seq;
     listShopDrawings(activeProjectHandle, st.key).then(function(groups){
       if (!vsState || vsState.seq !== seq) return;
-      vsShopSent.innerHTML = ""; vsShopReturned.innerHTML = "";
-      var sent = groups.filter(function(g){ return g.revisions.length; }), ret = groups.filter(function(g){ return g.returned.length; });
+      vsShopSent.innerHTML = ""; vsShopReturned.innerHTML = ""; vsShopApproved.innerHTML = "";
+      var sent = groups.filter(function(g){ return g.revisions.length; }), ret = groups.filter(function(g){ return g.returned.length; }), appr = groups.filter(function(g){ return g.approved && g.approved.length; });
       if (!sent.length) vsEmpty(vsShopSent, "Nothing sent yet."); else sent.forEach(function(g){ vsShopSent.appendChild(shopDrawingRow(g.revisions)); });
-      if (!ret.length) vsEmpty(vsShopReturned, "Nothing returned yet."); else ret.forEach(function(g){ vsShopReturned.appendChild(shopDrawingRow(g.returned)); });
-    }, function(err){ console.error(err); if (vsState && vsState.seq === seq){ vsEmpty(vsShopSent, "Couldn't read the shop drawings."); vsShopReturned.innerHTML = ""; } });
+      if (!ret.length) vsEmpty(vsShopReturned, "Nothing returned to resubmit yet."); else ret.forEach(function(g){ vsShopReturned.appendChild(shopDrawingRow(g.returned)); });
+      if (!appr.length) vsEmpty(vsShopApproved, "Nothing approved yet."); else appr.forEach(function(g){ vsShopApproved.appendChild(shopDrawingRow(g.approved)); });
+    }, function(err){ console.error(err); if (vsState && vsState.seq === seq){ vsEmpty(vsShopSent, "Couldn't read the shop drawings."); vsShopReturned.innerHTML = ""; vsShopApproved.innerHTML = ""; } });
   }
+  // (2026-10-01) "Add shop drawing" on the summary: the button, or a PDF dropped on the card (on a part: that kind)
+  var vsShopCard = document.getElementById("vsShopCard"), vsShopDrop = document.getElementById("vsShopDrop"), vsAddShopDrawingBtn = document.getElementById("vsAddShopDrawingBtn");
+  var vsShopFileInput = document.createElement("input");
+  vsShopFileInput.type = "file"; vsShopFileInput.accept = "application/pdf,.pdf"; vsShopFileInput.style.display = "none";
+  vsShopCard.appendChild(vsShopFileInput);
+  function vsAddShopDrawing(file, kind){ if (!vsState) return Promise.resolve(false); return openAddShopDrawingDialog(vsState.obj, { file: file || null, kind: kind || "sent" }); }
+  vsAddShopDrawingBtn.addEventListener("click", function(){ vsAddShopDrawing(null, "sent"); });
+  vsShopDrop.addEventListener("click", function(){ vsShopFileInput.click(); });
+  vsShopDrop.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); vsShopFileInput.click(); } });
+  vsShopFileInput.addEventListener("change", function(){
+    var f = vsShopFileInput.files && vsShopFileInput.files[0];
+    vsShopFileInput.value = "";
+    if (f) vsAddShopDrawing(f, "sent");
+  });
+  vsShopCard.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); vsShopDrop.classList.add("dragover"); });
+  vsShopCard.addEventListener("dragleave", function(e){ e.stopPropagation(); if (!vsShopCard.contains(e.relatedTarget)) vsShopDrop.classList.remove("dragover"); });
+  vsShopCard.addEventListener("drop", function(e){
+    e.preventDefault(); e.stopPropagation();
+    vsShopDrop.classList.remove("dragover");
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    var part = e.target && e.target.closest ? e.target.closest("[data-shop-kind]") : null;
+    vsAddShopDrawing(files[0], part ? part.getAttribute("data-shop-kind") : "sent");
+  });
   function vsStamp(d){ d = d || new Date(); function p2(n){ return (n < 10 ? "0" : "") + n; } return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + " " + p2(d.getHours()) + "-" + p2(d.getMinutes()) + "-" + p2(d.getSeconds()); }
   function vsNamePart(name, fallback){ var c = String(name || "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().replace(/^[._]+|[._\s]+$/g, ""); return c.slice(0, 80) || fallback; }
   function vsWriteFile(dirH, name, blob){ return dirH.getFileHandle(name, { create: true }).then(function(fh){ return verifiedHandleWrite(fh, blob); }); }
@@ -23560,9 +24340,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       page(imgs.closeUp, "Page 1 of 2 — close-up around " + (code || "the item") + (room ? " (" + room + ")" : "") + " (only this item's indicator shown)", true);
       page(imgs.full, "Page 2 of 2 — full floor plan: " + level + " (only this item's indicator shown)", false);
       var blob = doc.output("blob");
-      var name = [sanitizeFileBase(level), sanitizeFileBase(room || "no room"), sanitizeFileBase(code || "no code")].join(" - ") + " - Floor plan - " + vsNamePart(who || "Unnamed", "Unnamed") + " - " + vsStamp(stamp) + ".pdf";
+      // (2026-10-01, code-only file names) "<item file name> - Floor plan - <initials> - <YYYY-MM-DD HH-mm-ss>.pdf"
+      // (was "<Level> - <Room> - <Code> - Floor plan - <full name> - <...>"); a failed write leaves no empty file
+      var name = vsKeyFor(obj) + " - Floor plan - " + UtzItemFiles.initials(who || "") + " - " + vsStamp(stamp) + ".pdf";
       return activeProjectHandle.getDirectoryHandle("PDF Files", { create: true }).then(function(pf){ return pf.getDirectoryHandle("Floor Plans", { create: true }); }).then(function(dirH){
-        return vsWriteFile(dirH, name, blob).then(function(){ return { blob: blob, name: name, saved: true }; }, function(err){ console.error("Saving the floor plan PDF failed:", err); return { blob: blob, name: name, saved: false }; });
+        return writeNewFile(dirH, name, blob).then(function(){ return { blob: blob, name: name, saved: true }; }, function(err){ console.error("Saving the floor plan PDF failed:", err); return { blob: blob, name: name, saved: false }; });
       });
     }).then(function(res){
       fxBusy = false;
@@ -23593,6 +24375,17 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // (v76) joinery summary / shop drawing / floor plan export
     openJoinerySummaryForTest: function(obj){ return openJoinerySummary(obj); },
     addJobNoteForTest: function(obj, file){ openAddJobNoteDialog(obj); return handleJobNoteFile(file); },
+    // (2026-10-01) the Viewer's "Add shop drawing" dialog
+    openAddShopDrawingDialogForTest: function(obj, opts){ return openAddShopDrawingDialog(obj, opts); },
+    pickShopDrawingFileForTest: function(file){ sdAddPickFile(file); },
+    saveAddShopDrawingForTest: function(){ return saveAddShopDrawing(); },
+    addShopDrawingStateForTest: function(){
+      return sdAdd ? { key: sdAdd.key, next: sdAdd.next, readOk: sdAdd.readOk, busy: sdAdd.busy, file: sdAdd.file ? sdAdd.file.name : null, kind: sdAddKind(),
+        sent: sdAdd.sentRevs.map(function(r){ return { revLabel: r.revLabel, fileName: r.fileName, drawingId: r.drawingId, displayName: r.displayName }; }) } : null;
+    },
+    shopDrawingKeySetForTest: function(){ return shopDrawingKeySet ? Array.from(shopDrawingKeySet) : null; },
+    setShopDrawingKeySetForTest: function(keys){ shopDrawingKeySet = keys ? new Set(keys) : null; },
+    registerProjectItemFilesForTest: function(){ if (activeProjectHandle) delete itemFilesMemo[activeProjectHandle.name]; return registerProjectItemFiles(activeProjectHandle); },
     exportFloorPlanForTest: function(obj){ return exportFloorPlanPdf(obj); },
     qrItemLinkForTest: function(o){ return window.UtzQr ? UtzQr.itemLink(o) : ""; },
     fxMarkersInCloneForTest: function(keepId, scale){ var c = fxPrepareClone(0, 0, state.imageW, state.imageH, keepId, scale); var n = 0, tf = ""; Array.prototype.forEach.call(c.querySelectorAll("g[data-id]"), function(g){ var o = findObj(g.getAttribute("data-id")); if (o && o.type === "roomlink"){ n++; tf = g.getAttribute("transform") || ""; } }); return { markers: n, transform: tf }; },
@@ -23715,6 +24508,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       reworkFileKeySet = null;
       checkMeasureKeySet = null;
       viewerOverlayExistsMemo = {};
+      // (2026-10-01, code-only file names) the fake project's joinery-items.json, as a real open reads it
+      delete itemFilesMemo[activeProjectHandle.name];
+      return registerProjectItemFiles(activeProjectHandle);
     },
     // (v53, speed) Runs the same background rework listing the status scan
     // runs, and installs its result -- so a test can exercise the
