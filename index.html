@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v77">
+<link rel="manifest" href="./manifest.json?v=v78">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v77">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v77">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v78">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v78">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2345,6 +2345,27 @@ window.__pdfImportLibFailed = false;
    removed from UTZLINE Projects in v48, 2026-09-30, once Andrew's jobs were
    moved): the apps simply keep reading both layouts.
 
+   v2.1 (2026-10-01) -- Windows' 260-character path limit. Andrew: "some get
+   corrupted from the import ... then i cant change them in the schedule" /
+   "Couldn't save this schedule". His pilot project sits in
+   C:\Users\andrewu\OneDrive - Metro Joinery\UTZLINE Pilot\3756 - Jones Radiology Mt Barker\
+   and a record for a long room name ("G.42 - MRI & CT Subwait Seating")
+   reached 255 characters in full; Chrome writes through a "<name>.crswap"
+   swap file (7 more), so anything from 253 up was left as an EMPTY file and
+   the save reported a failure. Now:
+     - a new record's name no longer repeats the level that its folder already
+       names:  <Level>/<Room> - <Code> -- <name> - <stamp> - <kind>.json
+       (the room-and-code part is capped at 70 characters, "~hash" when cut);
+       every file already on disk under the long name still reads;
+     - when even that can't be written (the empty file is removed first), the
+       record goes under a 9-character "~hash" name instead, and a banner
+       tells the user the folder path is the reason;
+     - on Windows, the first write to a project measures how many characters
+       its folder path leaves (a few empty probe files, created and removed
+       again under UTZLINE Events), and the banner shows early when that is
+       less than long room names need; UtzEvents.pathBudget() gives the
+       number to an app (UTZLINE Projects shows it when a project is opened).
+
    Generated into each app between UTZLINE-EVENT-STORE markers from
    shared/event-store/event-store.js -- edit it there. */
 (function(){
@@ -2352,6 +2373,10 @@ window.__pdfImportLibFailed = false;
   var ROOT = "UTZLINE Events", SEP = " -- ";
   var BRANCHES = ["Joinery Status", "Joinery Schedule", "Machining Flags", "Solid Surface Completion", "Solid Surface Schedule", "Joinery Cutting File", "Joinery Notes"];
   var MEMO_MS = 4000, LEGACY_TTL = 12 * 3600 * 1000, MISS_MS = 5000, LEG_MISS_MS = 60000, NAME_KEY_MAX = 150;
+  // The room-and-code part that leads a new record's name (the level is its
+  // folder), and what long room names need of a Windows path after the
+  // project folder (branch + level folder + record name, with the swap file).
+  var ITEM_MAX = 70, NEEDS_REL = 170, WIN_FULL = 252;
 
   // ---------- names ----------
   function sanitize(name, max, fallback){
@@ -2388,17 +2413,44 @@ window.__pdfImportLibFailed = false;
     return { key: n.slice(0, i), base: n.slice(i + SEP.length) };
   }
 
+  // The part of a canonical key after its level: what leads a new record's
+  // name inside the level folder (capped, "~hash" of the whole key when cut).
+  function shortOf(canon, lf){
+    var s = canon;
+    if (lf && (canon.indexOf(lf + " - ") === 0)) s = canon.slice(lf.length + 3);
+    else if (lf === "No level" && canon.indexOf("plan - ") === 0) s = canon.slice(7);
+    if (!s) s = canon;
+    if (s.length <= ITEM_MAX) return s;
+    return s.slice(0, ITEM_MAX - 10).replace(/[ .]+$/, "") + " ~" + hash(canon);
+  }
+  function tinyOf(canon){ return "~" + hash(canon); }
+
   // Every key an app makes is remembered with the item it names, so a
-  // stand-in folder asked for by key knows its level and its canonical key.
-  var registry = {}, alias = {};
+  // stand-in folder asked for by key knows its level and its canonical key,
+  // and a record file's leading part (long, short or "~hash") finds its item.
+  var registry = {}, alias = {}, canonKnown = {}, byShort = {}, byTiny = {}, regVersion = 0;
   function remember(key, level, room, code){
     if (!key || registry[key]) return key;
-    var canon = nameKey(itemKey(level, room, code));
-    registry[key] = { level: level == null ? "" : String(level), room: room == null ? "" : String(room), code: code == null ? "" : String(code), canon: canon };
+    var canon = nameKey(itemKey(level, room, code)), lf = levelFolder(level), short = shortOf(canon, lf), tiny = tinyOf(canon);
+    registry[key] = { level: level == null ? "" : String(level), room: room == null ? "" : String(room), code: code == null ? "" : String(code), canon: canon, lf: lf, short: short, tiny: tiny };
     if (key !== canon && !alias[canon]) alias[canon] = key;
+    canonKnown[canon] = 1; byShort[lf + "\u0000" + short] = canon; byTiny[tiny] = canon;
+    regVersion++;
     return key;
   }
   function canonOf(key){ var r = registry[key]; return r ? r.canon : nameKey(key); }
+  // The item (canonical key) a record file in level folder lf belongs to,
+  // from the part before " -- ": an old level-led name, a new short name, a
+  // "~hash" name, or -- for an item no app has named yet -- the level folder
+  // put back in front of a short name.
+  function resolvePrefix(lf, prefix){
+    var c = byShort[lf + "\u0000" + prefix];
+    if (c) return c;
+    if (canonKnown[prefix]) return prefix;
+    if (prefix.charAt(0) === "~") return byTiny[prefix] || prefix;
+    if (prefix === lf || prefix.indexOf(lf + " - ") === 0) return prefix;
+    return nameKey((lf === "No level" ? "plan" : lf) + " - " + prefix);
+  }
 
   // ---------- small helpers ----------
   function isNotFound(err){ return !!(err && (err.name === "NotFoundError" || err.name === "TypeMismatchError")); }
@@ -2477,12 +2529,33 @@ window.__pdfImportLibFailed = false;
       if (k.indexOf(id + "\u0000") !== 0) return;
       var m = memos[k], scope = k.slice(id.length + 1);
       if (scope !== "*" && scope !== lf) return;
-      if (!m.groups) return;
-      var g = m.groups[canon] || (m.groups[canon] = newGroup(lf));
-      g.entries[base] = rec;
+      if (!m.raw) return;
+      m.raw.push({ lf: lf, prefix: null, canon: canon, base: base, rec: rec });
+      if (m.g){ var g = m.g[canon] || (m.g[canon] = newGroup(lf)); g.entries[base] = rec; }
     });
   }
   function newGroup(lf){ return { entries: {}, legacy: [], lf: lf || null }; }
+  // A listing's files grouped per item. The grouping is redone when an app
+  // has named more items since (registry), so a short or "~hash" record
+  // name listed before its item was known still lands with its item.
+  function groupsOf(m){
+    if (m.g && m.ver === regVersion) return m.g;
+    var groups = {};
+    m.raw.forEach(function(e){
+      var c = e.canon || resolvePrefix(e.lf, e.prefix);
+      var g = groups[c] || (groups[c] = newGroup(e.lf));
+      g.lf = e.lf;
+      g.entries[e.base] = e.rec;
+    });
+    m.legacy.forEach(function(e){
+      var c = e.canon || canonOf(e.dh.name);
+      var g = groups[c] || (groups[c] = newGroup(null));
+      if (g.legacy.indexOf(e.dh) < 0) g.legacy.push(e.dh);
+    });
+    Object.keys(m.made).forEach(function(c){ if (!groups[c]) groups[c] = newGroup(m.made[c]); else if (!groups[c].lf) groups[c].lf = m.made[c]; });
+    m.g = groups; m.ver = regVersion;
+    return groups;
+  }
 
   function Ctx(o){
     this.dir = o.dir;
@@ -2507,19 +2580,19 @@ window.__pdfImportLibFailed = false;
     if (c[lf]) return Promise.resolve(c[lf]);
     return newH.getDirectoryHandle(lf, { create: !!create }).then(function(h){ c[lf] = h; return h; });
   }
+  // -> Promise<memo>; memo.groups() is the listing grouped per item.
   function scan(ctx, newH, legH, level){
     var k = memoKey(ctx.id, level);
     var m = !ctx.force && freshMemo(k);
     if (m && m.newH === newH && m.legH === legH) return m.p;
-    var groups = {};
+    m = { at: now(), p: null, raw: [], legacy: [], made: {}, g: null, ver: -1, newH: newH, legH: legH };
+    m.groups = function(){ return groupsOf(m); };
     function addNew(levelDirH, files){
       files.forEach(function(f){
         if (f.kind !== "file") return;
         var s = splitName(f.name);
         if (!s) return;
-        var g = groups[s.key] || (groups[s.key] = newGroup(levelDirH.name));
-        g.lf = levelDirH.name;
-        g.entries[s.base] = { h: f, parent: levelDirH, real: f.name, layout: "new" };
+        m.raw.push({ lf: levelDirH.name, prefix: s.key, canon: null, base: s.base, rec: { h: f, parent: levelDirH, real: f.name, layout: "new" } });
       });
     }
     var pNew;
@@ -2538,17 +2611,16 @@ window.__pdfImportLibFailed = false;
       var names = {};
       dirs.forEach(function(dh){
         names[dh.name] = 1;
-        var c = canonOf(dh.name);
-        var g = groups[c] || (groups[c] = newGroup(null));
-        g.legacy.push(dh);
+        m.legacy.push({ dh: dh, canon: null });
       });
       // forget folders that have gone (moved by a tidy-up)
       Object.keys(L.data.folders).forEach(function(n){ if (!names[n]) delete L.data.folders[n]; });
       L.data.rootNames = Object.keys(names); L.data.rootAt = now();
       legacySave(L, ctx.id);
     });
-    var p = Promise.all([pNew, pLeg]).then(function(){ return groups; });
-    memos[k] = { at: now(), p: p, groups: groups, newH: newH, legH: legH };
+    var p = Promise.all([pNew, pLeg]).then(function(){ return m; });
+    m.p = p;
+    memos[k] = m;
     p.catch(function(){ if (memos[k] && memos[k].p === p) delete memos[k]; });
     return p;
   }
@@ -2568,6 +2640,92 @@ window.__pdfImportLibFailed = false;
         return files.map(function(e){ return { h: e, parent: dh, real: e.name, layout: "legacy" }; });
       });
     });
+  }
+
+  // ---------- Windows' 260-character path limit ----------
+  var tinyNeeded = {}, probes = {}, warned = {};
+  var IS_WIN = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent || "");
+  var PROBE = "~ UTZLINE path check (safe to delete) ";
+  function projectOf(ctx){ return String(ctx.id).split("\u0000")[0]; }
+  function repeat(ch, n){ return n > 0 ? new Array(n + 1).join(ch) : ""; }
+  // How many characters a Windows path leaves after this project's folder
+  // for a file's full path (252: 259 less Chrome's ".crswap"): found from
+  // the longest name an empty probe file can be made with under
+  // Project Saves/UTZLINE Events (made and removed again, a few tries),
+  // kept for the session. Off Windows there is nothing to measure.
+  // -> Promise<{ rel: number|null, win: boolean }>  (rel null: no limit met)
+  function pathProbe(ctx, force){
+    var pid = projectOf(ctx);
+    if (probes[pid] && !force) return probes[pid].p;
+    var P = { p: null, rel: null, done: false };
+    probes[pid] = P;
+    if (!IS_WIN){ P.done = true; P.p = Promise.resolve({ rel: null, win: false }); return P.p; }
+    P.p = ctx.dir([ROOT], true).then(function(h){
+      function tryLen(n){
+        var name = PROBE + repeat("x", n);
+        return h.getFileHandle(name, { create: true }).then(function(){
+          return h.removeEntry(name).then(null, function(){}).then(function(){ return true; });
+        }, function(){ return false; });
+      }
+      var top = 255 - PROBE.length;              // the longest name a file can have
+      return tryLen(top).then(function(ok){
+        if (ok) return null;                      // fits: long paths are on, or the folder path is short
+        var lo = -1, hi = top;                    // lo fits (or nothing does), hi doesn't
+        function step(){
+          if (hi - lo <= 1) return lo;
+          var mid = (lo + hi) >> 1;
+          return tryLen(mid).then(function(fits){ if (fits) lo = mid; else hi = mid; return step(); });
+        }
+        return Promise.resolve(step()).then(function(best){
+          if (best < 0) return 0;
+          // probe's full path: X + "\Project Saves\UTZLINE Events\" (30) + name <= 259
+          var X = 259 - 30 - (PROBE.length + best);
+          return Math.max(0, WIN_FULL - X - 1);
+        });
+      });
+    }).then(function(rel){
+      P.rel = rel; P.done = true;
+      if (rel != null && rel < NEEDS_REL) pathWarn(ctx, "budget", rel);
+      return { rel: rel, win: true };
+    }, function(){ P.done = true; return { rel: null, win: true }; });
+    return P.p;
+  }
+  // Was a failed write to this record name plausibly the path limit? Only
+  // on Windows; when the probe has measured, only if the name is past what
+  // it left (a write that fails for another reason -- a file held by
+  // OneDrive, say -- is not retried under another name).
+  function lengthy(ctx, lf, real){
+    if (!IS_WIN) return false;
+    var P = probes[projectOf(ctx)];
+    if (!P || !P.done) return true;
+    if (P.rel == null) return false;
+    return (14 + ROOT.length + 1 + ctx.branch.length + 1 + lf.length + 1 + real.length) > P.rel;
+  }
+  var ADVICE = " Best fix: move the Projects folder nearer the drive root (for example C:\\UTZLINE Projects), or shorten the project folder's name.";
+  function pathWarn(ctx, why, rel){
+    var pid = projectOf(ctx);
+    if (warned[pid + "\u0000" + why]) return;
+    warned[pid + "\u0000" + why] = 1;
+    var msg;
+    if (why === "budget") msg = "Windows limits a file's full path to 260 characters, and this project's folder path leaves only " + rel + " for UTZLINE's own files (long room names need about " + NEEDS_REL + "). Records that don't fit are kept under short names, but PDFs and exports with long names can still fail." + ADVICE;
+    else if (why === "fallback") msg = "A record for an item with a long name didn't fit Windows' 260-character path limit here, so it was saved under a short name instead. PDFs and exports with long names can still fail." + ADVICE;
+    else msg = "A record couldn't be saved: its full path is past Windows' 260-character limit." + ADVICE;
+    try{ if (typeof console !== "undefined") console.warn("UTZLINE events: " + msg); }catch(e){}
+    banner(msg);
+    try{ window.dispatchEvent(new CustomEvent("utz-path-limit", { detail: { why: why, rel: rel == null ? null : rel, message: msg } })); }catch(e){}
+  }
+  function banner(msg){
+    if (typeof document === "undefined" || !document.body) return;
+    var old = document.getElementById("utzPathBanner"); if (old) old.parentNode.removeChild(old);
+    var bar = document.createElement("div"); bar.id = "utzPathBanner";
+    bar.setAttribute("role", "alert");
+    bar.style.cssText = "position:fixed;left:12px;right:12px;bottom:12px;z-index:3000;display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:12px;background:#3a2a00;color:#ffe9a8;border:1px solid #8a6a10;font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.35)";
+    var t = document.createElement("div"); t.style.flex = "1"; t.textContent = "\u26a0 " + msg;
+    var b = document.createElement("button"); b.type = "button"; b.textContent = "OK";
+    b.style.cssText = "font:inherit;font-weight:700;padding:6px 14px;border-radius:8px;border:1px solid #c9a227;background:transparent;color:inherit;cursor:pointer";
+    b.addEventListener("click", function(){ if (bar.parentNode) bar.parentNode.removeChild(bar); });
+    bar.appendChild(t); bar.appendChild(b);
+    document.body.appendChild(bar);
   }
 
   // ---------- stand-in handles ----------
@@ -2593,7 +2751,19 @@ window.__pdfImportLibFailed = false;
     });
   };
   FileWrap.prototype.getFile = function(){ return this._real().then(function(h){ return h.getFile(); }); };
-  FileWrap.prototype.createWritable = function(o){ return this._real().then(function(h){ return h.createWritable(o); }); };
+  // A record file this session just created but whose writer can't be
+  // opened (on Windows: the full path, plus Chrome's ".crswap" swap file, is
+  // past 259 characters -- the file is left empty) is made again under its
+  // item's "~hash" name; the empty file goes first.
+  FileWrap.prototype.createWritable = function(o){
+    var rec = this._rec;
+    return this._real().then(function(h){
+      return h.createWritable(o).then(null, function(err){
+        if (!rec.fresh || rec.tiny || !rec.dir) throw err;
+        return rec.dir._retryTiny(rec, err).then(function(h2){ return h2.createWritable(o); });
+      });
+    });
+  };
   FileWrap.prototype.isSameEntry = function(other){
     return this._real().then(function(h){
       if (other && other._rec) return other._real().then(function(o){ return h === o || (typeof h.isSameEntry === "function" ? h.isSameEntry(o) : false); });
@@ -2635,20 +2805,65 @@ window.__pdfImportLibFailed = false;
       return levelDir(nh, lf, create);
     });
   };
+  // The on-disk name of a new record: "<Room> - <Code> -- <name>" inside the
+  // level folder (the registry's short part, else the canonical key with the
+  // level folder taken off the front); "~hash -- <name>" when tiny.
+  ItemDir.prototype._realName = function(name, tiny){
+    var r = registry[this.name] || null, canon = this._canon, lf = this._g.lf;
+    if (tiny) return (r ? r.tiny : tinyOf(canon)) + SEP + name;
+    return (r ? r.short : shortOf(canon, lf)) + SEP + name;
+  };
   ItemDir.prototype.getFileHandle = function(name, opts){
     var self = this, create = !!(opts && opts.create), g = this._g;
     return this._merged().then(function(out){
       var rec = out[name];
       if (rec) return new FileWrap(name, rec);
       if (!create) throw notFound(name);
-      return self._levelDir(true).then(function(lh){
-        var real = self._canon + SEP + name;
-        return lh.getFileHandle(real, { create: true }).then(function(h){
-          var r = { h: h, parent: lh, real: real, layout: "new" };
+      return self._levelDir(true).then(null, function(err){
+        // on Windows a level folder that can't even be made is the path limit too
+        if (IS_WIN && !isNotFound(err) && lengthy(self._root._ctx, self._g.lf || "", "")) pathWarn(self._root._ctx, "failed");
+        throw err;
+      }).then(function(lh){
+        var ctx = self._root._ctx;
+        pathProbe(ctx);
+        var tiny = !!tinyNeeded[ctx.id + "\u0000" + self._canon];
+        function made(h, real, isTiny){
+          var r = { h: h, parent: lh, real: real, layout: "new", fresh: true, tiny: isTiny, dir: self, base: name };
           g.entries[name] = r;
-          recordWrite(self._root._ctx.id, lh.name, self._canon, name, r);
+          recordWrite(ctx.id, lh.name, self._canon, name, r);
           return new FileWrap(name, r);
+        }
+        var real = self._realName(name, tiny);
+        return lh.getFileHandle(real, { create: true }).then(function(h){ return made(h, real, tiny); }, function(err){
+          // not even the empty file could be made: straight to the "~hash" name
+          if (tiny || isNotFound(err) || !lengthy(ctx, lh.name, real)) throw err;
+          var real2 = self._realName(name, true);
+          return lh.getFileHandle(real2, { create: true }).then(function(h){
+            tinyNeeded[ctx.id + "\u0000" + self._canon] = 1;
+            pathWarn(ctx, "fallback");
+            return made(h, real2, true);
+          }, function(){ pathWarn(ctx, "failed"); throw err; });
         });
+      });
+    });
+  };
+  // createWritable failed on a record this session just made: if the file
+  // is empty (nothing was ever written), remove it and make the record
+  // under its "~hash" name instead -> that handle. Anything else rethrows.
+  ItemDir.prototype._retryTiny = function(rec, err){
+    var self = this, ctx = this._root._ctx, g = this._g;
+    if (!lengthy(ctx, rec.parent.name, rec.real)) return Promise.reject(err);
+    return rec.h.getFile().then(function(f){ return f.size === 0; }, function(){ return false; }).then(function(empty){
+      if (!empty) throw err;
+      return rec.parent.removeEntry(rec.real).then(null, function(){}).then(function(){
+        var real2 = self._realName(rec.base, true);
+        return rec.parent.getFileHandle(real2, { create: true }).then(function(h2){
+          rec.h = h2; rec.real = real2; rec.tiny = true;
+          g.entries[rec.base] = rec;
+          tinyNeeded[ctx.id + "\u0000" + self._canon] = 1;
+          pathWarn(ctx, "fallback");
+          return h2;
+        }, function(){ pathWarn(ctx, "failed"); throw err; });
       });
     });
   };
@@ -2672,7 +2887,7 @@ window.__pdfImportLibFailed = false;
     if (!create) return Promise.resolve(null);
     return this._ctx.dir([ROOT, this._ctx.branch], true).then(function(h){ self._newH = h; delete misses[self._ctx.id + "\u0000new"]; return h; });
   };
-  Root.prototype._groups = function(){ return scan(this._ctx, this._newH, this._legH, this._level); };
+  Root.prototype._groups = function(){ return scan(this._ctx, this._newH, this._legH, this._level).then(function(m){ return m.groups(); }); };
   Root.prototype._dirs = function(){
     var self = this;
     return this._groups().then(function(groups){
@@ -2703,19 +2918,22 @@ window.__pdfImportLibFailed = false;
     var lf = r ? levelFolder(r.level) : null;
     // the new-layout files: from a whole-branch or this level's listing
     var all = !ctx.force && freshMemo(memoKey(ctx.id, null));
-    var groupsP;
-    if (all && all.newH === this._newH && all.legH === this._legH) groupsP = all.p;
-    else if (lf != null && this._newH) groupsP = scan(ctx, this._newH, null, r.level);
+    var memoP;
+    if (all && all.newH === this._newH && all.legH === this._legH) memoP = all.p;
+    else if (lf != null && this._newH) memoP = scan(ctx, this._newH, null, r.level);
     else if (this._newH){
-      groupsP = ctx.levelDirs(this._newH).then(function(dirs){
+      memoP = ctx.levelDirs(this._newH).then(function(dirs){
         var m = memos[ctx.id + "\u0001levels"]; if (m) m.names = dirs.map(function(d){ return d.name; });
         lf = self._lfFor(canon, key);
         return scan(ctx, self._newH, null, lf);
       });
-    } else groupsP = Promise.resolve({});
-    return groupsP.then(function(groups){
+    } else memoP = Promise.resolve(null);
+    var memo = null;
+    return memoP.then(function(m){
+      memo = m;
+      var groups = m ? m.groups() : {};
       var g = groups[canon];
-      if (!g){ g = newGroup(lf); groups[canon] = g; }
+      if (!g){ g = newGroup(lf); groups[canon] = g; if (m) m.made[canon] = lf; }
       if (lf && !g.lf) g.lf = lf;
       // the item's old folder(s): the app's key, the canonical one, the ITPs' 80-character one
       var cands = [key];
@@ -2730,7 +2948,11 @@ window.__pdfImportLibFailed = false;
         if (known) cands = cands.filter(function(n){ return known.indexOf(n) >= 0; });
         return Promise.all(cands.map(function(n){ return self._legH.getDirectoryHandle(n, { create: false }).then(null, softNull); }));
       }).then(function(found){
-        (found || []).forEach(function(dh){ if (dh && !have[dh.name]){ have[dh.name] = 1; g.legacy.push(dh); } });
+        (found || []).forEach(function(dh){
+          if (!dh || have[dh.name]) return;
+          have[dh.name] = 1; g.legacy.push(dh);
+          if (memo) memo.legacy.push({ dh: dh, canon: canon });
+        });
         return g;
       });
     }).then(function(g){
@@ -2815,19 +3037,23 @@ window.__pdfImportLibFailed = false;
               var ev;
               try{ ev = JSON.parse(r.text); }catch(e){ ev = null; }
               if (!ev || typeof ev !== "object" || ev.level == null){ out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: "couldn't be read" }); return false; }
-              var canon = nameKey(itemKey(ev.level, ev.room, ev.joineryId));
-              var target = canon + SEP + fh.name;
-              return levelDir(levelFolder(ev.level)).then(function(lh){
-                return lh.getFileHandle(target, { create: false }).then(function(th){
-                  return readText(th).then(function(t){
-                    if (t.text === r.text) return true;
-                    if (!t.size) return writeText(lh, target, r.text).then(function(){ return readText(th); }).then(function(t2){ return t2.text === r.text; });
-                    out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: "a different record with the same name is already in the new place" });
-                    return false;
+              var canon = nameKey(itemKey(ev.level, ev.room, ev.joineryId)), lf = levelFolder(ev.level);
+              var target = shortOf(canon, lf) + SEP + fh.name, longName = canon + SEP + fh.name;
+              return levelDir(lf).then(function(lh){
+                // already moved under the long (pre-v2.1) name?
+                return lh.getFileHandle(longName, { create: false }).then(function(th){ return readText(th).then(function(t){ return t.text === r.text; }); }, function(err){ if (!isNotFound(err)) throw err; return false; }).then(function(there){
+                  if (there) return true;
+                  return lh.getFileHandle(target, { create: false }).then(function(th){
+                    return readText(th).then(function(t){
+                      if (t.text === r.text) return true;
+                      if (!t.size) return writeText(lh, target, r.text).then(function(){ return readText(th); }).then(function(t2){ return t2.text === r.text; });
+                      out.left.push({ branch: branch, folder: dh.name, name: fh.name, why: "a different record with the same name is already in the new place" });
+                      return false;
+                    });
+                  }, function(err){
+                    if (!isNotFound(err)) throw err;
+                    return writeText(lh, target, r.text).then(function(th){ return readText(th); }).then(function(t){ return t.text === r.text; });
                   });
-                }, function(err){
-                  if (!isNotFound(err)) throw err;
-                  return writeText(lh, target, r.text).then(function(th){ return readText(th); }).then(function(t){ return t.text === r.text; });
                 });
               }).then(function(ok){
                 if (!ok) return false;
@@ -2879,12 +3105,17 @@ window.__pdfImportLibFailed = false;
     }, true);
   }
 
+  // o: { dir, cacheId } -> Promise<{ rel, win }> (see pathProbe); { force }
+  // measures again. An app shows the banner itself only if it wants to --
+  // the probe already shows it once when rel is under what long names need.
+  function pathBudget(o){ return pathProbe(new Ctx({ dir: o.dir, branch: BRANCHES[0], cacheId: o.cacheId }), !!o.force); }
+
   window.UtzEvents = {
-    version: 2,
-    ROOT: ROOT, SEP: SEP, BRANCHES: BRANCHES,
-    itemKey: itemKey, nameKey: nameKey, levelFolder: levelFolder, itpKey: itpKey,
-    remember: remember, root: root, refresh: refresh, tidy: tidy, countLegacy: countLegacy,
-    _registry: registry, _memos: function(){ return memos; }
+    version: 2.1,
+    ROOT: ROOT, SEP: SEP, BRANCHES: BRANCHES, NEEDS_REL: NEEDS_REL, WIN_FULL: WIN_FULL,
+    itemKey: itemKey, nameKey: nameKey, levelFolder: levelFolder, itpKey: itpKey, shortOf: shortOf, tinyOf: tinyOf,
+    remember: remember, root: root, refresh: refresh, tidy: tidy, countLegacy: countLegacy, pathBudget: pathBudget,
+    _registry: registry, _memos: function(){ return memos; }, _probes: probes
   };
 })();
 </script>
@@ -8345,7 +8576,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v77";
+  var APP_VERSION = "v78";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -9446,7 +9677,17 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // same second, e.g. from a script or a test.
     var pad3 = function(n){ return String(n).padStart(3, "0"); };
     var timePart = pad(d.getHours()) + "-" + pad(d.getMinutes()) + "-" + pad(d.getSeconds()) + "-" + pad3(d.getMilliseconds());
-    return sanitizeFileBase(state.fileBase || "plan") + "_backup_" + datePart + "_" + timePart;
+    // (2026-10-01) Windows' 260-character path limit: the stem no longer
+    // repeats the project and item the folder already names
+    // (Backups/UTZLINE Site Measure/<Level - Room - Code>/) -- with those in
+    // front, a long room name's snapshot reached 219 characters after the
+    // project folder and was left EMPTY on Andrew's PC. Now "backup_<date>_<time>".
+    return "backup_" + datePart + "_" + timePart;
+  }
+  // The date-time a snapshot stem carries (either shape), for ordering.
+  function backupStemStamp(stem){
+    var m = /(?:^|_)backup_(\d{4}_\d{2}_\d{2}_\d{2}-\d{2}-\d{2}(?:-\d{3})?)$/.exec(stem);
+    return m ? m[1] : "";
   }
   // Same shape as listSubdirNames further down, but for FILES rather than
   // subdirectories -- used only for pruning a backup folder's own contents.
@@ -9480,7 +9721,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         if (stem === n) return;
         (stems[stem] = stems[stem] || []).push(n);
       });
-      var stemList = Object.keys(stems).sort();
+      // oldest first by the stamp in the stem (old long-named stems and the
+      // short ones order together; anything without a stamp counts as oldest)
+      var stemList = Object.keys(stems).sort(function(a, b){ var sa = backupStemStamp(a), sb = backupStemStamp(b); return sa < sb ? -1 : sa > sb ? 1 : (a < b ? -1 : a > b ? 1 : 0); });
       var excess = stemList.length - LEVEL_BACKUP_MAX_SNAPSHOTS;
       if (excess <= 0) return;
       var removals = [];
@@ -10987,7 +11230,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // sits in the name, so old and new files both keep sorting correctly
   // together.
   function jobNoteFileName(originalName){
-    var base = sanitizeFileBase(String(originalName || "note").replace(/\.pdf$/i, "")) || "note";
+    // (2026-10-01) the original name is cut to 40 characters: Windows' 260-character path limit
+    // (Project Saves/Job Notes/<Level - Room - Code>/ is ~80 before the file on Andrew's PC)
+    var base = sanitizeFileBase(String(originalName || "note").replace(/\.pdf$/i, "")).slice(0, 40).replace(/[\s._-]+$/, "") || "note";
     return base + " - " + overlayTimestampStamp() + ".pdf";
   }
   // Pulls the "yyyy-mm-dd hh-mm-ss" stamp out of a job note filename

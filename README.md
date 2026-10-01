@@ -1,10 +1,18 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v77 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v78 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v78 (2026-10-01) — RC 1.0: Windows' 260-character path limit — records and backup snapshots for long room names were being saved empty.**
+
+- **Why:** Andrew: *"some get corrupted from the import ... then i cant change them in the schedule"* / Set schedule's *"Couldn't save this schedule"*. Windows limits a file's full path to 260 characters; the pilot project's folder path (`C:\Users\andrewu\OneDrive - Metro Joinery\UTZLINE Pilot\3756 - Jones Radiology Mt Barker\`, 88 characters) left a schedule record for a long room name at 253 in full -- Chrome's `<name>.crswap` swap file needs 7 more, so the file was created EMPTY and the save failed. 27 of the 72 schedule files in that project's Ground Floor folder were empty.
+- **Event store (shared with every app that writes records):** a new record's name no longer repeats the level its folder names -- `UTZLINE Events/<Branch>/<Level>/<Room> - <Code> -- <name> - <stamp> - <kind>.json`; everything already on disk under the long name still reads. When even that doesn't fit, the empty file is removed and the record is kept under a 9-character `~hash` name, and a banner says why; on a PC the first write to a project measures what its folder path leaves and the banner shows early when it is under the ~170 characters long room names need (*move the Projects folder nearer the drive root, or shorten the project folder's name*). Update every device: an app on the previous version doesn't see records under the new short names.
+- **Backups:** a level / room / joinery item's rolling backup snapshot is now `backup_<date>_<time>.utzline.json` (+ `.png`) inside its own folder under `Backups/UTZLINE Site Measure/` -- the name used to repeat the project and the item (219 characters after the project folder for a long room name: those snapshots were being left empty on PCs). Pruning orders old and new names by their date-time.
+- **Job notes:** the original file name is kept to 40 characters in the saved name.
+- Test: `pdftest-projects/run_event_store_path_limit.js` (a mock folder that behaves like Windows: Andrew's path, a deeper one, a hopeless one, and Linux).
 
 **v77 (2026-10-01) — RC 1.0: the Viewer's floor plan export carries a QR code (Site Measure only carries the code).**
 
