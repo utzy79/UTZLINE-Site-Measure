@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v85">
+<link rel="manifest" href="./manifest.json?v=v87">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v85">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v85">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v87">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v87">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -9132,7 +9132,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v85";
+  var APP_VERSION = "v87";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -9150,6 +9150,13 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // marker double-click, Share/current-view export for printing) is left
   // completely untouched.
   var VIEW_ONLY_MODE = /[?&]viewer=1(&|$)/.test(location.search);
+  // (2026-10-02) Andrew: "on the viewer app. NON windows devices. only have the open joinery summary and
+  // view site measure / job note and cancel option available. i dont want the ability to add files in
+  // the viewer". The Viewer on a tablet / phone (anything that isn't Windows) gets a short marker menu
+  // -- Open joinery summary, Open site measure, View job note (when there is one), Cancel -- and
+  // nothing can be added: no Add shop drawing / Add job note, and the joinery summary has no
+  // shop-drawing drop zone or button. The Windows Viewer is unchanged. Site Measure is never trimmed.
+  var VIEWER_TRIMMED = VIEW_ONLY_MODE && !/Windows/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
   var SVG_NS = "http://www.w3.org/2000/svg";
   // Embedded copies (base64 woff2, weight 500 -- the only weight the app
   // ever measures or draws text with) of the two custom Google Fonts used
@@ -13345,7 +13352,26 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       perf.mark(pre.exists ? "read the check measure (layers list, drafts, the save it opens from)" : "checked: no check measure yet");
       if (pre.exists && checkMeasureKeySet) checkMeasureKeySet.add(preKey);
       if (!wantSnapshot || pre.exists) return null;
-      return safeRenderPlanViewSnapshotForItem();
+      return safeRenderPlanViewSnapshotForItem().then(function(prev){
+        if (!prev || firstOpenSnapshotMode !== "crop") return prev;
+        // (2026-10-02, sharpness) the crop is chosen on the quick preview HERE, while the plan is still
+        // live, then that area alone is rendered again at the plan's native resolution -- never cut
+        // out of the screen-density preview (that was "when its cropped the new image is really blurry").
+        var dn = joineryItemPageDisplayName(activeLevelName, obj.roomName || "", obj.joineryCode || "");
+        return showCropDialog(prev.dataUrl, prev.w, prev.h, {
+          label: "Crop the plan snapshot for “" + dn + "” — drag the corners, then Crop, or keep the whole view:",
+          skipLabel: "Use full view"
+        }).then(function(res){
+          var reg = prev.region, fr = res && res.frac;
+          var region = fr
+            ? { x0: reg.x0 + fr.x * reg.w, y0: reg.y0 + fr.y * reg.h, x1: reg.x0 + (fr.x + fr.w) * reg.w, y1: reg.y0 + (fr.y + fr.h) * reg.h }
+            : { x0: reg.x0, y0: reg.y0, x1: reg.x0 + reg.w, y1: reg.y0 + reg.h };
+          return safeRenderPlanViewSnapshotForItem({ region: region, hi: true }).then(function(hi){
+            var pick = hi || (res && res.dataUrl ? res : prev);
+            return { dataUrl: pick.dataUrl, w: pick.w, h: pick.h, final: true };
+          });
+        });
+      });
     });
     showToast("Opening check measure…");
     return firstOpenSnapshotP.then(function(snap){
@@ -13427,7 +13453,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           // an untouched page never prompts to save or writes a draft.
           return firstOpenSnapshotP.then(function(snap){
             if (!snap || firstOpenSnapshotMode === "off"){ startBlankPlan(displayName); unsavedSinceLastSave = false; backupDirty = false; return; }
-            if (firstOpenSnapshotMode === "full"){
+            if (firstOpenSnapshotMode === "full" || snap.final){
               applyLoadedImage(snap.dataUrl, snap.w, snap.h, displayName);
               unsavedSinceLastSave = false; backupDirty = false;
               return;
@@ -18274,7 +18300,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // "on next update, we need to bring the upload shop drawings back into
     // viewer. put it at the top of the menu". Site Measure still has none
     // (removed there 2026-09-24). See openAddShopDrawingDialog.
-    if (VIEW_ONLY_MODE && isRealObject && obj.type === "roomlink"){
+    // (2026-10-02) Tablet / phone Viewer: the joinery summary leads the short menu instead.
+    if (VIEWER_TRIMMED && isRealObject && obj.type === "roomlink"){
+      popoverRow(box, SUMMARY_ICON + "<span>Open joinery summary</span>", function(){ hideLockPopover(); openJoinerySummary(obj); });
+    }
+    if (VIEW_ONLY_MODE && !VIEWER_TRIMMED && isRealObject && obj.type === "roomlink"){
       popoverRow(box, SHOPDRAWING_ICON + "<span>Add shop drawing</span>", function(){
         hideLockPopover();
         openAddShopDrawingDialog(obj);
@@ -18331,14 +18361,14 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     }
     // (v55) Moved here from the old in-between Joinery Item dialog.
     // (v60) Viewer only -- Andrew: "the view rework does not need to be in site measure app, remove it".
-    if (VIEW_ONLY_MODE && isRealObject && obj.type === "roomlink" && obj.roomName && reworkFileKeySet && itemMayHaveReworkFile(activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat)){
+    if (VIEW_ONLY_MODE && !VIEWER_TRIMMED && isRealObject && obj.type === "roomlink" && obj.roomName && reworkFileKeySet && itemMayHaveReworkFile(activeLevelName, obj.roomName, obj.joineryCode, activeLevelIsFlat)){
       popoverRow(box, JOBNOTE_ICON + "<span class=\"popover-rework-label\">View rework</span>", function(){
         hideLockPopover();
         var title = "Rework" + (obj.joineryCode ? " \u2014 " + obj.joineryCode : "") + (obj.roomName ? " (" + [activeLevelName, obj.roomName].filter(Boolean).join(" \u00b7 ") + ")" : "");
         openReworksScreen({ level: activeLevelName, room: obj.roomName, code: obj.joineryCode || "" }); // (v61)
       });
     }
-    if (isRealObject && obj.type === "roomlink" && !activeLevelIsFlat && obj.roomName){
+    if (isRealObject && obj.type === "roomlink" && !activeLevelIsFlat && obj.roomName && !VIEWER_TRIMMED){
       popoverRow(box, ROOM_ICON + "<span>Open this room's own plan</span>", function(){
         hideLockPopover();
         openLegacyRoomPlanFromJoineryItem(obj);
@@ -18399,7 +18429,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // measure app. but keep add shop drawing" -- Site Measure loses the
     // ability to add one; the Viewer is now the only place a job note can
     // be attached from at all.
-    if (isRealObject && obj.type === "roomlink" && VIEW_ONLY_MODE){
+    if (isRealObject && obj.type === "roomlink" && VIEW_ONLY_MODE && !VIEWER_TRIMMED){
       popoverRow(box, JOBNOTE_ICON + "<span>Add job note</span>", function(){
         hideLockPopover();
         openAddJobNoteDialog(obj);
@@ -18446,7 +18476,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // button if there is one applied" -- gated on shopDrawingKeySet (see
     // its comment), the same way the job-note row above is gated on the
     // record's jobNote flag. Unknown-yet reads as "show", never as "hide".
-    if (isRealObject && obj.type === "roomlink" && itemHasShopDrawing(shopDrawingKeyFor(obj))){
+    if (isRealObject && obj.type === "roomlink" && !VIEWER_TRIMMED && itemHasShopDrawing(shopDrawingKeyFor(obj))){
       popoverRow(box, SHOPDRAWING_ICON + "<span>View shop drawing</span>", function(){
         hideLockPopover();
         openViewShopDrawingDialog(obj);
@@ -18454,7 +18484,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     }
     // (v76, Viewer only) Andrew: "the viewer to have the right click option to open the joinery summary",
     // and the floor plan export on its own row too (it also follows Add job note -- see handleJobNoteFile).
-    if (isRealObject && obj.type === "roomlink" && VIEW_ONLY_MODE){
+    if (isRealObject && obj.type === "roomlink" && VIEW_ONLY_MODE && !VIEWER_TRIMMED){
       popoverRow(box, SUMMARY_ICON + "<span>Open joinery summary</span>", function(){ hideLockPopover(); openJoinerySummary(obj); });
       popoverRow(box, EXPORT_PLAN_ICON + "<span>Export floor plan (A3 PDF)</span>", function(){ hideLockPopover(); exportFloorPlanPdf(obj); });
     }
@@ -21906,21 +21936,36 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // the test harness switches this so existing item-page tests aren't
   // parked behind a modal.
   var firstOpenSnapshotMode = "crop";
-  function renderPlanViewSnapshotForItem(){
+  // (2026-10-02) Andrew: "when its cropped the new image is really blurry". The preview the crop is
+  // drawn on is taken at SCREEN density (a zoomed-out A0 view is only ~2000 px for the whole sheet),
+  // and the old code cut the crop out of that preview -- so a small crop was a few hundred soft
+  // pixels. Now the preview is only for choosing the area; opts.region (world px) + opts.hi renders
+  // that area again from the live plan at the plan's NATIVE resolution (1 output px per plan px,
+  // capped at ITEM_SNAPSHOT_HI_LONG_EDGE for a 4 GB tablet), with no upscaling floor.
+  var ITEM_SNAPSHOT_HI_LONG_EDGE = 4096;
+  function renderPlanViewSnapshotForItem(opts){
+    opts = opts || {};
     if (!state.imageW || !state.imageH) return Promise.resolve(null);
     var vb = computeViewportWorldBounds();
     var x0 = Math.max(vb.x0, 0), y0 = Math.max(vb.y0, 0);
     var x1 = Math.min(vb.x1, state.imageW), y1 = Math.min(vb.y1, state.imageH);
     if (x1 - x0 < 10 || y1 - y0 < 10){ x0 = 0; y0 = 0; x1 = state.imageW; y1 = state.imageH; } // plan panned out of view: use the whole plan
+    if (opts.region){
+      x0 = Math.max(0, opts.region.x0); y0 = Math.max(0, opts.region.y0);
+      x1 = Math.min(state.imageW, opts.region.x1); y1 = Math.min(state.imageH, opts.region.y1);
+      if (x1 - x0 < 2 || y1 - y0 < 2){ x0 = 0; y0 = 0; x1 = state.imageW; y1 = state.imageH; }
+    }
     var contentW = x1 - x0, contentH = y1 - y0;
     var r = svgRoot.getBoundingClientRect();
     var dpr = clamp(window.devicePixelRatio || 1, 1, 3);
     var viewW = vb.x1 - vb.x0;
     var density = viewW > 0 ? (r.width * dpr) / viewW : dpr;
+    if (opts.hi) density = Math.max(density, 1); // native: never softer than the plan's own pixels
     var outW = Math.max(1, Math.round(contentW * density)), outH = Math.max(1, Math.round(contentH * density));
     var longEdge = Math.max(outW, outH);
     var f = 1;
-    if (longEdge < ITEM_SNAPSHOT_MIN_LONG_EDGE) f = ITEM_SNAPSHOT_MIN_LONG_EDGE / longEdge;
+    if (opts.hi){ if (longEdge > ITEM_SNAPSHOT_HI_LONG_EDGE) f = ITEM_SNAPSHOT_HI_LONG_EDGE / longEdge; }
+    else if (longEdge < ITEM_SNAPSHOT_MIN_LONG_EDGE) f = ITEM_SNAPSHOT_MIN_LONG_EDGE / longEdge;
     else if (longEdge > ITEM_SNAPSHOT_MAX_LONG_EDGE) f = ITEM_SNAPSHOT_MAX_LONG_EDGE / longEdge;
     outW = Math.max(1, Math.round(outW * f)); outH = Math.max(1, Math.round(outH * f));
     var clone = cloneWorldForExport();
@@ -21965,7 +22010,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, 0, 0, outW, outH);
-      var out = { dataUrl: canvas.toDataURL("image/jpeg", 0.9), w: outW, h: outH };
+      var out = { dataUrl: canvas.toDataURL("image/jpeg", opts.hi ? 0.95 : 0.9), w: outW, h: outH, region: { x0: x0, y0: y0, w: contentW, h: contentH } };
       canvas.width = canvas.height = 0; // release the bitmap now, not at GC time
       return out;
     }).catch(function(err){
@@ -21977,8 +22022,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     });
   }
   // (v54) Never let the snapshot throw synchronously into the tap handler.
-  function safeRenderPlanViewSnapshotForItem(){
-    try{ return renderPlanViewSnapshotForItem(); }
+  function safeRenderPlanViewSnapshotForItem(opts){
+    try{ return renderPlanViewSnapshotForItem(opts); }
     catch(e){ console.error("Plan snapshot for item failed:", e); return Promise.resolve(null); }
   }
 
@@ -22082,7 +22127,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var out;
       try{ out = c.toDataURL(mime === "image/png" ? "image/png" : "image/jpeg", 0.92); }
       catch(e){ closeCropDialog(); return; }
-      closeCropDialog({ dataUrl: out, w: nw, h: nh });
+      closeCropDialog({ dataUrl: out, w: nw, h: nh, frac: { x: nx / cropSrc.w, y: ny / cropSrc.h, w: nw / cropSrc.w, h: nh / cropSrc.h } });
     };
     full.onerror = function(){ closeCropDialog(); };
     full.src = cropSrc.dataUrl;
@@ -24683,15 +24728,17 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   vsShopCard.appendChild(vsShopFileInput);
   function vsAddShopDrawing(file, kind){ if (!vsState) return Promise.resolve(false); return openAddShopDrawingDialog(vsState.obj, { file: file || null, kind: kind || "sent" }); }
   vsAddShopDrawingBtn.addEventListener("click", function(){ vsAddShopDrawing(null, "sent"); });
-  UtzDrop.longPress(vsShopDrop, vsShopFileInput); // (2026-10-02) drag and drop only
+  if (VIEWER_TRIMMED){ vsShopDrop.style.display = "none"; vsAddShopDrawingBtn.parentNode.style.display = "none"; } // (2026-10-02) tablet / phone Viewer: nothing can be added
+  else UtzDrop.longPress(vsShopDrop, vsShopFileInput); // (2026-10-02) drag and drop only
   vsShopFileInput.addEventListener("change", function(){
     var f = vsShopFileInput.files && vsShopFileInput.files[0];
     vsShopFileInput.value = "";
     if (f) vsAddShopDrawing(f, "sent");
   });
-  vsShopCard.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); vsShopDrop.classList.add("dragover"); });
+  vsShopCard.addEventListener("dragover", function(e){ if (VIEWER_TRIMMED) return; e.preventDefault(); e.stopPropagation(); vsShopDrop.classList.add("dragover"); });
   vsShopCard.addEventListener("dragleave", function(e){ e.stopPropagation(); if (!vsShopCard.contains(e.relatedTarget)) vsShopDrop.classList.remove("dragover"); });
   vsShopCard.addEventListener("drop", function(e){
+    if (VIEWER_TRIMMED) return; // (2026-10-02) no adding files on a tablet / phone Viewer (the page's own drop guard swallows the file)
     e.preventDefault(); e.stopPropagation();
     vsShopDrop.classList.remove("dragover");
     var files = e.dataTransfer && e.dataTransfer.files;

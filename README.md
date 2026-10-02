@@ -1,10 +1,14 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v85 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v87 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v87 (2026-10-02) — RC 1.0: sharp crop on a new site measure.**
+
+- **Create site measure → crop**: the crop window is now shown on the quick preview while the level plan is still on screen, and the area you pick (or "Use full view") is then rendered again from the plan at its own full resolution (up to 4096 px on the long edge) instead of being cut out of the screen-resolution preview, so the new page is no longer blurry. Test `run_sm_crop_sharp_v87.js`.
 
 **v85 (2026-10-02) — RC 1.0: logos folder, reversed Machined, drag and drop only, Viewer button ink.**
 
