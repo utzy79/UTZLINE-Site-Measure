@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v81">
+<link rel="manifest" href="./manifest.json?v=v85">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v81">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v81">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v85">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v85">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -88,10 +88,14 @@ window.__pdfImportLibFailed = false;
    Andrew: "can each project when started input the builders logo, this could be saved per builder. when
    we start a project the builder name can be a drop down with option to add new, if adding new it asks
    to drag and drop their logo. this can be used on the project headers" (screens + PDFs).
-   Kept once at the Projects ROOT (beside company-logo.png and utzline-users.csv), never per project:
-     utzline-builders.json                  { schemaVersion: 1, updatedAt, builders: [ { name, logo, addedBy, addedAt } ] }
-     utzline-builder-logo - <slug>.png      the logo (PNG, longest side <= 600 px) -- a root FILE, so no app
-                                            ever lists it as a project and no exclusion list needs changing
+   Kept once in the "logos" folder at the Projects ROOT (2026-10-02: Andrew, "move the company and builders logos
+   into a logos folder"), never per project. Readers look in logos/ FIRST and fall back to the Projects root, so
+   files an older version left at the root keep working; only UTZLINE Projects writes (always into logos/) and it
+   copies the root files across once (UtzBuilders.migrate -- copies, never moves or deletes):
+     logos/company-logo.png
+     logos/utzline-builders.json            { schemaVersion: 1, updatedAt, builders: [ { name, logo, addedBy, addedAt } ] }
+     logos/utzline-builder-logo - <slug>.png  the logo (PNG, longest side <= 600 px)
+   ("logos" is a reserved root folder name in every app, so it is never listed as a project.)
    A project only stores the builder's NAME (project-meta.json "contractor", as before); the logo is looked
    up by name (case-insensitive). Written by UTZLINE Projects only; every app reads.
      UtzBuilders.list(rootH)                      -> Promise<[{name, logo}]>   ([] when the file isn't there)
@@ -100,7 +104,12 @@ window.__pdfImportLibFailed = false;
      UtzBuilders.logoUrl(rootH, name)             -> Promise<string|null>      (object URL, cached per root)
      UtzBuilders.logoDataUrl(rootH, name, maxPx)  -> Promise<string|null>      (for PDFs)
      UtzBuilders.contractorOf(projectH)           -> Promise<string>           (project-meta.json "contractor", "" if none)
-     UtzBuilders.mount(el, rootH, name)           -> shows the logo in/next to a header element (adds <img class="utz-builder-logo">)
+     UtzBuilders.mount(el, rootH, name)           -> shows the logo in/next to a header element (adds <img class="utz-builder-logo">);
+                                                     an element carrying data-utz-top="screenA,screenB" (the ids of the project screens)
+                                                     puts it at the FAR RIGHT OF THE TOP BAR instead (<img class="utz-top-builder"> in the
+                                                     <header>, shown only while one of those screens is up and the project has a logo)
+     UtzBuilders.logoFileHandle(rootH, name)      -> Promise<FileSystemFileHandle>  (logos/ first, then the root) -- company-logo.png etc.
+     UtzBuilders.migrate(rootH)                   -> Promise<number>           (Projects only: copies root-level logo files into logos/)
      UtzBuilders.forget(rootH)                    -> drops the caches (after a save)
    Plain ES5. */
 (function(){
@@ -115,8 +124,18 @@ window.__pdfImportLibFailed = false;
     return h.getFileHandle(name, { create: false }).then(function(fh){ return fh.getFile(); }).then(function(f){ return f.text(); });
   }
   function notFound(err){ return !!(err && (err.name === "NotFoundError" || err.name === "TypeMismatchError")); }
+  var LOGOS = "logos";
+  function logosDir(rootH, create){
+    if (!rootH || typeof rootH.getDirectoryHandle !== "function"){ var e = new Error("no logos folder"); e.name = "NotFoundError"; return Promise.reject(e); }
+    return rootH.getDirectoryHandle(LOGOS, { create: !!create });
+  }
+  // the file `name` as a handle: logos/ first, the Projects root as the fallback (older layouts, test stand-ins)
+  function logoFileHandle(rootH, name){
+    return logosDir(rootH, false).then(function(d){ return d.getFileHandle(name, { create: false }); }).then(null, function(){ return rootH.getFileHandle(name, { create: false }); });
+  }
+  function readLogoText(rootH, name){ return logoFileHandle(rootH, name).then(function(fh){ return fh.getFile(); }).then(function(f){ return f.text(); }); }
   function readDoc(rootH){
-    return readText(rootH, FILE).then(function(t){
+    return readLogoText(rootH, FILE).then(function(t){
       var d = JSON.parse(t);
       if (!d || typeof d !== "object" || !Array.isArray(d.builders)) throw new Error("utzline-builders.json isn't the expected shape");
       d.builders = d.builders.filter(function(b){ return b && typeof b.name === "string" && b.name.trim(); });
@@ -158,15 +177,17 @@ window.__pdfImportLibFailed = false;
     name = String(name || "").trim();
     if (!name) return Promise.reject(new Error("The builder needs a name"));
     return readDoc(rootH).then(function(d){
-      var logoName = null;
-      var p = file ? downscale(file, 600).then(function(b){ logoName = PREFIX + slug(name) + ".png"; return writeBlob(rootH, logoName, b); }) : Promise.resolve();
-      return p.then(function(){
-        var found = null;
-        d.builders.forEach(function(b){ if (norm(b.name) === norm(name)) found = b; });
-        if (!found){ found = { name: name, logo: "", addedBy: by || "", addedAt: new Date().toISOString() }; d.builders.push(found); }
-        if (logoName){ found.logo = logoName; found.logoBy = by || ""; found.logoAt = new Date().toISOString(); }
-        d.schemaVersion = 1; d.updatedAt = new Date().toISOString();
-        return writeText(rootH, FILE, JSON.stringify(d, null, 2)).then(function(){ forget(rootH); return { name: found.name, logo: found.logo || "" }; });
+      return logosDir(rootH, true).then(function(dir){
+        var logoName = null;
+        var p = file ? downscale(file, 600).then(function(b){ logoName = PREFIX + slug(name) + ".png"; return writeBlob(dir, logoName, b); }) : Promise.resolve();
+        return p.then(function(){
+          var found = null;
+          d.builders.forEach(function(b){ if (norm(b.name) === norm(name)) found = b; });
+          if (!found){ found = { name: name, logo: "", addedBy: by || "", addedAt: new Date().toISOString() }; d.builders.push(found); }
+          if (logoName){ found.logo = logoName; found.logoBy = by || ""; found.logoAt = new Date().toISOString(); }
+          d.schemaVersion = 1; d.updatedAt = new Date().toISOString();
+          return writeText(dir, FILE, JSON.stringify(d, null, 2)).then(function(){ forget(rootH); return { name: found.name, logo: found.logo || "" }; });
+        });
       });
     });
   }
@@ -181,7 +202,7 @@ window.__pdfImportLibFailed = false;
     if (!cache[k]) cache[k] = { list: null, urls: {} };
     if (!cache[k].urls[n]) cache[k].urls[n] = entryFor(rootH, name).then(function(b){
       if (!b || !b.logo) return null;
-      return rootH.getFileHandle(b.logo, { create: false }).then(function(fh){ return fh.getFile(); }).then(function(f){
+      return logoFileHandle(rootH, b.logo).then(function(fh){ return fh.getFile(); }).then(function(f){
         if (f instanceof Blob) return URL.createObjectURL(f);
         // a stand-in file object (tests, some wrappers): build a Blob from its bytes
         return f.arrayBuffer().then(function(ab){ return URL.createObjectURL(new Blob([ab], { type: "image/png" })); });
@@ -214,6 +235,7 @@ window.__pdfImportLibFailed = false;
   // el: a header element (or a container); the logo goes in a <img class="utz-builder-logo"> inside it (kept, updated, hidden)
   function mount(el, rootH, name){
     if (!el) return Promise.resolve(null);
+    if (el.hasAttribute && el.hasAttribute("data-utz-top")) return mountTop(el, rootH, name);
     var img = el.querySelector(":scope > img.utz-builder-logo");
     if (!img){ img = document.createElement("img"); img.className = "utz-builder-logo"; img.alt = ""; img.hidden = true; el.appendChild(img); }
     var token = (img.__utzToken = (img.__utzToken || 0) + 1);
@@ -225,15 +247,203 @@ window.__pdfImportLibFailed = false;
       return url;
     });
   }
-  window.UtzBuilders = { FILE: FILE, PREFIX: PREFIX, list: list, add: add, setLogo: setLogo, logoUrl: logoUrl, logoDataUrl: logoDataUrl, contractorOf: contractorOf, mount: mount, forget: forget, slug: slug, downscale: downscale };
+  // ---- the logo at the far right of the top bar (2026-10-02: "builder logo on the far right of the top bar") ----
+  // one <img class="utz-top-builder"> in the app's <header> (the last flex item, just left of the day / night button);
+  // el's data-utz-top lists the ids of the project screens it belongs to -- it shows while one of them is up.
+  var watching = {};
+  function topImg(){
+    var header = document.querySelector("header");
+    if (!header) return null;
+    var img = header.querySelector(":scope > img.utz-top-builder");
+    if (!img){
+      img = document.createElement("img"); img.className = "utz-top-builder"; img.alt = ""; img.hidden = true;
+      header.insertBefore(img, header.querySelector(":scope > .utz-theme-btn"));
+    }
+    return img;
+  }
+  function screenUp(id){ var sc = document.getElementById(id); return !!(sc && !sc.hidden && sc.getClientRects().length); }
+  function refreshTop(){
+    var img = topImg();
+    if (!img) return;
+    var ids = img.__utzScreens || [], up = !ids.length;
+    for (var i = 0; i < ids.length && !up; i++) if (screenUp(ids[i])) up = true;
+    img.hidden = !(up && img.__utzName && img.getAttribute("src"));
+  }
+  function watchScreens(ids){
+    ids.forEach(function(id){
+      var sc = document.getElementById(id);
+      if (!sc || watching[id] === sc || typeof MutationObserver === "undefined") return;
+      watching[id] = sc;
+      new MutationObserver(function(){ refreshTop(); }).observe(sc, { attributes: true, attributeFilter: ["class", "hidden", "style"] });
+    });
+  }
+  function mountTop(el, rootH, name){
+    var img = topImg();
+    if (!img) return Promise.resolve(null);
+    var ids = String(el.getAttribute("data-utz-top") || "").split(/[\s,]+/).filter(Boolean);
+    img.__utzScreens = ids; watchScreens(ids);
+    var token = (img.__utzToken = (img.__utzToken || 0) + 1);
+    img.__utzName = name || "";
+    img.hidden = true;
+    if (!name){ img.removeAttribute("src"); return Promise.resolve(null); }
+    img.title = name;
+    return logoUrl(rootH, name).then(function(url){
+      if (img.__utzToken !== token) return url;
+      if (url) img.src = url; else img.removeAttribute("src");
+      refreshTop();
+      return url;
+    });
+  }
+  // Projects only: copy the logo files an older layout left at the Projects root into logos/ (copies, never moves or deletes)
+  function migrate(rootH){
+    if (!rootH || typeof rootH.values !== "function") return Promise.resolve(0);
+    var found = [], it = rootH.values();
+    function collect(){
+      return it.next().then(function(r){
+        if (r.done) return;
+        var e = r.value;
+        if (e && e.kind === "file" && (e.name === "company-logo.png" || e.name === FILE || e.name.indexOf(PREFIX) === 0)) found.push(e);
+        return collect();
+      });
+    }
+    return collect().then(function(){
+      if (!found.length) return 0;
+      return logosDir(rootH, true).then(function(dir){
+        var n = 0;
+        function next(i){
+          if (i >= found.length) return n;
+          var e = found[i];
+          return dir.getFileHandle(e.name, { create: false }).then(function(){ return next(i + 1); }, function(err){
+            if (!notFound(err)) throw err;
+            return e.getFile().then(function(f){ return writeBlob(dir, e.name, f); }).then(function(){ n++; return next(i + 1); });
+          });
+        }
+        return next(0);
+      });
+    }).then(function(n){ if (n) forget(rootH); return n; }, function(){ return 0; });
+  }
+  window.UtzBuilders = { FILE: FILE, PREFIX: PREFIX, list: list, add: add, setLogo: setLogo, logoUrl: logoUrl, logoDataUrl: logoDataUrl, contractorOf: contractorOf, mount: mount, forget: forget, slug: slug, downscale: downscale, logoFileHandle: logoFileHandle, logosDir: logosDir, migrate: migrate, LOGOS: LOGOS };
 })();
 </script>
 <style>
   /* ---- UTZLINE builder logo on project headers (2026-09-30) -- see shared/builders/builders.js ---- */
-  img.utz-builder-logo{ height: 30px; max-width: 140px; width: auto; object-fit: contain; vertical-align: middle; margin-left: 10px; border-radius: 4px; background: #fff; padding: 2px; }
+  img.utz-builder-logo{ height: 30px; max-width: 240px; width: auto; flex: 0 0 auto; box-sizing: border-box; object-fit: contain; vertical-align: middle; margin-left: 10px; border-radius: 4px; background: #fff; padding: 2px; } /* (2026-10-01) the window stretches to suit the logo, same height */
   img.utz-builder-logo[hidden]{ display: none; }
+  /* ---- the logo at the far right of the top bar (2026-10-02) ---- */
+  img.utz-top-builder{ order: 99; height: 30px; max-width: 200px; width: auto; flex: 0 0 auto; box-sizing: border-box; object-fit: contain; border-radius: 4px; background: #fff; padding: 2px; margin-left: 4px; }
+  img.utz-top-builder[hidden]{ display: none; }
+  @media (max-width: 700px){ img.utz-top-builder{ max-width: 110px; } }
 </style>
 <!-- UTZLINE-BUILDERS END -->
+<!-- UTZLINE-DROP BEGIN (generated from shared/drop -- don't edit here) -->
+<script>
+/* ============================== UTZLINE drag and drop (2026-10-02) ==============================
+   Andrew (2026-10-01): "i want the entire system to be drag and drop (no file selector) for all shop drawings,
+   job notes, orders, workorders, (basically everything)". Every place a file comes in is a drop zone -- no Browse
+   button, no click-to-choose. One tiny module, inlined into every app that takes a file:
+     UtzDrop.zone(el, onFiles, opts)   makes `el` a drop target: lit (class utz-drop-over) while a file is dragged over it,
+                                       onFiles(arrayOfFiles) when one is dropped. opts: { accept: ["pdf","png"] | function(file),
+                                       multiple: false (only the first file is passed), reject: function(files) (nothing acceptable),
+                                       picker: <input type=file> (hidden, kept ONLY for the tablet fallback below) }
+     UtzDrop.feed(input, files)        hands dropped files to an existing hidden <input type=file> change handler unchanged
+     UtzDrop.wire(el, input, opts)     zone + feed in one: the input's own change handler receives the drop
+   Tablets: a long press on a zone opens the system picker, but only on a touch-only device (pointer: coarse and no hover) --
+   where a drop from a file manager is not possible. On a PC / laptop there is no picker anywhere.
+   A file dropped OUTSIDE a zone is ignored (it never navigates the window away from the app and loses the work).
+   Plain ES5. */
+(function(){
+  "use strict";
+  if (window.UtzDrop) return;
+  function hasFiles(e){
+    var t = e && e.dataTransfer && e.dataTransfer.types;
+    if (!t) return false;
+    for (var i = 0; i < t.length; i++) if (t[i] === "Files") return true;
+    return false;
+  }
+  function touchOnly(){
+    try { return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(hover: hover)").matches); } catch (e) { return false; }
+  }
+  function ext(name){ var m = /\.([A-Za-z0-9]+)$/.exec(String(name || "")); return m ? m[1].toLowerCase() : ""; }
+  function accepts(file, accept){
+    if (!accept) return true;
+    if (typeof accept === "function") return !!accept(file);
+    var x = ext(file.name), t = String(file.type || "").toLowerCase();
+    for (var i = 0; i < accept.length; i++){
+      var a = String(accept[i]).toLowerCase();
+      if (a === x) return true;
+      if (a === "image" && t.indexOf("image/") === 0) return true;
+      if (a === "pdf" && t === "application/pdf") return true;
+    }
+    return false;
+  }
+  // touch-only tablets: a long press opens the system picker (the one place a file selector still exists). `picker` is the hidden
+  // <input type=file>, or anything with a click() (an app that wants a confirm first passes { click: fn }).
+  function longPress(el, picker){
+    if (!el || !picker) return;
+    var timer = null;
+    function clear(){ if (timer){ clearTimeout(timer); timer = null; } }
+    el.addEventListener("pointerdown", function(e){
+      if (!touchOnly() || e.pointerType === "mouse") return;
+      clear(); timer = setTimeout(function(){ timer = null; try { picker.value = ""; picker.click(); } catch (x) {} }, 650);
+    });
+    ["pointerup", "pointercancel", "pointermove", "pointerleave"].forEach(function(t){ el.addEventListener(t, clear); });
+  }
+  function zone(el, onFiles, opts){
+    if (!el || el.__utzDrop) return el;
+    opts = opts || {};
+    el.__utzDrop = true;
+    el.setAttribute("data-utz-drop", "1");
+    var depth = 0;
+    function over(e){
+      if (!hasFiles(e)) return;
+      e.preventDefault(); e.stopPropagation();
+      try { e.dataTransfer.dropEffect = "copy"; } catch (x) {}
+      el.classList.add("utz-drop-over");
+    }
+    el.addEventListener("dragenter", function(e){ if (hasFiles(e)) depth++; over(e); });
+    el.addEventListener("dragover", over);
+    el.addEventListener("dragleave", function(){ depth = Math.max(0, depth - 1); if (!depth) el.classList.remove("utz-drop-over"); });
+    el.addEventListener("drop", function(e){
+      if (!hasFiles(e)) return;
+      e.preventDefault(); e.stopPropagation();
+      depth = 0; el.classList.remove("utz-drop-over");
+      var all = Array.prototype.slice.call(e.dataTransfer.files || []);
+      var ok = all.filter(function(f){ return accepts(f, opts.accept); });
+      if (!ok.length){ if (all.length && typeof opts.reject === "function") opts.reject(all); return; }
+      if (!opts.multiple) ok = ok.slice(0, 1);
+      onFiles(ok);
+    });
+    if (opts.picker) longPress(el, opts.picker);
+    return el;
+  }
+  function feed(input, files){
+    if (!input) return;
+    try {
+      var dt = new DataTransfer();
+      for (var i = 0; i < files.length; i++) dt.items.add(files[i]);
+      input.files = dt.files;
+    } catch (e) { return; }
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  function wire(el, input, opts){
+    opts = opts || {};
+    var o = { accept: opts.accept, multiple: opts.multiple !== undefined ? opts.multiple : !!(input && input.multiple), reject: opts.reject, picker: input };
+    return zone(el, function(files){ feed(input, files); }, o);
+  }
+  // a file dropped anywhere that is NOT a zone must never navigate the window to it
+  function guard(e){ if (hasFiles(e) && !(e.target && e.target.closest && e.target.closest("[data-utz-drop]"))) e.preventDefault(); }
+  window.addEventListener("dragover", guard);
+  window.addEventListener("drop", guard);
+  window.UtzDrop = { longPress: longPress, zone: zone, feed: feed, wire: wire, hasFiles: hasFiles, touchOnly: touchOnly };
+})();
+</script>
+<style>
+  /* ---- UTZLINE drop zones (2026-10-02) -- see shared/drop/drop.js ---- */
+  .utz-drop{ border: 2px dashed var(--border, rgba(128,128,128,.5)); border-radius: 10px; padding: 14px 16px; text-align: center; font-size: 13px; color: var(--muted, var(--text-secondary, inherit)); cursor: default; background: transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+  .utz-drop b{ color: var(--text, var(--text-primary, inherit)); }
+  .utz-drop.utz-drop-over, [data-utz-drop].utz-drop-over{ outline: 3px solid var(--accent, #3b82f6); outline-offset: -3px; background: rgba(59,130,246,.14); }
+</style>
+<!-- UTZLINE-DROP END -->
 <style>
   :root{
     --surface-0:#eef0ee;
@@ -245,6 +455,7 @@ window.__pdfImportLibFailed = false;
     --text-secondary:#5c6864;
     --accent:#c8391c;
     --accent-ink:#9c2c14;
+    --on-accent:#fff;
     --accent-soft:#f4ded8;
     --shadow:0 2px 10px rgba(20,26,24,0.12), 0 1px 2px rgba(20,26,24,0.08);
     --focus:#1e5f8c;
@@ -383,6 +594,8 @@ window.__pdfImportLibFailed = false;
     scrollbar-color:var(--border-strong) transparent;
   }
   .toolbar-row > *{flex:none;}
+  .top-builder{ margin-left:auto; position:sticky; right:0; align-self:stretch; display:flex; align-items:center; padding-left:10px; background:var(--surface-1); z-index:3; }
+  .top-builder img.utz-builder-logo{ margin-left:0; height:34px; max-width:170px; }
   /* (2026-09-25) Explicit touch behaviour for the toolbar on Android: the
      rows may be finger-scrolled sideways, and the controls themselves are
      plain tap targets (no double-tap-zoom / long-press gestures). */
@@ -421,7 +634,7 @@ window.__pdfImportLibFailed = false;
   .ibtn:hover{background:var(--surface-2);}
   .ibtn:active{background:var(--border);}
   .ibtn[disabled]{opacity:0.35; cursor:default; pointer-events:none;}
-  .ibtn.active{background:var(--accent); color:#fff; border-color:var(--accent-ink);}
+  .ibtn.active{background:var(--accent); color:var(--on-accent,#fff); border-color:var(--accent-ink);}
   .ibtn:focus-visible, button:focus-visible, input:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
   /* (v45.10, 2026-09-24) A small always-visible count badge on
      #overlayLayersBtn -- Andrew: "we still dont have the layer button for
@@ -439,7 +652,7 @@ window.__pdfImportLibFailed = false;
   .ibtn-badge{
     position:absolute; top:-4px; right:-4px;
     min-width:15px; height:15px; padding:0 3px;
-    border-radius:999px; background:var(--accent); color:#fff;
+    border-radius:999px; background:var(--accent); color:var(--on-accent,#fff);
     font-size:10px; font-weight:700; line-height:15px; text-align:center;
     pointer-events:none; box-shadow:0 0 0 1.5px var(--surface-0);
   }
@@ -452,7 +665,7 @@ window.__pdfImportLibFailed = false;
     font-size:12.5px; font-weight:500; cursor:pointer;
   }
   .tbtn:hover{background:var(--surface-2);}
-  .tbtn.primary{background:var(--accent); border-color:var(--accent-ink); color:#fff;}
+  .tbtn.primary{background:var(--accent); border-color:var(--accent-ink); color:var(--on-accent,#fff);}
   .tbtn.primary:hover{background:var(--accent-ink);}
   .tbtn svg{width:15px; height:15px;}
   /* "Jump to any room" dropdown (#roomJumpSelect) -- same height/border/
@@ -673,6 +886,8 @@ window.__pdfImportLibFailed = false;
   .layer-row.selected{background:var(--accent-soft);}
   .layer-row .layer-icon{width:15px; height:15px; flex:none; color:var(--text-secondary);}
   .layer-row.hidden-obj{opacity:0.45;}
+  .layer-row .layer-del{ margin-left:auto; flex:none; font:inherit; font-size:12px; padding:3px 9px; border-radius:6px; border:1px solid var(--border-strong); background:var(--surface-1); color:var(--text-primary); cursor:pointer; }
+  .layer-row .layer-del:hover{ background:var(--surface-2); }
   .layer-row .layer-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .layer-row .lbtn{
     width:20px; height:20px; flex:none; border:none; background:transparent; cursor:pointer;
@@ -739,6 +954,11 @@ window.__pdfImportLibFailed = false;
     z-index:45;
     transition:opacity .18s ease, transform .18s ease;
   }
+  /* (v83) Andrew: "this export floor plan button doesnt do anything untill you go back to the floor plan" -- the export popup
+     (and its toast) were drawn UNDER the joinery summary screen (z-index 60), so the button looked dead until the screen was closed.
+     These sit above every full screen (60 / 80), the toast above them. */
+  #fxDoneBackdrop{ z-index:90; }
+  .toast{ z-index:100; }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
   /* ---------- lock/unlock/edit popover (right-click / long-press on an item) ----------
@@ -785,7 +1005,7 @@ window.__pdfImportLibFailed = false;
      the plain neutral pill above; there's no rework-style destructive row
      left in this popover any more (removed 2026-09-24), so no red variant
      is needed here. */
-  .lock-popover.lock-popover-accent{ background:var(--accent); border-color:var(--accent-ink); color:#fff; }
+  .lock-popover.lock-popover-accent{ background:var(--accent); border-color:var(--accent-ink); color:var(--on-accent,#fff); }
   .lock-popover.lock-popover-accent:hover{ background:var(--accent-ink); }
   /* (v60) "View rework" is Viewer-only -- never shown in Site Measure. */
   body:not(.viewer-mode) #viewProjectReworkBtn, body:not(.viewer-mode) #joineryItemViewReworkBtn{ display:none !important; }
@@ -869,7 +1089,7 @@ window.__pdfImportLibFailed = false;
     border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text-primary);
   }
   .mbtn:hover{ background:var(--surface-0); }
-  .mbtn-accent{ background:var(--accent); border-color:var(--accent-ink); color:#fff; }
+  .mbtn-accent{ background:var(--accent); border-color:var(--accent-ink); color:var(--on-accent,#fff); }
   .mbtn-accent:hover{ background:var(--accent-ink); }
   /* "View rework" (2026-09-27) -- Andrew, verbatim: "add a view rework
      button if a joinery item has a rework, make the text red on this
@@ -1056,6 +1276,9 @@ window.__pdfImportLibFailed = false;
   .vs-meta{ display:grid; grid-template-columns: 150px minmax(0,1fr); gap:6px 12px; margin:0; font-size:14px; }
   .vs-meta dt{ color:var(--text-secondary); }
   .vs-meta dd{ margin:0; color:var(--text-primary); overflow-wrap:anywhere; }
+  .vs-pill.ok{ color:var(--rw-green); }
+  .vs-pill.warn{ color:#d97706; }
+  .vs-pill.sent{ color:var(--accent, #2563eb); }
   .vs-pill{ display:inline-block; border:1.5px solid currentColor; border-radius:8px; padding:1px 8px; font-size:12px; font-weight:700; margin-left:6px; }
   .vs-list{ display:flex; flex-direction:column; gap:6px; }
   .vs-row{ display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface-0); font-size:14px; }
@@ -1237,7 +1460,7 @@ window.__pdfImportLibFailed = false;
   .measure-pad button.mp-hit{ filter:brightness(0.82); transform:scale(0.96); }
   .measure-pad button.mp-quick{ font-size:14px; background:var(--accent-soft); color:var(--accent-ink); border-color:var(--accent); }
   .measure-pad button.mp-fn{ font-size:14px; }
-  .measure-pad button.mp-done{ grid-column:span 2; background:var(--accent); border-color:var(--accent-ink); color:#fff; font-size:15px; }
+  .measure-pad button.mp-done{ grid-column:span 2; background:var(--accent); border-color:var(--accent-ink); color:var(--on-accent,#fff); font-size:15px; }
 
   svg text{cursor:default;}
   .drop-active{outline:3px dashed var(--accent); outline-offset:-8px;}
@@ -1408,12 +1631,14 @@ window.__pdfImportLibFailed = false;
       --accent:#3db2ff;
       --accent-ink:#99d6ff;
       --accent-soft:#1c2d3a;
+      --on-accent:#06131c; /* (2026-10-02) white on this bright blue was 2.3:1 */
     }
   }
   :root[data-theme="dark"] body.viewer-mode{
     --accent:#3db2ff;
     --accent-ink:#99d6ff;
     --accent-soft:#1c2d3a;
+    --on-accent:#06131c;
   }
 /* (v69) Projects on this device -- see deviceProjects in the script */
 .dp-bar{ background:var(--surface-1); border:1px solid var(--border-strong); border-left:4px solid var(--accent); border-radius:10px; padding:10px 12px; margin:0 0 12px; display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
@@ -1571,6 +1796,11 @@ window.__pdfImportLibFailed = false;
     <select class="tselect" id="roomJumpSelect" title="Jump straight to any level or room in this project" style="display:none;">
       <option value="">Jump to…</option>
     </select>
+    <!-- (v84) Viewer only: Andrew, "viewer to have the room list menu as an option". Lists this level's rooms (from its room markers); tap one to go to it on the plan. -->
+    <button class="tbtn" id="roomListBtn" title="This level's rooms — tap one to go to it on the plan" style="display:none;">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14"/><path d="M3 10h14"/><path d="M3 15h14"/></svg>
+      Room list
+    </button>
     <button class="tbtn primary" id="saveBtn" title="Save everything in one go: a plan file (.utzline.json — reopen it later to keep adjusting) AND a flattened, timestamped PDF (labels and lines stay true vector, so they're never blurry no matter how far you zoom in, but it can't be reopened here for further editing). With a project/level open, this writes straight into that level's own folders.">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 3.5h9.6l3.4 3.4v9.1a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1v-11.5a1 1 0 0 1 1-1z"/><path d="M6 3.5v4.2h6v-4.2"/><rect x="6" y="11.3" width="8" height="5.2" rx="0.6"/></svg>
       Save
@@ -1633,6 +1863,8 @@ window.__pdfImportLibFailed = false;
     <button class="ibtn" id="exitAppBtn" title="Exit app" aria-label="Exit app" style="display:none;">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.2H4.8a1 1 0 0 0-1 1v11.6a1 1 0 0 0 1 1H8"/><path d="M7.8 10h8.4M12.8 6.2l3.8 3.8-3.8 3.8"/></svg>
     </button>
+    <!-- (v84) Andrew: "put the builder logo on the far right of the top bar". Pinned to the right edge even while the row is scrolled sideways. -->
+    <div class="top-builder" id="topBuilderLogo" style="display:none;"></div>
     </div><!-- /toolbarRowFile -->
 
     <div class="toolbar-row" id="toolbarRowDraw">
@@ -2022,6 +2254,16 @@ window.__pdfImportLibFailed = false;
          from here along with promptAddRoomAt/showJoineryItemDialog/
          showProjectInfoDialog. -->
 
+    <div class="modal-backdrop" id="roomListBackdrop" hidden>
+      <div class="modal-box share-choice-box" role="dialog" aria-modal="true" aria-labelledby="roomListLabel">
+        <p id="roomListLabel">Rooms on this level:</p>
+        <div class="share-choice-options" id="roomListOptions" style="max-height:60vh; overflow:auto;"></div>
+        <div class="modal-actions">
+          <button class="mbtn" id="roomListClose">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-backdrop" id="shareChoiceBackdrop" hidden>
       <div class="modal-box share-choice-box" role="dialog" aria-modal="true" aria-labelledby="shareChoiceLabel">
         <p id="shareChoiceLabel">Share as:</p>
@@ -2062,8 +2304,8 @@ window.__pdfImportLibFailed = false;
             <span class="share-choice-sub">Opens the camera right here in the app — won't lose your place if the tablet is low on memory</span>
           </button>
           <button type="button" class="share-choice-opt" id="insertSourceFileBtn">
-            <span class="share-choice-title">Choose file</span>
-            <span class="share-choice-sub">An existing photo, PDF, or your device's own camera app</span>
+            <span class="share-choice-title">From a file</span>
+            <span class="share-choice-sub">Drag a photo or PDF onto the plan (or paste one with Ctrl+V) — a tablet opens its file list</span>
           </button>
         </div>
         <div class="modal-actions">
@@ -2125,12 +2367,13 @@ window.__pdfImportLibFailed = false;
         <div class="card"><h2 class="section-title">Site Measure (check measures)</h2><div id="vsOverlays" class="vs-list"></div></div>
         <div class="card" id="vsShopCard">
           <h2 class="section-title">Shop drawings</h2>
+          <div id="vsShopStatusLine" style="margin:0 0 8px;font-size:14px;"></div>
           <!-- (2026-10-01) Andrew: "the returned need to be split to returned to resubmit, or approved" -->
           <p class="sub" style="font-weight:600;">Sent</p><div id="vsShopSent" class="vs-list" data-shop-kind="sent"></div>
           <p class="sub" style="font-weight:600;margin-top:12px;">Returned to resubmit</p><div id="vsShopReturned" class="vs-list" data-shop-kind="returned"></div>
           <p class="sub" style="font-weight:600;margin-top:12px;">Approved</p><div id="vsShopApproved" class="vs-list" data-shop-kind="approved"></div>
           <!-- (2026-10-01) "make it so that drawings can be added there also": a PDF dropped anywhere on this card (on a part: that kind), or the button -->
-          <div class="vs-drop" id="vsShopDrop" tabindex="0" role="button">Drop a shop drawing PDF here, or tap to add one</div>
+          <div class="vs-drop" id="vsShopDrop" tabindex="0" role="button">Drop a shop drawing PDF here</div>
           <div class="row" style="margin-top:10px;"><button class="btn" id="vsAddShopDrawingBtn" type="button">Add shop drawing</button></div>
         </div>
         <div class="card"><h2 class="section-title">Job notes</h2><div id="vsJobNotes" class="vs-list"></div></div>
@@ -2140,18 +2383,7 @@ window.__pdfImportLibFailed = false;
         <div class="card"><h2 class="section-title">Sub orders</h2><div id="vsSubOrders" class="vs-list"></div></div>
       </div>
     </div>
-    <!-- (v76) after a shop drawing is saved in the Viewer: "export the floor plan?" -->
-    <div class="modal-backdrop" id="fxAskBackdrop" hidden>
-      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="fxAskTitle">
-        <p id="fxAskTitle" class="joinery-item-title">Job note added</p>
-        <p class="sub" id="fxAskText" style="color:var(--text-secondary);font-size:14px;margin:0 0 14px;"></p>
-        <div class="modal-actions">
-          <button class="mbtn" id="fxAskNoBtn">Not now</button>
-          <button class="mbtn mbtn-accent" id="fxAskYesBtn">Export floor plan</button>
-        </div>
-      </div>
-    </div>
-    <!-- (v76) the exported floor plan: saved in the project; open / share it -->
+    <!-- (v83) the job note just added (plan pages at its end) or the exported floor plan: open / share / print it -->
     <div class="modal-backdrop" id="fxDoneBackdrop" hidden>
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="fxDoneTitle">
         <p id="fxDoneTitle" class="joinery-item-title">Floor plan exported</p>
@@ -2159,6 +2391,7 @@ window.__pdfImportLibFailed = false;
         <div class="modal-actions">
           <button class="mbtn" id="fxDoneCloseBtn">Close</button>
           <button class="mbtn" id="fxDoneShareBtn" hidden>Share</button>
+          <button class="mbtn" id="fxDonePrintBtn">Print entire job note</button>
           <button class="mbtn mbtn-accent" id="fxDoneOpenBtn">Open PDF</button>
         </div>
       </div>
@@ -2204,10 +2437,10 @@ window.__pdfImportLibFailed = false;
       <div class="modal-box jobnote-box" role="dialog" aria-modal="true" aria-labelledby="jobNoteAddTitle">
         <p id="jobNoteAddTitle" class="joinery-item-title">Add job note</p>
         <p id="jobNoteAddSubtitle" class="joinery-item-subtitle"></p>
-        <div class="jobnote-dropzone" id="jobNoteDropzone" tabindex="0" role="button" aria-label="Drag a PDF here, or tap to choose a file">
+        <div class="jobnote-dropzone" id="jobNoteDropzone" tabindex="0" role="button" aria-label="Drag a PDF here">
           <svg viewBox="0 0 20 20" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 15v1.5A1.5 1.5 0 0 0 5.5 18h9a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
           <span class="jobnote-dropzone-title">Drag a PDF here</span>
-          <span>or tap to choose a file</span>
+          <span>PDF files only</span>
         </div>
         <p class="jobnote-status" id="jobNoteAddStatus"></p>
         <p class="jobnote-empty" style="padding:4px 2px 0;">Every page gets a light grey FOR CONSTRUCTION watermark.</p>
@@ -2256,10 +2489,10 @@ window.__pdfImportLibFailed = false;
         </div>
         <p class="shopdrawing-add-info" id="shopDrawingSentInfo"></p>
         <div class="shopdrawing-add-info" id="shopDrawingReturnInfo" hidden></div>
-        <div class="jobnote-dropzone" id="shopDrawingDropzone" tabindex="0" role="button" aria-label="Drag a PDF here, or tap to choose a file">
+        <div class="jobnote-dropzone" id="shopDrawingDropzone" tabindex="0" role="button" aria-label="Drag a PDF here">
           <svg viewBox="0 0 20 20" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 15v1.5A1.5 1.5 0 0 0 5.5 18h9a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
           <span class="jobnote-dropzone-title" id="shopDrawingDropTitle">Drag a PDF here</span>
-          <span id="shopDrawingDropSub">or tap to choose a file</span>
+          <span id="shopDrawingDropSub">PDF files only</span>
         </div>
         <p class="jobnote-status" id="shopDrawingAddStatus"></p>
         <p class="jobnote-empty" id="shopDrawingNameNote" style="padding:4px 2px 0;"></p>
@@ -4606,7 +4839,7 @@ window.__pdfImportLibFailed = false;
        https://utzy79.github.io/UTZLINE-Delivery-ITP/?utz=item&p=<project folder>&l=<level>&r=<room>&j=<code>
      (app: "delivery" (default) | "install" | "manufacture" picks which ITP a phone camera opens; every ITP's
      own Scan QR button reads the same query whichever app the link names, and opens the item in itself.)
-   UtzQr.parseItemLink(text) -> { project, level, room, code } | null
+   UtzQr.parseItemLink(text) -> { project, level, room, code, action } | null   (action: "" or "rework")
    UtzQr.modules(text, ecl) -> { n, isDark(r, c) }      (qrcode-generator by Kazuhiko Arase, MIT, below)
    UtzQr.dataUrl(text, px, opts) -> a PNG data URL, quiet zone included
    UtzQr.svg(text, size) -> an <svg> string
@@ -6910,7 +7143,8 @@ window.__pdfImportLibFailed = false;
   function itemLink(o){
     o = o || {};
     var base = BASES[o.app] || BASES.delivery;
-    return base + "?utz=item&p=" + enc(o.project) + "&l=" + enc(o.level) + "&r=" + enc(o.room) + "&j=" + enc(o.code);
+    // (2026-10-01) o.action: "rework" -> the link also carries a=rework: the app opens the item and goes straight to Add rework
+    return base + "?utz=item&p=" + enc(o.project) + "&l=" + enc(o.level) + "&r=" + enc(o.room) + "&j=" + enc(o.code) + (o.action ? "&a=" + enc(o.action) : "");
   }
   function parseItemLink(text){
     text = String(text || "").trim();
@@ -6924,7 +7158,7 @@ window.__pdfImportLibFailed = false;
       out[k] = v;
     }
     if (out.utz !== "item" || !out.p || !out.l) return null;
-    return { project: out.p, level: out.l, room: out.r || "", code: out.j || "" };
+    return { project: out.p, level: out.l, room: out.r || "", code: out.j || "", action: out.a || "" };
   }
   function modules(text, ecl){
     var qr = qrcode(0, ecl || "M");
@@ -6943,7 +7177,7 @@ window.__pdfImportLibFailed = false;
     var c = document.createElement("canvas"); c.width = size; c.height = size;
     var ctx = c.getContext("2d");
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle = opts.dark || "#000000"; // (2026-10-01) opts.dark: the colour of the dark modules (the red "Add rework here" code)
     for (var r = 0; r < m.n; r++) for (var col = 0; col < m.n; col++) if (m.isDark(r, col)) ctx.fillRect((col + quiet) * cell, (r + quiet) * cell, cell, cell);
     var url = c.toDataURL("image/png");
     c.width = c.height = 0;
@@ -7040,6 +7274,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       S.locked = !ok;
       S.staleName = ok ? "" : savedName;
       writeSession({ name: ok ? savedName : "", hiddenAt: 0 });
+      if (ok && S.holding) hideGate();                 // already signed in on this visit: no cover after all
+      else if (!ok) drawHold();                        // (no-op when the early cover is already up)
     }
     if (S.locked && (savedName === S.staleName) && savedName !== S.pendingName) return "";
     return savedName;
@@ -7078,6 +7314,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var np = document.getElementById("numberpadBackdrop");
       (np && np.parentNode ? np.parentNode : document.body).appendChild(g);
       S.gate = g;
+    } else if (S.holding){
+      // the early "Opening..." cover becomes the names list: move it next to the app's own dialogs (see above)
+      var np2 = document.getElementById("numberpadBackdrop");
+      if (np2 && np2.parentNode && S.gate.parentNode !== np2.parentNode) np2.parentNode.appendChild(S.gate);
+      S.gate.setAttribute("aria-label", "Sign in"); S.holding = false;
     }
     var g2 = S.gate;
     g2.innerHTML = "";
@@ -7103,7 +7344,26 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function hideGate(){
     if (S.gate){ S.gate.hidden = true; if (S.gate.parentNode) S.gate.parentNode.removeChild(S.gate); S.gate = null; }
     document.body.classList.remove("utz-signin-on");
-    S.showing = false;
+    S.showing = false; S.holding = false;
+  }
+  /* (2026-10-01) Andrew: "the login splash screen comes up after the app has started, this could cause issues ... it opens the app, then
+     opens the user selector just after, so someone could maybe make changes before logging in." The names list can only be drawn once the
+     app has read utzline-users.csv (an async folder read), so until then the app sat there live. Now a plain "Opening..." cover goes up
+     the moment this module runs (tablets / phones, unless this is a reload of a page that is already signed in) and is swapped for the
+     names list when it arrives -- or dropped when the app is already signed in, there are no names yet, or the names list hasn't arrived in 15 s
+     (so a fault can never lock anyone out of the app). */
+  function drawHold(){
+    if (S.gate || !document.body) return;
+    ensureStyle();
+    var g = document.createElement("div");
+    g.id = "utzSignIn"; g.setAttribute("role", "dialog"); g.setAttribute("aria-modal", "true"); g.setAttribute("aria-label", "Opening");
+    var card = document.createElement("div"); card.className = "usi-card";
+    var h = document.createElement("h1"); h.textContent = "UTZLINE";
+    var p = document.createElement("p"); p.textContent = "Opening…";
+    card.appendChild(h); card.appendChild(p); g.appendChild(card);
+    document.body.appendChild(g);
+    document.body.classList.add("utz-signin-on");
+    S.gate = g; S.holding = true;
   }
   function unlocked(){
     S.locked = false; S.staleName = ""; S.pendingName = "";
@@ -7178,6 +7438,20 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (document.visibilityState === "hidden") onHide(); else onShow();
   });
   window.addEventListener("pagehide", onHide);
+
+  // the early cover (see drawHold): tablets / phones only; not for a reload / back-forward of a page that is already signed in
+  (function earlyHold(){
+    if (!isLight()) return;
+    var s0 = readSession();
+    if (sameVisit() && s0 && s0.name) return;
+    if (document.body) drawHold();
+    else {
+      // this module sits in the page head: put the cover up the moment <body> exists (before the page has painted its own content)
+      try { var mo = new MutationObserver(function(){ if (document.body){ mo.disconnect(); drawHold(); } }); mo.observe(document.documentElement, { childList: true }); } catch (e) {}
+      document.addEventListener("DOMContentLoaded", drawHold);
+    }
+    setTimeout(function(){ if (S.holding) hideGate(); }, 15000);
+  })();
 
   window.UtzSignIn = {
     init: function(adapter){ A = adapter || null; if (S.booted && S.locked) check(); },
@@ -7374,6 +7648,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
 
   /* ------------------------------ reading reworks ------------------------------ */
   // Keeps everything but the photo/snapshot pixels (4 GB tablets).
+  // (2026-10-02) Andrew: "the rework register shows where the rework was logged and by who" -- the app that created an
+  // entry is stored on it (createdApp, e.g. "UTZLINE Install ITP"); shown without the "UTZLINE " prefix. Entries logged
+  // before this change have none and show a dash (no guessing).
+  function appLabel(app){ return String(app || "").replace(/^UTZLINE\s+/i, ""); }
   function slimEntry(e){
     var out = {};
     Object.keys(e).forEach(function(k){ if (k !== "photos" && k !== "locationSnapshot") out[k] = e[k]; });
@@ -7624,7 +7902,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function logLines(entry, events){
     var f = fold(entry, events);
     var out = [];
-    if (entry.createdAt) out.push({ at: entry.createdAt, by: entry.createdBy || "", what: "Logged", kind: "logged", app: "" });
+    if (entry.createdAt) out.push({ at: entry.createdAt, by: entry.createdBy || "", what: "Logged", kind: "logged", app: entry.createdApp || "" });
     var skippedFirstLogged = false;
     f.changes.forEach(function(c){
       if (c.src === "file" && c.status === "logged" && !skippedFirstLogged && (!entry.createdAt || !c.at || c.at === entry.createdAt || Math.abs(new Date(c.at) - new Date(entry.createdAt)) < 5000)){
@@ -7760,7 +8038,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       ["Project No.", proj.no || "—"], ["Project", proj.name || row.project || "—"],
       ["Head Contractor / Builder", proj.contractor || "—"], ["Level", row.level || "—"],
       ["Area / Room", row.room || "—"], ["Joinery No.", row.code || "—"],
-      ["Cabinet", entry.cabinetNumber || "—"], ["Logged", [fmtDate(entry.createdAt, true), entry.createdBy || ""].filter(Boolean).join(" — ") || "—"],
+      ["Cabinet", entry.cabinetNumber || "—"], ["Logged", [fmtDate(entry.createdAt, true), entry.createdBy || "", entry.createdApp ? "in " + appLabel(entry.createdApp) : ""].filter(Boolean).join(" — ") || "—"],
       ["Current state", f.closed ? "Closed out" : stateLabel(f.status)], ["State set", [fmtDate(f.closed ? f.closed.at : f.statusAt, true), f.closed ? f.closed.by : f.statusBy].filter(Boolean).join(" — ") || "—"],
       ["Delivered to site", f.delivered ? [f.delivered.date || fmtDate(f.delivered.at), f.delivered.by || ""].filter(Boolean).join(" — ") : "Not yet"], ["Photos", String(photos.filter(function(p){ return !/^Delivery location/.test(p.caption); }).length)],
     ];
@@ -8089,7 +8367,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       return st.rows.filter(function(r){
         if (st.projectFilter && r.project !== st.projectFilter) return false;
         if (q){
-          var hay = [r.project, r.level, r.room, r.code, r.entry.cabinetNumber, r.entry.text, r.entry.createdBy].join(" ").toLowerCase();
+          var hay = [r.project, r.level, r.room, r.code, r.entry.cabinetNumber, r.entry.text, r.entry.createdBy, appLabel(r.entry.createdApp)].join(" ").toLowerCase();
           if (hay.indexOf(q) === -1) return false;
         }
         return true;
@@ -8103,6 +8381,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           case "project": return r.project; case "level": return r.level; case "room": return r.room; case "code": return r.code;
           case "cabinet": return r.entry.cabinetNumber || ""; case "text": return r.entry.text || ""; case "photos": return r.entry.photoCount || 0;
           case "state": return STATE_ORDER.indexOf(f.status);
+          case "loggedIn": return appLabel(r.entry.createdApp);
           case "latest": var l = logLines(r.entry, eventsOf(r) || [])[0]; return l ? l.at : "";
           default: return r.entry.createdAt || "";
         }
@@ -8115,7 +8394,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     }
     // State and the action sit right after the item's identity, so on a
     // tablet in portrait they're on screen without scrolling sideways.
-    var COLS = [["project", "Project"], ["level", "Level"], ["room", "Room"], ["code", "Joinery ID"], ["cabinet", "Cabinet"], ["state", "State"], ["", ""], ["text", "Rework"], ["photos", "Photos"], ["logged", "Logged"], ["latest", "Latest"]];
+    var COLS = [["project", "Project"], ["level", "Level"], ["room", "Room"], ["code", "Joinery ID"], ["cabinet", "Cabinet"], ["state", "State"], ["", ""], ["text", "Rework"], ["photos", "Photos"], ["logged", "Logged"], ["loggedIn", "Logged in"], ["latest", "Latest"]];
     function theadHtml(){
       return "<thead><tr>" + COLS.map(function(c){
         if (!c[0]) return "<th></th>";
@@ -8139,6 +8418,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         "<td class=\"urw-text\">" + escapeHtml(e.text || "(no description)") + "</td>" +
         "<td>" + (e.photoCount ? e.photoCount : "—") + "</td>" +
         "<td>" + escapeHtml(fmtDate(e.createdAt, true)) + (e.createdBy ? "<div class=\"urw-small urw-muted\">" + escapeHtml(e.createdBy) + "</div>" : "") + "</td>" +
+        "<td class=\"urw-loggedin\">" + (e.createdApp ? escapeHtml(appLabel(e.createdApp)) : "<span class=\"urw-muted\">—</span>") + "</td>" +
         "<td class=\"urw-latest\">" + (evs ? escapeHtml(latestLine(r, evs)) : "…") + "</td></tr>";
     }
     var regRows = [];
@@ -8152,7 +8432,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           "<div class=\"filters-bar\">" +
             "<select data-urw=\"project\"><option value=\"\">All projects</option></select>" +
             "<select data-urw=\"state\"><option value=\"\">All outstanding</option><option value=\"logged\">Logged</option><option value=\"machined\">Cut</option><option value=\"manufactured\">Ready to deliver</option></select>" +
-            "<input type=\"text\" data-urw=\"search\" placeholder=\"Search code, cabinet, room or text\">" +
+            "<input type=\"text\" data-urw=\"search\" placeholder=\"Search code, cabinet, room, text, who or app\">" +
             "<button class=\"btn secondary sm\" data-urw=\"refresh\">Refresh</button>" +
           "</div>" +
           "<p class=\"table-count\" data-urw=\"count\"></p>" +
@@ -8312,7 +8592,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     function companyLogo(){
       var root = cfg.getRootHandle && cfg.getRootHandle();
       if (!root) return Promise.resolve(null);
-      return root.getFileHandle("company-logo.png", { create: false }).then(function(fh){ return fh.getFile(); }).then(function(file){
+      return UtzBuilders.logoFileHandle(root, "company-logo.png").then(function(fh){ return fh.getFile(); }).then(function(file){
         if (!(file instanceof Blob)) return null;
         return downscaleToDataUrl(file, 500);
       }).catch(function(){ return null; });
@@ -8491,7 +8771,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
             "<dt>Room</dt><dd>" + escapeHtml(row.room || "—") + "</dd>" +
             "<dt>Joinery ID</dt><dd><b>" + escapeHtml(row.code) + "</b></dd>" +
             "<dt>Cabinet</dt><dd>" + escapeHtml(e.cabinetNumber || "—") + "</dd>" +
-            "<dt>Logged</dt><dd>" + escapeHtml([fmtDate(e.createdAt, true), e.createdBy || ""].filter(Boolean).join(" — ") || "—") + "</dd>" +
+            "<dt>Logged</dt><dd>" + escapeHtml([fmtDate(e.createdAt, true), e.createdBy || "", e.createdApp ? "in " + appLabel(e.createdApp) : ""].filter(Boolean).join(" — ") || "—") + "</dd>" +
             "<dt>State</dt><dd>" + pillHtml(f) + (f.statusAt ? " <span class=\"urw-small urw-muted\">" + escapeHtml([f.statusBy, fmtDate(f.statusAt, true)].filter(Boolean).join(", ")) + "</span>" : "") + "</dd>" +
             (f.delivered ? "<dt>Delivered</dt><dd>" + escapeHtml([f.delivered.date || fmtDate(f.delivered.at), f.delivered.by].filter(Boolean).join(" — ")) + "</dd>" : "") +
             (f.drafter ? "<dt>Drafter</dt><dd>" + escapeHtml(f.drafter) + (f.drafterAction ? " — <b>" + escapeHtml(drafterActionLabel(f.drafterAction.action)) + "</b> <span class=\"urw-small urw-muted\">" + escapeHtml([f.drafterAction.by, fmtDate(f.drafterAction.at, true)].filter(Boolean).join(", ")) + "</span>" : " <span class=\"urw-small urw-muted\">(flagged" + (f.drafterBy ? " by " + escapeHtml(f.drafterBy) : "") + ")</span>") + "</dd>" : "") +
@@ -8852,7 +9132,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v81";
+  var APP_VERSION = "v85";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -11330,6 +11610,47 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     ov.addEventListener("click", function(){ ov.parentNode && ov.parentNode.removeChild(ov); });
     document.body.appendChild(ov);
   }
+  /* ---- (v84) Viewer: Room list ---- */
+  function levelRoomList(){
+    var by = {};
+    state.objects.forEach(function(o){
+      if (!o || o.type !== "roomlink" || !o.roomName) return;
+      var k = String(o.roomName).toLowerCase();
+      var r = by[k] || (by[k] = { name: o.roomName, count: 0, sx: 0, sy: 0, firstId: o.id });
+      r.count++; r.sx += o.x; r.sy += o.y;
+    });
+    return Object.keys(by).map(function(k){ var r = by[k]; return { name: r.name, count: r.count, x: r.sx / r.count, y: r.sy / r.count, firstId: r.firstId }; })
+      .sort(function(a, b){ return String(a.name).localeCompare(String(b.name), undefined, { numeric: true, sensitivity: "base" }); });
+  }
+  function closeRoomList(){ document.getElementById("roomListBackdrop").hidden = true; }
+  function goToRoomOnPlan(r){
+    closeRoomList();
+    state.view.scale = Math.max(state.view.scale, 0.6);
+    applyView();
+    recenterViewOn(r.x, r.y);
+    state.selectedId = r.firstId;
+    renderAll();
+    showToast(r.name + (r.count > 1 ? " — " + r.count + " items." : "."));
+  }
+  function openRoomList(){
+    if (!onLevelPlanNow()){ showToast("Open a level's plan first."); return; }
+    var rooms = levelRoomList();
+    if (!rooms.length){ showToast("No rooms on this plan."); return; }
+    var box = document.getElementById("roomListOptions");
+    box.innerHTML = "";
+    rooms.forEach(function(r){
+      var b = document.createElement("button"); b.type = "button"; b.className = "share-choice-opt"; b.setAttribute("data-room", r.name);
+      var t = document.createElement("span"); t.className = "share-choice-title"; t.textContent = r.name;
+      var sub = document.createElement("span"); sub.className = "share-choice-sub"; sub.textContent = r.count + (r.count === 1 ? " joinery item" : " joinery items");
+      b.appendChild(t); b.appendChild(sub);
+      b.addEventListener("click", function(){ goToRoomOnPlan(r); });
+      box.appendChild(b);
+    });
+    document.getElementById("roomListBackdrop").hidden = false;
+  }
+  document.getElementById("roomListBtn").addEventListener("click", openRoomList);
+  document.getElementById("roomListClose").addEventListener("click", closeRoomList);
+  document.getElementById("roomListBackdrop").addEventListener("click", function(e){ if (e.target === this) closeRoomList(); });
   function rwShowOnPlan(row){
     closeReworksScreen();
     var go = (activeLevelName === row.level && onLevelPlanNow()) ? Promise.resolve() : openLevel(row.level);
@@ -11518,7 +11839,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     return Promise.all((notes || []).map(function(n){
       if (!n.sidecar) return null;
       return readJsonFileHandle(n.sidecar).then(function(info){
-        if (info && info.kind === "jobNote"){ n.original = info.original || ""; n.by = info.by || ""; n.at = info.at || ""; }
+        if (info && info.kind === "jobNote"){ n.original = info.original || ""; n.by = info.by || ""; n.at = info.at || ""; n.withPlan = !!info.withPlan; }
       }, function(){});
     })).then(function(){ return notes; });
   }
@@ -11599,15 +11920,36 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       }).then(function(bytes){ return new Blob([bytes], { type: "application/pdf" }); });
     });
   }
-  // Resolves { stamped } -- false when the PDF couldn't take the watermark
-  // and was saved as it is (v65).
-  function addJobNote(projectHandle, level, room, joineryId, key, file, updatedBy){
-    var stamped = true, savedName = "";
+  // (v83) base + the pages of extra, as one PDF blob (the plan pages go AFTER the watermark, so they are never stamped)
+  function appendPdfPages(baseBlob, extraBlob){
+    return loadPdfLib().then(function(PDFLib){
+      return Promise.all([baseBlob.arrayBuffer(), extraBlob.arrayBuffer()]).then(function(bufs){
+        return Promise.all([PDFLib.PDFDocument.load(bufs[0], { updateMetadata: false }), PDFLib.PDFDocument.load(bufs[1], { updateMetadata: false })]);
+      }).then(function(docs){
+        return docs[0].copyPages(docs[1], docs[1].getPageIndices()).then(function(pages){
+          pages.forEach(function(pg){ docs[0].addPage(pg); });
+          return docs[0].save();
+        });
+      }).then(function(bytes){ return new Blob([bytes], { type: "application/pdf" }); });
+    });
+  }
+  // Resolves { stamped, fileName, withPlan, blob } -- stamped false when the PDF couldn't take the watermark
+  // and was saved as it is (v65). planBlob (v83, Viewer): the two A3 landscape plan pages, added at the END
+  // of the same file; if they can't be joined on, the note is saved without them (withPlan false).
+  function addJobNote(projectHandle, level, room, joineryId, key, file, updatedBy, planBlob){
+    var stamped = true, savedName = "", withPlan = false, finalBlob = null;
     return stampForConstruction(file).then(null, function(err){
       console.error("Couldn't add the For Construction watermark to " + (file.name || "a job note") + ":", err);
       stamped = false;
       return file;
     }).then(function(data){
+      if (!planBlob) return data;
+      return appendPdfPages(data, planBlob).then(function(b){ withPlan = true; return b; }, function(err){
+        console.error("Couldn't add the plan pages to the job note (saved without them):", err);
+        return data;
+      });
+    }).then(function(data){
+      finalBlob = data;
       // (2026-10-01, code-only file names) "Job note - <saved> - <item file name>.pdf" + its .json
       var now = new Date();
       return pathRoomFor(projectHandle, [projectSavesDirName(), jobNotesBranchName(), key]).then(function(roomLeft){
@@ -11616,7 +11958,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           return freeFileName(dirH, name).then(function(free){
             savedName = free;
             return writeNewFile(dirH, free, data).then(function(){
-              var info = { kind: "jobNote", file: free, original: file.name || "", by: updatedBy || "", at: now.toISOString(), level: level || "", room: room || "", joineryId: joineryId || "", stamped: stamped };
+              var info = { kind: "jobNote", file: free, original: file.name || "", by: updatedBy || "", at: now.toISOString(), level: level || "", room: room || "", joineryId: joineryId || "", stamped: stamped, withPlan: withPlan };
               return writeNewFile(dirH, free.replace(/\.pdf$/i, "") + ".json", new Blob([JSON.stringify(info)], { type: "application/json" })).then(null, function(err){
                 console.error("Couldn't save the job note's details beside it (the note itself is saved):", err);
               });
@@ -11625,19 +11967,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         });
       });
     }).then(function(){
-      // Sequential rather than Promise.all -- kept that way for simplicity,
-      // though it's no longer required for correctness the way it used to
-      // be: since the v45.13 event-sourced rewrite (see the "joinery-status.json
-      // v2" comment above readJoineryStatuses), these two calls append two
-      // separate, independently-named immutable event files (a "jobnote"
-      // event and a "status" event) rather than racing to read-modify-write
-      // the same shared file, so running them concurrently would now be
-      // just as safe. Order still doesn't matter functionally either way
-      // (different fields, different files).
+      // Sequential rather than Promise.all -- the "jobnote" and "status" events are two separate, independently-named
+      // immutable event files (see the "joinery-status.json v2" comment above readJoineryStatuses), so order is cosmetic.
       return markJobNoteAdded(projectHandle, level, room, joineryId, updatedBy).then(function(){
         return setJoineryStatusForward(projectHandle, level, room, joineryId, "in_manufacture", updatedBy);
       });
-    }).then(function(){ return { stamped: stamped, fileName: savedName }; });
+    }).then(function(){ return { stamped: stamped, fileName: savedName, withPlan: withPlan, blob: finalBlob }; });
   }
   function jobNoteKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
 
@@ -12542,7 +12877,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
      backups, kept directly in the main Projects folder -- isn't a project,
      so it's left out of the project list (the same one-line rule is in
      every app in the family). */
-  function isReservedRootFolderName(name){ return String(name || "").trim().toLowerCase() === "schedule backups"; }
+  function isReservedRootFolderName(name){ return String(name || "").trim().toLowerCase() === "schedule backups" || String(name || "").trim().toLowerCase() === "logos"; }
   function listExistingProjects(){
     return listSubdirNames(projectsRootHandle).then(function(names){ return names.filter(function(n){ return !isReservedRootFolderName(n); }); });
   }
@@ -12953,7 +13288,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       entry.data = null; // (v61) drop the preloaded copy once handed over (4 GB tablets)
       return dataP.then(function(data){
         if (activeJoineryItemPage !== page) return;
-        page.layers.push({ user: (data && data.savedBy && !entry.unsaved) ? String(data.savedBy) : entry.user, stamp: entry.stamp, fileName: entry.fileName, unsaved: !!entry.unsaved, visible: true, objects: (data && data.objects) || [] }); // (2026-10-01) the saver's full name from the file (its name has initials only)
+        // (v84) Andrew: "the overwritten measure layers are turned off by default (can turn them on to audit manually)" and "the viewer ...
+        // should match the site measure app exactly". The newest save (the last one read) is drawn natively when the page has no marks of its
+        // own; every other layer starts hidden.
+        var isNative = !!(page.showNewestNative && i === entries.length);
+        page.layers.push({ user: (data && data.savedBy && !entry.unsaved) ? String(data.savedBy) : entry.user, stamp: entry.stamp, fileName: entry.fileName, unsaved: !!entry.unsaved, visible: isNative, native: isNative, objects: (data && data.objects) || [] }); // (2026-10-01) the saver's full name from the file (its name has initials only)
         renderOverlayLayers(); // (v56) appends just this layer -- see renderOverlayLayers
         renderOverlayLayersPanel();
       }, function(err){
@@ -13059,6 +13398,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
             key: key, displayName: displayName,
             pdfsHandle: pdfsHandle, backupsHandle: backupsHandle,
             layers: [], pendingLayerCount: pendingLayerEntries.length, ownHasDraft: !!ownDraft,
+            // (v84) the page carries no marks of its own (the Viewer; Site Measure with nothing of mine): the NEWEST save is drawn on it
+            // as Site Measure draws its own work; every older save is a hidden reference layer (switch it on to audit)
+            showNewestNative: !ownDraft && !pre.baseEntry, baseStamp: pre.baseEntry ? String(pre.baseEntry.stamp || "") : "",
             startedFrom: pre.startedFrom
           };
           loadOtherLayersInBackground(activeJoineryItemPage, pendingLayerEntries, perf);
@@ -13514,18 +13856,28 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     }
     var obj = activeJobNoteMarker;
     jobNoteAddStatusEl.textContent = "Adding “" + file.name + "”…";
-    ensureProjectWritePermission().then(function(ok){
+    return ensureProjectWritePermission().then(function(ok){
       if (!ok){
         jobNoteAddStatusEl.textContent = "Couldn't get permission to save that here — try again, or add this note from Site Measure instead.";
         return;
       }
       var key = jobNoteKeyFor(obj);
-      return addJobNote(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode || "", key, file, deviceUserName || (VIEW_ONLY_MODE ? "Viewer" : "Site Measure")).then(function(res){
-        renderAll();
-        showToast("Job note added to “" + roomlinkDisplayText(obj) + "”." + (res && res.stamped === false ? " It couldn't take the For Construction watermark (a protected PDF?) and was saved as it is." : ""), res && res.stamped === false ? 7000 : undefined);
-        closeAddJobNoteDialog();
-        // (v76, Viewer) Andrew: "when job note is added. create the a3 plans" -- offer the two-page A3 floor plan export
-        if (VIEW_ONLY_MODE) fxAsk(obj, "The job note “" + (file.name || "") + "” is added to " + (obj.joineryCode || "this item") + ". ");
+      // (v83, Viewer) Andrew: "save the exported floor plan pdfs to the end of the job note (the zoomed in and full page) as A3 landscape"
+      // -- drawn first, while the level plan is on screen, then joined on after the watermark
+      var planP = VIEW_ONLY_MODE ? (jobNoteAddStatusEl.textContent = "Adding “" + file.name + "” and drawing the plan pages…", fxBuildPlanPagesSafe(obj)) : Promise.resolve(null);
+      return planP.then(function(plan){
+        return addJobNote(activeProjectHandle, activeLevelName, obj.roomName, obj.joineryCode || "", key, file, deviceUserName || (VIEW_ONLY_MODE ? "Viewer" : "Site Measure"), plan ? plan.blob : null).then(function(res){
+          renderAll();
+          closeAddJobNoteDialog();
+          var noWm = res && res.stamped === false ? " It couldn't take the For Construction watermark (a protected PDF?) and was saved as it is." : "";
+          if (VIEW_ONLY_MODE){
+            fxShowDone({ kind: "note", obj: obj, blob: res.blob, name: res.fileName || "Job note.pdf", title: "Job note added",
+              text: "“" + (file.name || "The job note") + "” is added to " + (obj.joineryCode || "this item") + "." +
+                (res.withPlan ? " Two A3 landscape plan pages are at the end of it: a close-up around the item, then the whole " + (activeLevelName || "level") + " plan, with its indicator and QR codes." : " The plan pages couldn't be added — open the level plan and use Export floor plan, then Print entire job note.") + noWm });
+          } else {
+            showToast("Job note added to “" + roomlinkDisplayText(obj) + "”." + noWm, noWm ? 7000 : undefined);
+          }
+        });
       });
     }).catch(function(err){
       console.error("Add job note failed:", err);
@@ -13543,8 +13895,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // time it correctly saved as a job note. e.stopPropagation() on every
   // drag/drop event here is what actually confines the drop to this
   // dropzone alone.
-  jobNoteDropzone.addEventListener("click", function(){ jobNoteFileInput.click(); });
-  jobNoteDropzone.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); jobNoteFileInput.click(); } });
+  UtzDrop.longPress(jobNoteDropzone, jobNoteFileInput); // (2026-10-02) drag and drop only -- no click-to-choose (a touch-only tablet's long press opens the picker)
   jobNoteDropzone.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); jobNoteDropzone.classList.add("dragover"); });
   jobNoteDropzone.addEventListener("dragleave", function(e){ e.stopPropagation(); jobNoteDropzone.classList.remove("dragover"); });
   jobNoteDropzone.addEventListener("drop", function(e){
@@ -13705,10 +14056,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (alone) alone.textContent = shopKindWord(k);
     if (sdAdd.file){
       sdAddDropTitle.textContent = sdAdd.file.name || "drawing.pdf";
-      sdAddDropSub.textContent = "tap to choose another";
+      sdAddDropSub.textContent = "drop another to replace it";
     } else {
       sdAddDropTitle.textContent = "Drag a PDF here";
-      sdAddDropSub.textContent = "or tap to choose a file";
+      sdAddDropSub.textContent = "PDF files only";
     }
     sdAddSaveBtn.disabled = !!(sdAdd.busy || !sdAdd.file || !sdAdd.readOk);
   }
@@ -13834,8 +14185,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   sdAddBackdrop.addEventListener("click", function(e){ if (e.target === sdAddBackdrop && !(sdAdd && sdAdd.busy)) closeAddShopDrawingDialog(); });
   sdAddSaveBtn.addEventListener("click", function(){ saveAddShopDrawing(); });
   // (the same "don't let the drop reach #stage's insert-a-photo listener" care as the job note dropzone)
-  sdAddDropzone.addEventListener("click", function(){ sdAddFileInput.click(); });
-  sdAddDropzone.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); sdAddFileInput.click(); } });
+  UtzDrop.longPress(sdAddDropzone, sdAddFileInput); // (2026-10-02) drag and drop only
   sdAddDropzone.addEventListener("dragover", function(e){ e.preventDefault(); e.stopPropagation(); sdAddDropzone.classList.add("dragover"); });
   sdAddDropzone.addEventListener("dragleave", function(e){ e.stopPropagation(); sdAddDropzone.classList.remove("dragover"); });
   sdAddDropzone.addEventListener("drop", function(e){
@@ -15576,19 +15926,34 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function foldJoineryStatusEvents(events){
     if (!events || !events.length) return null;
     var statusEvents = events.filter(function(e){ return e.kind === "status" && e.status; });
+    // (2026-10-01) Andrew: "if something is flagged as machined, but then the machining gets reversed, the flags need to be
+    // reversed also". The status pipeline is forward-only (highest rank wins), so a reversal is its OWN event, never a
+    // deleted file: { kind: "statusRetract", from: "machined", by, at } cancels every EARLIER status event of the stage it
+    // names; a stage written AFTER the reversal (the item machined again) counts normally. Apps that don't know this event
+    // yet simply ignore it (they filter on kind) and keep showing the old stage until they are updated.
+    var retractEvents = events.filter(function(e){ return e.kind === "statusRetract" && e.from; });
     var jobNoteEvents = events.filter(function(e){ return e.kind === "jobNote"; });
     if (!statusEvents.length && !jobNoteEvents.length) return null;
     var any = statusEvents[0] || jobNoteEvents[0];
     var rec = { level: any.level || "", room: any.room || "", joineryId: any.joineryId || "" };
+    function cancelled(s){
+      return retractEvents.some(function(r){ return r.from === s.status && (r.at || "") > (s.at || ""); });
+    }
     var best = null;
-    statusEvents.forEach(function(e){ if (!best || joineryStatusRank(e.status) > joineryStatusRank(best.status)) best = e; });
-    if (best){
-      rec.status = best.status; rec.updatedAt = best.at; rec.updatedBy = best.by || "";
-      rec.history = statusEvents.slice().sort(function(a, b){
+    statusEvents.forEach(function(e){
+      if (cancelled(e)) return;
+      if (!best || joineryStatusRank(e.status) > joineryStatusRank(best.status)) best = e;
+    });
+    if (statusEvents.length){
+      if (best){ rec.status = best.status; rec.updatedAt = best.at; rec.updatedBy = best.by || ""; }
+      else { rec.status = ""; rec.updatedAt = ""; rec.updatedBy = ""; }
+      rec.history = statusEvents.map(function(e){
+        var h = { status: e.status, at: e.at, by: e.by || "" };
+        if (cancelled(e)) h.cancelled = true;
+        return h;
+      }).concat(retractEvents.map(function(r){ return { status: r.from, at: r.at, by: r.by || "", reversed: true }; })).sort(function(a, b){
         return (a.at || "") < (b.at || "") ? -1 : (a.at || "") > (b.at || "") ? 1 : 0;
-      }).map(function(e){ var h = { status: e.status, at: e.at, by: e.by || "" }; if (e.note) h.note = e.note; return h; });
-      // (v68) check measured because a site measure isn't needed (Site Measure's "Site measure not required")
-      if (statusEvents.some(function(e){ return e.status === "measured" && e.measureNotRequired; })) rec.measureNotRequired = true;
+      });
     } else {
       rec.status = ""; rec.updatedAt = ""; rec.updatedBy = ""; rec.history = [];
     }
@@ -16246,7 +16611,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         var rlBadge = el("text", {
           x: obj.x, y: obj.y, "font-size": Math.max(16, rlR * 2),
           "text-anchor": "middle", "dominant-baseline": "central",
-          stroke: "#ffffff", "stroke-width": 3, "paint-order": "stroke"
+          stroke: "#ffffff", "stroke-width": 3, "paint-order": "stroke", "class": "marker-status-icon"
         });
         rlBadge.textContent = rlIcon;
         g.appendChild(rlBadge);
@@ -18819,11 +19184,15 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // "faded images" fix.
     var g = el("g", { style: "pointer-events:none;" });
     g.setAttribute("data-layer-idx", String(i));
+    if (layer.native) g.setAttribute("class", "native-layer"); // (v84) drawn exactly like Site Measure draws its own marks: no tint, halo kept
     (layer.objects || []).forEach(function(o){
       if (o.hidden) return;
       try{
-        var og = renderObject(o, true);
-        tintOverlayObjectGroup(og, tint);
+        // (v84) the native layer goes through the same call Site Measure's own marks do (so a faded line fades the same way), then keeps
+        // the reference-layer class so it still never takes part in selecting/dragging
+        var og = renderObject(o, !layer.native);
+        if (layer.native) og.setAttribute("class", "ui-preview");
+        else tintOverlayObjectGroup(og, tint);
         g.appendChild(og);
       }catch(e){ /* a malformed foreign object should never break rendering of everything else */ }
     });
@@ -18872,6 +19241,58 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       g.setAttribute("display", show ? "inline" : "none"); // PDF/PNG export honours the attribute too
     });
   }
+  // ---- (v84) Delete an OLD layer. Andrew (2026-10-02): "old ones are deletable". Guard rails (his standing rule: nothing can wipe a job):
+  // Site Measure only (never the Viewer); one layer at a time, after a confirm that names the layer; only a layer that a newer save has
+  // overwritten -- the newest save is never offered, so an item can't be emptied; and the file is MOVED to "Deleted layers" inside the
+  // item's own folder (a copy is written and checked before the original goes), with a small record of who deleted it and when.
+  function overlayLayerDeletable(layer){
+    var page = activeJoineryItemPage;
+    if (VIEW_ONLY_MODE || !page || !layer || layer.unsaved || !layer.fileName || !layer.stamp) return false;
+    var newest = String(page.baseStamp || "");
+    (page.layers || []).forEach(function(l){ if (l.stamp && !l.unsaved && String(l.stamp) > newest) newest = String(l.stamp); });
+    return String(layer.stamp) < newest;
+  }
+  function askDeleteOverlayLayer(layer){
+    if (!overlayLayerDeletable(layer)) return Promise.resolve(false);
+    return showConfirm("Delete the old layer saved by " + (layer.user || "Unnamed") + " on " + formatOverlayStamp(layer.stamp) + "? It disappears from this list, and the file is kept in this item's “Deleted layers” folder so it can be recovered.", { okLabel: "Delete layer" }).then(function(yes){
+      if (!yes) return false;
+      return deleteOverlayLayer(layer);
+    });
+  }
+  function deleteOverlayLayer(layer){
+    var page = activeJoineryItemPage;
+    if (!overlayLayerDeletable(layer)) return Promise.resolve(false);
+    var key = page.key, name = layer.fileName;
+    return getJoineryOverlaysDir(activeProjectHandle, key, false).then(function(dirH){
+      if (!dirH) throw new Error("no overlays folder");
+      return dirH.getFileHandle(name).then(function(fh){ return fh.getFile(); }).then(function(file){
+        return file.arrayBuffer().then(function(buf){
+          return dirH.getDirectoryHandle("Deleted layers", { create: true }).then(function(delDir){
+            return delDir.getFileHandle(name, { create: true }).then(function(copyH){
+              return verifiedHandleWrite(copyH, new Blob([buf], { type: "application/json" })).then(function(){ return copyH.getFile(); });
+            }).then(function(copyFile){
+              if (copyFile.size !== file.size) throw new Error("the kept copy didn't match -- nothing was deleted");
+              var rec = { file: name, user: layer.user || "", stamp: layer.stamp || "", deletedBy: deviceUserName || "", deletedAt: new Date().toISOString() };
+              return delDir.getFileHandle(name.replace(/\.json$/i, "") + " deleted.json", { create: true }).then(function(rh){
+                return verifiedHandleWrite(rh, new Blob([JSON.stringify(rec)], { type: "application/json" }));
+              });
+            });
+          });
+        });
+      }).then(function(){ return dirH.removeEntry(name); });
+    }).then(function(){
+      var idx = page.layers.indexOf(layer);
+      if (idx >= 0) page.layers.splice(idx, 1);
+      renderOverlayLayers(true);
+      renderOverlayLayersPanel();
+      showToast("Layer deleted — kept in this item's “Deleted layers” folder.");
+      return true;
+    }).catch(function(err){
+      console.error("Deleting a layer failed:", err);
+      showToast("Couldn't delete that layer — nothing was changed.");
+      return false;
+    });
+  }
   function renderOverlayLayersPanel(){
     if (!overlayLayersPanelOpen) return;
     overlayLayersList.innerHTML = "";
@@ -18896,8 +19317,14 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       });
       row.appendChild(cb);
       var lab = document.createElement("span"); lab.className = "layer-label";
-      lab.textContent = (layer.user || "Unnamed") + " — " + (layer.unsaved ? "unsaved (not saved yet)" : formatOverlayStamp(layer.stamp));
+      lab.textContent = (layer.user || "Unnamed") + " — " + (layer.unsaved ? "unsaved (not saved yet)" : formatOverlayStamp(layer.stamp)) + (layer.native ? " (latest, on the page)" : "");
       row.appendChild(lab);
+      if (overlayLayerDeletable(layer)){
+        var del = document.createElement("button"); del.type = "button"; del.className = "layer-del"; del.textContent = "Delete";
+        del.title = "Delete this old layer (it is kept in this item's Deleted layers folder, not erased)";
+        del.addEventListener("click", function(){ askDeleteOverlayLayer(layer); });
+        row.appendChild(del);
+      }
       overlayLayersList.appendChild(row);
     });
   }
@@ -19205,9 +19632,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     var prefix = activeProjectName ? activeProjectName + " — " : "";
     // (2026-09-30) the project's builder logo next to the name (shared/builders; the logo lives at the Projects root)
     if (window.UtzBuilders){
-      var brandEl = sub.parentNode;
-      if (activeProjectHandle && projectsRootHandle) UtzBuilders.contractorOf(activeProjectHandle).then(function(c){ UtzBuilders.mount(brandEl, projectsRootHandle, c); });
-      else UtzBuilders.mount(brandEl, null, "");
+      var topEl = document.getElementById("topBuilderLogo");
+      var showTop = function(url){ if (topEl) topEl.style.display = url ? "" : "none"; };
+      if (activeProjectHandle && projectsRootHandle) UtzBuilders.contractorOf(activeProjectHandle).then(function(c){ return UtzBuilders.mount(topEl, projectsRootHandle, c); }).then(showTop, function(){ showTop(null); });
+      else UtzBuilders.mount(topEl, null, "").then(showTop);
     }
     if (activeRoomName){
       sub.textContent = prefix + activeLevelName + " — " + activeRoomName;
@@ -19791,7 +20219,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var d = dialog(justSaved ? "Saved — now sync only these" : "How to sync only these");
       d.card.insertAdjacentHTML("beforeend",
         "<p>Keep these on this device:</p><ul class=\"dp-keep\">" +
-        "<li>the <b>files</b> in “" + esc(rootName) + "” itself — <i>utzline-users.csv</i> (names &amp; PINs) and <i>company-logo.png</i> — not its folders</li>" +
+        "<li>the <b>files</b> in “" + esc(rootName) + "” itself — <i>utzline-users.csv</i> (names &amp; PINs), and its <i>logos</i> folder (the company and builder logos) — not the project folders</li>" +
         ch.map(function(n){ return "<li>“" + esc(rootName) + " › " + esc(n) + "” (the whole folder)</li>"; }).join("") +
         "</ul><p>The other project folders don’t need to be on this device.</p>" +
         "<p><b>Windows tablet (OneDrive):</b> in File Explorer, right-click each folder above → <b>Always keep on this device</b>. Right-click the other project folders → <b>Free up space</b>.</p>" +
@@ -19881,9 +20309,13 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       // names & PINs (needed to sign anything) and the logo, from the main folder
       p = p.then(function(){
         return Promise.all(["utzline-users.csv", "company-logo.png"].map(function(n){
-          return r.getFileHandle(n).then(function(fh){ return openOne(fh).then(function(){ return { name: n, ok: true }; }, function(){ return { name: n, ok: false, why: "won't open" }; }); },
+          return (n === "company-logo.png" && window.UtzBuilders ? UtzBuilders.logoFileHandle(r, n) : r.getFileHandle(n)).then(function(fh){ return openOne(fh).then(function(){ return { name: n, ok: true }; }, function(){ return { name: n, ok: false, why: "won't open" }; }); },
             function(){ return { name: n, ok: false, why: "not on this device" }; });
         })).then(function(res){ rootFiles = res; });
+      });
+      // (2026-10-02) the logos folder too (the builders' logos), best-effort -- never fails the check
+      p = p.then(function(){
+        return r.getDirectoryHandle("logos").then(function(d){ var l = []; return walk(d, "logos", l).then(function(){ return Promise.all(l.map(function(f){ return openOne(f.h).catch(function(){}); })); }); }).catch(function(){});
       });
       ch.forEach(function(name){
         p = p.then(function(){
@@ -20383,6 +20815,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function updateBackBtnVisibility(){
     if (!backBtn) return;
     backBtn.style.display = (activeLevelName && (activeJoineryItemPage || activeRoomName || activeProjectHandle)) ? "" : "none";
+    // (v84) the Viewer's Room list option: on a level's own plan only
+    var rlBtn = document.getElementById("roomListBtn");
+    if (rlBtn) rlBtn.style.display = (VIEW_ONLY_MODE && activeLevelName && !activeRoomName && !activeJoineryItemPage) ? "" : "none";
     // The Save button reads "Save & exit" on a joinery item page (2026-09-25,
     // see saveAllProjectAware) -- plain "Save" everywhere else.
     var saveBtnEl = document.getElementById("saveBtn");
@@ -20839,7 +21274,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   var companyLogoObjectUrl = null;
   function readCompanyLogoReadOnly(){
     if (!projectsRootHandle) return Promise.resolve(null);
-    return projectsRootHandle.getFileHandle("company-logo.png", { create: false }).then(function(fh){
+    return UtzBuilders.logoFileHandle(projectsRootHandle, "company-logo.png").then(function(fh){
       return fh.getFile();
     }).then(function(file){
       return file.arrayBuffer();
@@ -22191,8 +22626,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       console.error("Camera access failed:", err);
       cameraBackdrop.hidden = true;
       var msg = (err && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError"))
-        ? "Camera access was blocked — check the site's camera permission, or use “Choose file” instead."
-        : "Couldn't open the camera — use “Choose file” instead.";
+        ? "Camera access was blocked — check the site's camera permission, or drop a photo onto the plan instead."
+        : "Couldn't open the camera — drop a photo onto the plan instead.";
       showToast(msg);
       return null;
     });
@@ -22222,7 +22657,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     cameraReviewControls.hidden = true;
     navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
       .then(function(stream){ cameraStream = stream; cameraVideo.srcObject = stream; })
-      .catch(function(){ closeCameraCapture(null); showToast("Couldn't reopen the camera — use “Choose file” instead."); });
+      .catch(function(){ closeCameraCapture(null); showToast("Couldn't reopen the camera — drop a photo onto the plan instead."); });
   });
   cameraUseBtn.addEventListener("click", function(){
     cameraCanvas.toBlob(function(blob){ closeCameraCapture(blob); }, "image/jpeg", 0.9);
@@ -22240,13 +22675,19 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // photo / image" button can reuse this exact flow once it's landed the
   // user on that item's own real page -- see the Joinery Item dialog
   // comment above for why. Behaviour unchanged from before the extraction.
+  // (2026-10-02) no file selector: on a PC a photo / PDF is dropped onto the plan (or pasted with Ctrl+V); only a touch-only tablet,
+  // where nothing can be dropped, still gets the system picker.
+  function insertImageFromFile(){
+    if (window.UtzDrop && UtzDrop.touchOnly()) insertImageInput.click();
+    else showToast("Drag a photo or PDF onto the plan — or paste an image with Ctrl+V.", 6000);
+  }
   function triggerInsertImageFlow(){
     if (!state.imageW){ showToast("Open a plan or photo first."); return; }
     if (!CAMERA_CAPTURE_SUPPORTED){
       // No camera capability to offer at all (desktop without a webcam
       // permission path, or an older browser) -- unchanged v36 behaviour.
       autosaveLevelPlanIfActive();
-      insertImageInput.click();
+      insertImageFromFile();
       return;
     }
     openInsertSourceChoice().then(function(mode){
@@ -22258,7 +22699,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         // this: it never leaves this tab, so there's no OS hand-off moment
         // for Android to interrupt in the first place.)
         autosaveLevelPlanIfActive();
-        insertImageInput.click();
+        insertImageFromFile();
       } else if (mode === "camera"){
         openCameraCapture().then(function(blob){ if (blob) insertImageFile(blob); });
       }
@@ -22698,6 +23139,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // no transform (world's pan/zoom stripped, coordinates back in native
   // image space) and none of the editor-only UI (selection handles, the
   // in-progress drag preview) baked in.
+  var shareExportActive = false; // (v84) true while a Share is rendering its picture / PDF
   function cloneWorldForExport(){
     var clone = world.cloneNode(true);
     clone.removeAttribute("transform");
@@ -22712,6 +23154,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     var comments = [];
     while (walker.nextNode()) comments.push(walker.currentNode);
     comments.forEach(function(c){ if (c.parentNode) c.parentNode.removeChild(c); });
+    // (v84) the newest save drawn on a page with no marks of its own is real content for the Viewer and for a share;
+    // a Site Measure Save never carries someone else's marks into a person's own PDF
+    if (VIEW_ONLY_MODE || shareExportActive){
+      clone.querySelectorAll("#overlayLayersGroup g.native-layer .ui-preview").forEach(function(n){ n.classList.remove("ui-preview"); });
+    }
     var kill = clone.querySelectorAll(".ui-handle, .ui-preview, .ui-preview-node");
     kill.forEach(function(n){ n.remove(); });
     // (v56) Hidden layers now stay in the page (display:none, kept so
@@ -23319,6 +23766,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   }
   function shareFile(file){
     var shareData = { files: [file] };
+    // (v84) no share sheet on this device (the PC app): the file is saved instead of the button vanishing
+    if (typeof navigator.share !== "function"){
+      browserDownloadBlob(file, file.name);
+      showToast("This device can't open a share sheet — saved \"" + file.name + "\" instead. Attach it from Downloads.");
+      return;
+    }
     if (navigator.canShare && !navigator.canShare(shareData)){
       browserDownloadBlob(file, file.name);
       showToast("Sharing files isn't supported here — saved \"" + file.name + "\" instead. Open it from Downloads (or your Files app) and share it from there.");
@@ -23468,9 +23921,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     });
   }
   function shareViewSnapshot(){
+    shareExportActive = true;
     renderViewSnapshotBlob().then(function(blob){
+      shareExportActive = false;
       shareFile(new File([blob], suggestFilename("png", "VIEW"), { type: "image/png" }));
     }).catch(function(err){
+      shareExportActive = false;
       console.error("Share (current view) failed:", err);
       showToast("Couldn't prepare the current view to share.");
     });
@@ -23479,9 +23935,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // text/lines, sharp at any zoom), falling back to a flattened PNG in the
   // same situations Save's own PDF half already falls back for.
   function shareFullPlanNow(){
+    shareExportActive = true;
     renderExportPdfBlob().then(function(blob){
+      shareExportActive = false;
       shareFile(new File([blob], suggestFilename("pdf", true), { type: "application/pdf" }));
     }).catch(function(err){
+      shareExportActive = false;
       console.error("Share (PDF) failed:", err);
       shareAsPngFallback("Couldn't build the PDF — ");
     });
@@ -23507,7 +23966,13 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   var shareChoiceFullBtn = document.getElementById("shareChoiceFull");
   var shareChoiceCancelBtn = document.getElementById("shareChoiceCancel");
   var shareChoiceResolve = null;
+  var shareChoiceLabelEl = document.getElementById("shareChoiceLabel");
+  var shareChoiceFullTitleEl = shareChoiceFullBtn.querySelector(".share-choice-title");
   function openShareChoice(){
+    // (v84) on a check measure the two choices say so
+    var onItem = !!activeJoineryItemPage;
+    shareChoiceLabelEl.textContent = onItem ? "Share this check measure as:" : "Share as:";
+    shareChoiceFullTitleEl.textContent = onItem ? "Full check measure (PDF)" : "Full plan (PDF)";
     shareChoiceBackdrop.hidden = false;
     return new Promise(function(resolve){ shareChoiceResolve = resolve; });
   }
@@ -23528,9 +23993,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     });
   }
   var shareBtn = document.getElementById("shareBtn");
-  if (isShareSupported()){
-    shareBtn.style.display = "";
-  }
+  // (v84) Andrew: "can we reintroduce the share function ... from within the joinery item check measure". The button used to appear only where
+  // the device has a share sheet; it is always there now (on a PC it saves the file instead).
+  shareBtn.style.display = "";
   shareBtn.addEventListener("click", shareCurrentPlan);
 
   /* ============================== resize ============================== */
@@ -24049,7 +24514,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     var key = vsKeyFor(obj);
     vsState = { obj: obj, key: key, level: level, room: room, code: code, seq: seq };
     vsTitle.textContent = [code || "(no code)", room, level].filter(Boolean).join(" · ");
-    vsMeta.innerHTML = "<dt>Level</dt><dd>" + vsEsc(level) + "</dd><dt>Room</dt><dd>" + vsEsc(room) + "</dd><dt>Joinery ID</dt><dd>" + vsEsc(code) + "</dd><dt>Status</dt><dd>Loading…</dd>";
+    vsMeta.innerHTML = "<dt>Level</dt><dd>" + vsEsc(level) + "</dd><dt>Room</dt><dd>" + vsEsc(room) + "</dd><dt>Joinery ID</dt><dd>" + vsEsc(code) + "</dd><dt>Status</dt><dd>Loading…</dd><dt>Shop drawing</dt><dd data-shop-line=\"1\">Loading…</dd>";
     [vsOverlays, vsShopSent, vsShopReturned, vsShopApproved, vsJobNotes, vsRework, vsSubOrders].forEach(function(el){ vsEmpty(el, "Loading…"); });
     vsItps.innerHTML = "<span class=\"vs-empty\">Loading…</span>";
     vsDelivery.innerHTML = "<p class=\"vs-empty\">Loading…</p>";
@@ -24074,11 +24539,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         (Number(it.dollarValue) > 0 ? "<dt>Value</dt><dd>$" + Number(it.dollarValue).toLocaleString() + "</dd>" : "") +
         "<dt>Status</dt><dd>" + vsEsc(joineryStatusIcon(st)) + " " + vsEsc(vsStatusLabel(st)) + (statusRec && statusRec.jobNote ? "<span class=\"vs-pill\">Job note</span>" : "") +
         (statusRec && (statusRec.at || statusRec.by) ? "<span class=\"vs-row-sub\">" + vsEsc([statusRec.by, vsWhen(statusRec.at)].filter(Boolean).join(", ")) + "</span>" : "") + "</dd>" +
+        "<dt>Shop drawing</dt><dd data-shop-line=\"1\">" + (vsState && vsState.shopStatusHtml ? vsState.shopStatusHtml : "Loading…") + "</dd>" +
         "<dt>Required delivery</dt><dd>" + vsEsc(sch.requiredDeliveryDate ? vsDate(sch.requiredDeliveryDate) : "Not set") + "</dd>" +
         "<dt>Manufacture start</dt><dd>" + vsEsc(sch.manufactureStartDate ? vsDate(sch.manufactureStartDate) : "Not set") + (sch.manufactureLeadTimeDays != null && sch.manufactureLeadTimeDays !== "" ? " <span class=\"vs-row-sub\">lead time " + vsEsc(sch.manufactureLeadTimeDays) + " days</span>" : "") + "</dd>";
       if (hist.length){
         hist.sort(function(a, b){ return String(a.at || "") < String(b.at || "") ? 1 : -1; });
-        html += "<dt>Status history</dt><dd>" + hist.slice(0, 8).map(function(h){ return vsEsc(vsStatusLabel(h.status)) + " <span class=\"vs-row-sub\" style=\"display:inline\">" + vsEsc([h.by, vsWhen(h.at)].filter(Boolean).join(", ")) + "</span>"; }).join("<br>") + "</dd>";
+        html += "<dt>Status history</dt><dd>" + hist.slice(0, 8).map(function(h){ return (h.reversed ? vsEsc(vsStatusLabel(h.status)) + " <em>reversed</em>" : (h.cancelled ? "<s>" + vsEsc(vsStatusLabel(h.status)) + "</s>" : vsEsc(vsStatusLabel(h.status)))) + " <span class=\"vs-row-sub\" style=\"display:inline\">" + vsEsc([h.by, vsWhen(h.at)].filter(Boolean).join(", ")) + "</span>"; }).join("<br>") + "</dd>";
       }
       vsMeta.innerHTML = html;
     }).catch(function(err){ console.error("Joinery summary details failed:", err); if (live()) vsMeta.innerHTML += "<dt></dt><dd class=\"vs-empty\">Couldn't read this item's details.</dd>"; });
@@ -24175,6 +24641,25 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   vsOpenCheckMeasureBtn.addEventListener("click", function(){ if (!vsState) return; var obj = vsState.obj; closeJoinerySummary(); openJoineryItemPage(obj); });
   vsExportPlanBtn.addEventListener("click", function(){ if (!vsState) return; exportFloorPlanPdf(vsState.obj); });
   vsOpenReworksBtn.addEventListener("click", function(){ if (!vsState) return; var st = vsState; closeJoinerySummary(); openReworksScreen({ level: st.level, room: st.room, code: st.code }); });
+  // (v83) Andrew: "this to tell the shop drawing status (sent / returned / approved)" -- the newest of the latest sent
+  // revision, the latest "returned to resubmit" copy and the latest approved copy (a tie goes to the later stage)
+  function vsShopStatus(groups){
+    var parts = shopDrawingParts(groups), c = [];
+    if (parts.sent.length) c.push({ kind: "sent", r: parts.sent[0], rank: 1 });
+    if (parts.returned.length) c.push({ kind: "returned", r: parts.returned[0], rank: 2 });
+    if (parts.approved.length) c.push({ kind: "approved", r: parts.approved[0], rank: 3 });
+    if (!c.length) return null;
+    c.sort(function(a, b){ return String(b.r.stamp || "").localeCompare(String(a.r.stamp || "")) || (b.rank - a.rank); });
+    return c[0];
+  }
+  function vsShopStatusHtml(groups){
+    var st = vsShopStatus(groups);
+    if (!st) return "<span class=\"vs-empty\">No shop drawing yet</span>";
+    var word = st.kind === "approved" ? "Approved" : st.kind === "returned" ? "Returned to resubmit" : "Sent";
+    var when = st.r.at ? vsWhen(st.r.at) : (st.r.stamp ? String(st.r.stamp).replace(/ (\d{2})-(\d{2})-(\d{2})(?:-\d{3})?$/, " $1:$2") : "");
+    return "<span class=\"vs-pill " + (st.kind === "approved" ? "ok" : st.kind === "returned" ? "warn" : "sent") + "\" style=\"margin-left:0;\" data-shop-status=\"" + st.kind + "\">" + word + (st.r.revLabel ? " · " + vsEsc(st.r.revLabel) : "") + "</span>" +
+      (when || st.r.by ? "<span class=\"vs-row-sub\">" + vsEsc([st.r.by, when].filter(Boolean).join(", ")) + "</span>" : "");
+  }
   // (2026-10-01) Sent / Returned to resubmit / Approved (Andrew: "the returned need to be split to returned to resubmit, or approved")
   function vsRenderShopDrawings(){
     var st = vsState; if (!st) return;
@@ -24182,6 +24667,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     listShopDrawings(activeProjectHandle, st.key).then(function(groups){
       if (!vsState || vsState.seq !== seq) return;
       vsShopSent.innerHTML = ""; vsShopReturned.innerHTML = ""; vsShopApproved.innerHTML = "";
+      document.getElementById("vsShopStatusLine").innerHTML = vsShopStatusHtml(groups);
+      if (vsState) vsState.shopStatusHtml = vsShopStatusHtml(groups);
+      var shopDd = vsMeta.querySelector("dd[data-shop-line]"); if (shopDd) shopDd.innerHTML = vsShopStatusHtml(groups);
       var sent = groups.filter(function(g){ return g.revisions.length; }), ret = groups.filter(function(g){ return g.returned.length; }), appr = groups.filter(function(g){ return g.approved && g.approved.length; });
       if (!sent.length) vsEmpty(vsShopSent, "Nothing sent yet."); else sent.forEach(function(g){ vsShopSent.appendChild(shopDrawingRow(g.revisions)); });
       if (!ret.length) vsEmpty(vsShopReturned, "Nothing returned to resubmit yet."); else ret.forEach(function(g){ vsShopReturned.appendChild(shopDrawingRow(g.returned)); });
@@ -24195,8 +24683,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   vsShopCard.appendChild(vsShopFileInput);
   function vsAddShopDrawing(file, kind){ if (!vsState) return Promise.resolve(false); return openAddShopDrawingDialog(vsState.obj, { file: file || null, kind: kind || "sent" }); }
   vsAddShopDrawingBtn.addEventListener("click", function(){ vsAddShopDrawing(null, "sent"); });
-  vsShopDrop.addEventListener("click", function(){ vsShopFileInput.click(); });
-  vsShopDrop.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " "){ e.preventDefault(); vsShopFileInput.click(); } });
+  UtzDrop.longPress(vsShopDrop, vsShopFileInput); // (2026-10-02) drag and drop only
   vsShopFileInput.addEventListener("change", function(){
     var f = vsShopFileInput.files && vsShopFileInput.files[0];
     vsShopFileInput.value = "";
@@ -24216,19 +24703,58 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function vsNamePart(name, fallback){ var c = String(name || "").replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim().replace(/^[._]+|[._\s]+$/g, ""); return c.slice(0, 80) || fallback; }
   function vsWriteFile(dirH, name, blob){ return dirH.getFileHandle(name, { create: true }).then(function(fh){ return verifiedHandleWrite(fh, blob); }); }
   // ---- Export floor plan (2 x A3) ----
-  var fxAskBackdrop = document.getElementById("fxAskBackdrop"), fxAskText = document.getElementById("fxAskText"), fxAskYesBtn = document.getElementById("fxAskYesBtn"), fxAskNoBtn = document.getElementById("fxAskNoBtn");
-  var fxDoneBackdrop = document.getElementById("fxDoneBackdrop"), fxDoneText = document.getElementById("fxDoneText"), fxDoneOpenBtn = document.getElementById("fxDoneOpenBtn"), fxDoneShareBtn = document.getElementById("fxDoneShareBtn"), fxDoneCloseBtn = document.getElementById("fxDoneCloseBtn");
-  var fxAskObj = null, fxDoneRes = null, fxBusy = false;
-  function fxAsk(obj, lead){
-    fxAskObj = obj;
-    fxAskText.textContent = (lead || "") + "Export the floor plan for it? A two-page A3 PDF: a close-up around this item, then the whole plan, each with its indicator and a QR code the ITP apps scan to open it.";
-    fxAskBackdrop.hidden = false;
+  var fxDoneBackdrop = document.getElementById("fxDoneBackdrop"), fxDoneTitleEl = document.getElementById("fxDoneTitle"), fxDoneText = document.getElementById("fxDoneText"), fxDoneOpenBtn = document.getElementById("fxDoneOpenBtn"), fxDoneShareBtn = document.getElementById("fxDoneShareBtn"), fxDonePrintBtn = document.getElementById("fxDonePrintBtn"), fxDoneCloseBtn = document.getElementById("fxDoneCloseBtn");
+  var fxDoneRes = null, fxBusy = false;
+  // (v83) one popup for both: a job note just added (the two A3 plan pages are at its end) and a manual floor plan export
+  //   res = { kind: "note" | "plan", obj, blob, name, title, text }
+  function fxShowDone(res){
+    fxDoneRes = res;
+    fxDoneTitleEl.textContent = res.title || "Floor plan exported";
+    fxDoneText.textContent = res.text || "";
+    fxDoneShareBtn.hidden = !isShareSupported();
+    fxDoneBackdrop.hidden = false;
   }
-  fxAskNoBtn.addEventListener("click", function(){ fxAskBackdrop.hidden = true; fxAskObj = null; });
-  fxAskYesBtn.addEventListener("click", function(){ var o = fxAskObj; fxAskBackdrop.hidden = true; fxAskObj = null; if (o) exportFloorPlanPdf(o); });
   fxDoneCloseBtn.addEventListener("click", function(){ fxDoneBackdrop.hidden = true; fxDoneRes = null; });
   fxDoneOpenBtn.addEventListener("click", function(){ if (!fxDoneRes) return; var url = URL.createObjectURL(fxDoneRes.blob); var w = window.open(url, "_blank"); if (!w) browserDownloadBlob(fxDoneRes.blob, fxDoneRes.name); setTimeout(function(){ URL.revokeObjectURL(url); }, 60000); });
   fxDoneShareBtn.addEventListener("click", function(){ if (!fxDoneRes) return; var f = null; try{ f = new File([fxDoneRes.blob], fxDoneRes.name, { type: "application/pdf" }); }catch(e){} if (f) shareFile(f); else browserDownloadBlob(fxDoneRes.blob, fxDoneRes.name); });
+  // Print a PDF: a hidden frame + print() on a computer; a tablet / phone has no print() for a PDF, so it opens the PDF (the viewer's own Print)
+  function fxPrintBlob(blob, name){
+    var url = URL.createObjectURL(blob);
+    function openIt(){ var w = window.open(url, "_blank"); if (!w) browserDownloadBlob(blob, name); setTimeout(function(){ URL.revokeObjectURL(url); }, 120000); }
+    if (/Android|iPhone|iPad/i.test(navigator.userAgent || "")){ openIt(); return; }
+    try{
+      var fr = document.createElement("iframe");
+      fr.setAttribute("aria-hidden", "true");
+      fr.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;";
+      fr.onload = function(){
+        setTimeout(function(){ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ console.error("Print failed:", e); openIt(); } }, 400);
+        setTimeout(function(){ if (fr.parentNode) fr.parentNode.removeChild(fr); URL.revokeObjectURL(url); }, 180000);
+      };
+      fr.src = url;
+      document.body.appendChild(fr);
+    }catch(e){ console.error("Print frame failed:", e); openIt(); }
+  }
+  // "Print entire job note" (Andrew: "a print entire job note button (which will print the job note, and plan)"):
+  // a job note just added already carries the plan pages; from a manual plan export the newest job note
+  // is found and joined to these pages (one that already has its plan pages is printed as it is)
+  function fxPrintEntire(){
+    var res = fxDoneRes; if (!res) return Promise.resolve();
+    if (res.kind === "note"){ fxPrintBlob(res.blob, res.name); return Promise.resolve(); }
+    if (!activeProjectHandle || !res.obj){ fxPrintBlob(res.blob, res.name); return Promise.resolve(); }
+    return listJobNotes(activeProjectHandle, jobNoteKeyFor(res.obj)).then(readJobNoteSidecars).then(function(notes){
+      if (!notes.length){ showToast("No job note for this item yet — printing the plan pages only.", 5000); fxPrintBlob(res.blob, res.name); return; }
+      var n = notes[0];
+      return n.handle.getFile().then(function(f){
+        if (n.withPlan){ fxPrintBlob(f, n.fileName); return; }
+        return appendPdfPages(f, res.blob).then(function(b){ fxPrintBlob(b, "Job note and plan.pdf"); });
+      });
+    }).catch(function(err){
+      console.error("Print entire job note failed:", err);
+      showToast("Couldn't put the job note and the plan together — printing the plan pages only.", 6000);
+      fxPrintBlob(res.blob, res.name);
+    });
+  }
+  fxDonePrintBtn.addEventListener("click", function(){ fxPrintEntire(); });
   // the plan (base tiles + the drawing) in world bounds, with ONLY the one item's indicator marker
   // (Andrew: "the floor plans should only show that joinery item indicator") -> a JPEG no longer than maxLong px
   // markerScale (Andrew: "the indicators larger on the pdf export"): the kept marker (dot, rings, icon and
@@ -24240,6 +24766,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var o = findObj(g.getAttribute("data-id"));
       if (!o || o.type !== "roomlink") return;
       if (o.id !== keepMarkerId){ g.remove(); return; }
+      // (v83) Andrew: "show the indicator and joinery code, but not the status icon" -- the dot and the code label stay
+      Array.prototype.forEach.call(g.querySelectorAll(".marker-status-icon"), function(n){ n.remove(); });
       if (markerScale && markerScale !== 1){
         var t = "translate(" + o.x + " " + o.y + ") scale(" + markerScale + ") translate(" + (-o.x) + " " + (-o.y) + ")";
         var prev = g.getAttribute("transform");
@@ -24276,12 +24804,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     }).then(function(res){ URL.revokeObjectURL(blobUrl); return res; }, function(err){ URL.revokeObjectURL(blobUrl); throw err; });
   }
   var FX_A3_W = 1190.55, FX_A3_H = 841.89, FX_M = 28;
-  function exportFloorPlanPdf(obj){
-    if (fxBusy){ showToast("Still exporting the floor plan…"); return Promise.resolve(); }
-    if (!activeProjectHandle || !state.imageW || !state.imageH){ showToast("Open the level plan first — the floor plan export draws the plan on screen."); return Promise.resolve(); }
+  // (v83) the two A3 landscape pages (close-up, whole plan) as a PDF blob -- not saved anywhere by itself. Rejects when the plan can't be drawn.
+  function fxBuildPlanPages(obj){
     var level = activeLevelName, room = obj.roomName || "", code = obj.joineryCode || "", who = deviceUserName || "";
-    fxBusy = true;
-    showToast("Exporting the floor plan (2 × A3)…", 4000);
     var libP = Promise.resolve(window.__utzNeedPdfLibs ? window.__utzNeedPdfLibs() : null);
     // close-up (Andrew: "the zoomed in one needs to be closer"): a tight window around the marker -- about 28 marker
     // radii or an eighth of the plan's width, whichever is wider (a room or two) -- in A3's shape, kept inside the plan
@@ -24305,6 +24830,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var qrLink = window.UtzQr ? UtzQr.itemLink({ project: activeProjectName, level: level, room: room, code: code, app: "delivery" }) : "";
       var qrImg = null;
       try{ if (qrLink) qrImg = UtzQr.dataUrl(qrLink, 600, { ecl: "M" }); }catch(e){ console.error("QR code failed:", e); qrImg = null; }
+      // (2026-10-01) Andrew: "another qr code that takes you to the add rework option ... at the bottom of the page under, right aligned with the
+      // current one and a different colour (red if possible) labeled add rework here" -- the same item link with a=rework, drawn dark red
+      var qrRework = null;
+      try{ if (qrLink) qrRework = UtzQr.dataUrl(UtzQr.itemLink({ project: activeProjectName, level: level, room: room, code: code, app: "delivery", action: "rework" }), 600, { ecl: "M", dark: "#b3001b" }); }catch(e){ console.error("Rework QR code failed:", e); qrRework = null; }
       var QR_W = qrImg ? 150 : 0, QR_SIZE = 118;
       // (v77) Andrew: "the utzline branding logo in the top right corner, next to the qr code" -- the UTZLINE mark (shared/brand) above the QR
       var brand = window.UTZLINE_LOGO_DATA_URL || null, BRAND_SIZE = 44;
@@ -24312,8 +24841,18 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         if (!brand) return;
         try{ doc.addImage(brand, "PNG", FX_A3_W - FX_M - BRAND_SIZE, FX_M - 6, BRAND_SIZE, BRAND_SIZE, undefined, "FAST"); }catch(e){ console.error("Brand mark failed:", e); }
       }
+      function reworkQr(){
+        if (!qrRework) return;
+        var x = FX_A3_W - FX_M - QR_SIZE - 10, y = FX_A3_H - FX_M - QR_SIZE - 44;
+        doc.setDrawColor(179, 0, 27); doc.setLineWidth(1); doc.roundedRect(x - 8, y - 8, QR_SIZE + 16, QR_SIZE + 16, 4, 4);
+        doc.addImage(qrRework.dataUrl, "PNG", x, y, QR_SIZE, QR_SIZE, undefined, "FAST");
+        doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(179, 0, 27);
+        doc.text("Add rework here", x - 8, y + QR_SIZE + 24, { maxWidth: QR_SIZE + 16 });
+        doc.setTextColor(20);
+      }
       function qrStrip(top, availH){
         brandMark();
+        reworkQr();
         if (!qrImg) return;
         var x = FX_A3_W - FX_M - QR_SIZE - 10, y = top + 18;
         doc.setDrawColor(200); doc.setLineWidth(0.6); doc.roundedRect(x - 8, y - 8, QR_SIZE + 16, QR_SIZE + 16, 4, 4);
@@ -24339,19 +24878,27 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       }
       page(imgs.closeUp, "Page 1 of 2 — close-up around " + (code || "the item") + (room ? " (" + room + ")" : "") + " (only this item's indicator shown)", true);
       page(imgs.full, "Page 2 of 2 — full floor plan: " + level + " (only this item's indicator shown)", false);
-      var blob = doc.output("blob");
-      // (2026-10-01, code-only file names) "<item file name> - Floor plan - <initials> - <YYYY-MM-DD HH-mm-ss>.pdf"
-      // (was "<Level> - <Room> - <Code> - Floor plan - <full name> - <...>"); a failed write leaves no empty file
-      var name = vsKeyFor(obj) + " - Floor plan - " + UtzItemFiles.initials(who || "") + " - " + vsStamp(stamp) + ".pdf";
-      return activeProjectHandle.getDirectoryHandle("PDF Files", { create: true }).then(function(pf){ return pf.getDirectoryHandle("Floor Plans", { create: true }); }).then(function(dirH){
-        return writeNewFile(dirH, name, blob).then(function(){ return { blob: blob, name: name, saved: true }; }, function(err){ console.error("Saving the floor plan PDF failed:", err); return { blob: blob, name: name, saved: false }; });
-      });
-    }).then(function(res){
+      return { blob: doc.output("blob"), stamp: stamp, level: level, room: room, code: code };
+    });
+  }
+  // The Viewer's job-note path: the pages, or null (never throws) when the level plan isn't open or the drawing fails
+  function fxBuildPlanPagesSafe(obj){
+    if (fxBusy || !activeProjectHandle || !state.imageW || !state.imageH) return Promise.resolve(null);
+    fxBusy = true;
+    return fxBuildPlanPages(obj).then(function(r){ fxBusy = false; return r; }, function(err){ fxBusy = false; console.error("Plan pages for the job note failed:", err); return null; });
+  }
+  function exportFloorPlanPdf(obj){
+    if (fxBusy){ showToast("Still exporting the floor plan…"); return Promise.resolve(); }
+    if (!activeProjectHandle || !state.imageW || !state.imageH){ showToast("Open the level plan first — the floor plan export draws the plan on screen."); return Promise.resolve(); }
+    fxBusy = true;
+    showToast("Exporting the floor plan (2 × A3)…", 4000);
+    return fxBuildPlanPages(obj).then(function(built){
       fxBusy = false;
-      fxDoneRes = res;
-      fxDoneText.textContent = (res.saved ? "Saved as PDF Files/Floor Plans/" + res.name : "The project folder wouldn't take the file (" + res.name + ") — open or share it from here instead.") + " Two A3 pages: the close-up around " + (code || "the item") + ", then the whole " + level + " plan, with this item's indicator and a QR code the ITP apps scan to open it.";
-      fxDoneShareBtn.hidden = !isShareSupported();
-      fxDoneBackdrop.hidden = false;
+      // (v83) Andrew: "dont duplicate that export per joinery item in the files" -- no separate file in the project; the pages
+      // live at the end of the job note, and this one is just to open, share or print
+      var res = { kind: "plan", obj: obj, blob: built.blob, name: vsKeyFor(obj) + " - Floor plan.pdf", title: "Floor plan exported",
+        text: "Two A3 landscape pages: the close-up around " + (built.code || "the item") + ", then the whole " + built.level + " plan, with this item's indicator and the QR codes the ITP apps scan to open it. It isn't saved as a separate file (a job note keeps these pages at its end) — open, share or print it from here." };
+      fxShowDone(res);
       return res;
     }).catch(function(err){
       fxBusy = false;
@@ -24372,6 +24919,16 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // state.objects to render its menu).
   window.__testHooks = {
     ready: function(){ return true; },
+    // (v84) layers default / delete, room list, share
+    overlayLayerStateForTest: function(){ var p = activeJoineryItemPage; return p ? { showNewestNative: p.showNewestNative, baseStamp: p.baseStamp, layers: p.layers.map(function(l){ return { user: l.user, stamp: l.stamp, visible: l.visible, native: !!l.native, deletable: overlayLayerDeletable(l), objects: (l.objects || []).length }; }) } : null; },
+    deleteOverlayLayerForTest: function(i){ var p = activeJoineryItemPage; return p && p.layers[i] ? deleteOverlayLayer(p.layers[i]) : Promise.resolve(false); },
+    setOverlayLayerVisibleForTest: function(i, v){ var p = activeJoineryItemPage; if (p && p.layers[i]){ p.layers[i].visible = v; renderOverlayLayers(); } },
+    openOverlayLayersPanelForTest: function(){ setOverlayLayersPanelOpen(true); renderOverlayLayersPanel(); },
+    roomListForTest: function(){ return levelRoomList(); },
+    openRoomListForTest: function(){ openRoomList(); },
+    shareStateForTest: function(){ var b = document.getElementById("shareBtn"); return { display: b.style.display, hasShareApi: typeof navigator.share === "function" }; },
+    shareExportActiveForTest: function(){ return shareExportActive; },
+    cloneForExportForTest: function(){ var c = cloneWorldForExport(); return { nativeObjs: c.querySelectorAll("#overlayLayersGroup g.native-layer *").length }; },
     // (v76) joinery summary / shop drawing / floor plan export
     openJoinerySummaryForTest: function(obj){ return openJoinerySummary(obj); },
     addJobNoteForTest: function(obj, file){ openAddJobNoteDialog(obj); return handleJobNoteFile(file); },
@@ -24389,6 +24946,15 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     exportFloorPlanForTest: function(obj){ return exportFloorPlanPdf(obj); },
     qrItemLinkForTest: function(o){ return window.UtzQr ? UtzQr.itemLink(o) : ""; },
     fxMarkersInCloneForTest: function(keepId, scale){ var c = fxPrepareClone(0, 0, state.imageW, state.imageH, keepId, scale); var n = 0, tf = ""; Array.prototype.forEach.call(c.querySelectorAll("g[data-id]"), function(g){ var o = findObj(g.getAttribute("data-id")); if (o && o.type === "roomlink"){ n++; tf = g.getAttribute("transform") || ""; } }); return { markers: n, transform: tf }; },
+    // (v83) how many status icons the marker has on screen vs in the plan export, and whether its code label is still drawn
+    refreshStatusCacheForTest: function(){ return Promise.resolve(refreshJoineryStatusCache(true)).then(function(){ renderAll(); return joineryStatusCache ? joineryStatusCache.length : -1; }); },
+    fxStatusIconCountsForTest: function(id){
+      var o = findObj(id), onScreen = 0, inExport = 0, label = false;
+      Array.prototype.forEach.call(objectsLayer.querySelectorAll("g[data-id]"), function(g){ if (g.getAttribute("data-id") === id) onScreen += g.querySelectorAll(".marker-status-icon").length; });
+      var c = fxPrepareClone(0, 0, state.imageW, state.imageH, id, 1);
+      Array.prototype.forEach.call(c.querySelectorAll("g[data-id]"), function(g){ if (g.getAttribute("data-id") === id){ inExport += g.querySelectorAll(".marker-status-icon").length; label = !!o && g.textContent.indexOf(o.joineryCode || "\u0000") !== -1; } });
+      return { onScreen: onScreen, inExport: inExport, labelInExport: label };
+    },
     setPlanStateForTest: function(w, h, objects){ state.imageW = w; state.imageH = h; state.objects = objects || []; renderAll(); },
     showLockPopover: function(obj, x, y){ return showLockPopover(obj, x, y); },
     hideLockPopover: function(){ return hideLockPopover(); },

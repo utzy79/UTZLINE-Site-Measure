@@ -1,10 +1,39 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v81 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v85 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v85 (2026-10-02) — RC 1.0: logos folder, reversed Machined, drag and drop only, Viewer button ink.**
+
+- **Company and builder logos live in a `logos` folder** at the Projects root (reads `logos/` first, falls back to the old root files; `logos` is never listed as a project; the "Get ready for offline" check and the sync note include it).
+- **Reversed Machined**: the status honours the Machine Schedule's `statusRetract` event (the item page and summary show the earlier stage again; history shows the entry struck through, then "reversed").
+- **Drag and drop only -- no file selector**: job notes, shop drawings (the Add dialog and the summary card) are drop boxes; Insert image takes a photo / PDF dropped on the plan or pasted with Ctrl+V (the picker only opens on a touch-only tablet, where nothing can be dropped, via a long press).
+- **Viewer**: text on the bright dark-mode blue buttons (Save, Choose Projects Folder, Reconnect, Confirm, the layers badge) is now dark -- white on that blue was 2.3:1, "white writing on a pale background".
+
+**v84 (2026-10-02) — RC 1.0: Share from the check measure, builder logo at the far right of the top bar, older measure layers off by default (and deletable in Site Measure), the Viewer draws the latest measure exactly like Site Measure, Viewer room list.**
+
+- **Share** is always on the toolbar now (it used to appear only where the device has a share sheet). On a check measure it offers "Current view" (a picture) or "Full check measure (PDF)". Where there is no share sheet (the PC app) it saves the file to Downloads instead.
+- **Builder logo** sits at the far right of the top bar, on the same row as the title, and stays at the right edge when the bar is scrolled sideways.
+- **Layers:** the newest save is drawn on the page exactly as Site Measure draws its own marks (bold text, halo, original colours) whenever the page has no marks of its own (always in the Viewer); every older save is a hidden reference layer -- tick it in the layers panel to audit it (tinted, thin). When you have your own save on the page, every other layer starts hidden.
+- **Delete an old layer (Site Measure only):** a Delete button beside each layer that a newer save has overwritten; asks first, one at a time, never offered for the newest, never in the Viewer. The file is moved into a "Deleted layers" folder inside the item's own folder, with a small record of who deleted it and when -- nothing is erased.
+- **Viewer: Room list** button (on a level's plan): the rooms on the level, alphabetical, with item counts; tap one to go to it on the plan.
+- Sign-in "Opening…" cover and the shared rework module's "Logged in" display re-inlined.
+
+**v83 (2026-10-01) — RC 1.0: the plan pages travel with the job note; Export floor plan works from the summary; status line for shop drawings (Viewer).**
+
+- **Job note + plan pages (Viewer).** Adding a job note now draws the two A3 landscape plan pages (the close-up around the item, then the whole level plan, each with the indicator and both QR codes) and puts them at the **end of the same PDF**, after the For Construction watermark (so they are never watermarked). One file, no separate plan export per item in the project folder (Andrew: *"dont duplicate that export per joinery item in the files"*). The note's `.json` carries `withPlan: true`. If the plan can't be drawn or joined, the note is saved as before and the popup says so.
+- **"Print entire job note"** on the popup shown after a note is added (and on a manual floor plan export): prints the job note and its plan pages together. From a manual export it finds the item's newest job note and joins it to the pages (a note that already carries its plan pages is printed as it is; no note: the plan pages only). On a computer it opens the print dialog; on a tablet it opens the PDF for the viewer's own Print.
+- **Export floor plan (A3 PDF)** no longer writes a file into `PDF Files/Floor Plans`; the popup offers Open / Share / Print.
+- **Bug fixed: "Export floor plan" did nothing until you went back to the plan.** The popup (and the "Exporting…" toast) were being drawn *under* the joinery summary screen, so it looked dead until the summary was closed. They now sit above every full screen.
+- **Plan exports show the indicator and joinery code, not the status icon** (Andrew: *"show the indicator and joinery code, but not the status icon"*).
+- **Viewer joinery summary: a shop drawing status line** — a coloured pill (Sent / Returned to resubmit / Approved, with its REV, who and when) in the details list and at the top of the Shop drawings card, from the newest of the latest sent revision, returned copy and approved copy (the Scheduler has had this since v46).
+
+**v82 (2026-10-01) — RC 1.0: the red "Add rework here" QR code on the plan PDF export.**
+
+- **The plan PDF export** (Site Measure / Viewer) has a **second QR code**, dark red, at the bottom right of each page under the first one's column and labelled **Add rework here** (Andrew: *"another qr code that takes you to the add rework option ... bottom of the page under right aligned with the current one and a different colour (red if possible) labeled add rework here"*). It carries the same item link with `a=rework`; scanning it (or opening it from the phone's camera) in the Install or Delivery ITP goes straight to that item's Add rework screen; the Manufacture ITP (no rework screen) opens the item and says rework is added in the Install or Delivery ITP.
 
 **v81 (2026-10-01) — RC 1.0: code-only file names -- joinery codes, not descriptions, in every file and folder name (path-limit round, fourth build).**
 
