@@ -1218,7 +1218,7 @@
 // v78 (2026-10-01): RC 1.0 -- Windows' 260-character path limit: shorter record and backup names (see README)
 // v84 (2026-10-02): RC 1.0 -- Share from the check measure, builder logo far right, older layers off by default / deletable, Viewer room list
 // v85 (2026-10-02): RC 1.0 -- logos folder, reversed Machined, drag and drop only, Viewer button ink.
-var CACHE_NAME = "utzline-sitemeasure-cache-v91";
+var CACHE_NAME = "utzline-sitemeasure-cache-v93";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [

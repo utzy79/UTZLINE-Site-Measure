@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v91">
+<link rel="manifest" href="./manifest.json?v=v93">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v91">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v91">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v93">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v93">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1058,12 +1058,14 @@ window.__pdfImportLibFailed = false;
     box-shadow:var(--shadow); padding:18px 20px; max-width:320px; width:calc(100% - 40px);
   }
   /* (v91) tick-list inside the confirm dialog (which items of a room a site measure covers) */
-  .confirm-items{ display:flex; flex-direction:column; gap:4px; margin:-4px 0 14px; max-height:42vh; overflow:auto; }
+  .confirm-items{ display:flex; flex-direction:column; gap:4px; margin:-4px 0 14px; max-height:58vh; overflow:auto; }
   .confirm-items label{ display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); font-size:13.5px; cursor:pointer; }
   .confirm-items label.is-off{ opacity:.55; cursor:default; }
   .confirm-items input[type=checkbox]{ width:20px; height:20px; flex:none; accent-color:var(--accent); }
   .confirm-items .ci-code{ font-weight:700; }
   .confirm-items .ci-note{ display:block; font-size:11.5px; color:var(--text-secondary,var(--text-primary)); }
+  .confirm-items .ci-preview{ position:sticky; top:0; z-index:1; background:var(--surface-1); padding-bottom:6px; }
+  .confirm-items .ci-preview canvas{ display:block; width:100%; height:auto; border:1px solid var(--border-strong); border-radius:8px; background:#fff; }
   .confirm-items .ci-tools{ display:flex; gap:8px; justify-content:flex-end; }
   .confirm-items .ci-tools button{ font:inherit; font-size:12px; padding:4px 10px; border:1px solid var(--border-strong); border-radius:6px; background:var(--surface-1); color:var(--text-primary); cursor:pointer; }
   .modal-box p{ margin:0 0 16px; font-size:13.5px; line-height:1.45; color:var(--text-primary); }
@@ -9178,7 +9180,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v91";
+  var APP_VERSION = "v93";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -15013,12 +15015,72 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (onRoomPage){
       askComplete = roomMeasureItems(pg.levelName, pg.roomName).then(function(items){
         if (!items.length) return false; // nothing known in this room: nothing to mark
-        return showItemTickConfirm("Site measure of ROOM " + pg.roomName + " — which items are now check measured?", items, { okLabel: "Mark ticked", cancelLabel: "Mark none" });
+        var preview = null;
+        try{ preview = makeRoomPlanPreview(items.mem, pg.roomName); }catch(e){ console.warn("plan preview failed:", e); }
+        return showItemTickConfirm("Site measure of ROOM " + pg.roomName + " — which items are now check measured?", items, { okLabel: "Mark ticked", cancelLabel: "Mark none", preview: preview });
       }).then(function(ticked){ return ticked === null ? false : ticked; });
     } else {
       askComplete = exitToPlanAfter ? showConfirm("Mark check measure complete?", { okLabel: "Yes", cancelLabel: "No" }) : Promise.resolve(false);
     }
     askComplete.then(function(markComplete){ runSaveAllProjectAware(exitToPlanAfter, markComplete); });
+  }
+  /* (v93) Andrew: "when ticked, it shows the indicator overlay so you can ensure you have ticked the right one" (chose: a plan
+     preview in the dialog) -- "only while the tick menu is open". A small picture of the level plan around the room, from
+     the plan remembered when the room page was opened (the same picture the markers sit on), with each of the room's
+     markers drawn on it: ticked ones solid with an orange ring and their code, the rest faint (30%). It lives inside the
+     tick-list, so it's gone the moment the list closes. Returns { canvas, setTicked(map) } or null (nothing to draw). */
+  function makeRoomPlanPreview(mem, roomName){
+    if (!mem || !mem.imageW || !mem.imageH || !(mem.imageDataURL || (mem.imageTiles && mem.imageTiles.length))) return null;
+    var want = String(roomName || "").toLowerCase();
+    var marks = (mem.objects || []).filter(function(o){ return o && o.type === "roomlink" && o.joineryCode && isFinite(o.x) && isFinite(o.y) && String(o.roomName || "").toLowerCase() === want; });
+    if (!marks.length) return null;
+    var minX = 1e12, minY = 1e12, maxX = -1e12, maxY = -1e12, R = 0;
+    marks.forEach(function(o){ var r = o.r || 27; R = Math.max(R, r); minX = Math.min(minX, o.x); maxX = Math.max(maxX, o.x); minY = Math.min(minY, o.y); maxY = Math.max(maxY, o.y); });
+    var ASPECT = 2.2, pad = R * 7;
+    var rw = (maxX - minX) + 2 * pad, rh = (maxY - minY) + 2 * pad;
+    rw = Math.max(rw, R * 24); rh = Math.max(rh, R * 24 / ASPECT);
+    if (rw / rh > ASPECT) rh = rw / ASPECT; else rw = rh * ASPECT;
+    if (rw > mem.imageW){ rw = mem.imageW; rh = rw / ASPECT; }
+    if (rh > mem.imageH){ rh = mem.imageH; rw = rh * ASPECT; }
+    var rx = Math.max(0, Math.min(mem.imageW - rw, (minX + maxX) / 2 - rw / 2));
+    var ry = Math.max(0, Math.min(mem.imageH - rh, (minY + maxY) / 2 - rh / 2));
+    var W = 640, scale = W / rw, H = Math.max(80, Math.round(rh * scale));
+    var canvas = document.createElement("canvas"); canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext("2d");
+    var baseC = document.createElement("canvas"); baseC.width = W; baseC.height = H;
+    var bctx = baseC.getContext("2d"); bctx.fillStyle = "#ffffff"; bctx.fillRect(0, 0, W, H);
+    var ticked = {}, baseReady = false, posByCode = {};
+    marks.forEach(function(o){ posByCode[String(o.joineryCode)] = { x: Math.round((o.x - rx) * scale), y: Math.round((o.y - ry) * scale) }; });
+    canvas.setAttribute("data-marks", JSON.stringify(posByCode));
+    function draw(){
+      ctx.clearRect(0, 0, W, H); ctx.globalAlpha = 1; ctx.drawImage(baseC, 0, 0);
+      marks.slice().sort(function(a, b){ return (ticked[String(a.joineryCode).toLowerCase()] ? 1 : 0) - (ticked[String(b.joineryCode).toLowerCase()] ? 1 : 0); }).forEach(function(o){
+        var on = !!ticked[String(o.joineryCode).toLowerCase()];
+        var x = (o.x - rx) * scale, y = (o.y - ry) * scale, rr = Math.max(8, (o.r || 27) * scale);
+        ctx.globalAlpha = on ? 1 : 0.3;
+        ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fillStyle = o.color || "#c8391c"; ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+        if (on){ ctx.beginPath(); ctx.arc(x, y, rr + 7, 0, Math.PI * 2); ctx.lineWidth = 6; ctx.strokeStyle = "#ff6a3a"; ctx.stroke(); }
+        ctx.font = "bold 28px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+        var ty = Math.min(H - 8, y + rr + (on ? 36 : 30));
+        ctx.lineWidth = 6; ctx.strokeStyle = "#ffffff"; ctx.strokeText(String(o.joineryCode), x, ty);
+        ctx.fillStyle = on ? "#7a1f10" : "#333333"; ctx.fillText(String(o.joineryCode), x, ty);
+      });
+      ctx.globalAlpha = 1;
+    }
+    var tiles = (mem.imageTiles && mem.imageTiles.length) ? mem.imageTiles : [{ x: 0, y: 0, w: mem.imageW, h: mem.imageH, dataUrl: mem.imageDataURL }];
+    Promise.all(tiles.filter(function(t){ return t && t.dataUrl && t.x < rx + rw && t.x + t.w > rx && t.y < ry + rh && t.y + t.h > ry; }).map(function(t){
+      return new Promise(function(res){
+        var im = new Image(); im.onload = function(){ res(im); }; im.onerror = function(){ res(null); }; im.src = t.dataUrl;
+      }).then(function(im){
+        if (!im) return;
+        var x0 = Math.max(t.x, rx), y0 = Math.max(t.y, ry), x1 = Math.min(t.x + t.w, rx + rw), y1 = Math.min(t.y + t.h, ry + rh);
+        var kx = im.naturalWidth / t.w, ky = im.naturalHeight / t.h;
+        bctx.drawImage(im, (x0 - t.x) * kx, (y0 - t.y) * ky, (x1 - x0) * kx, (y1 - y0) * ky, (x0 - rx) * scale, (y0 - ry) * scale, (x1 - x0) * scale, (y1 - y0) * scale);
+      });
+    })).then(function(){ baseReady = true; draw(); }, function(){ baseReady = true; draw(); });
+    draw();
+    return { canvas: canvas, setTicked: function(map){ ticked = map || {}; draw(); } };
   }
   // The items of a room, for the tick-list above: [{ code, desc, on, off, note }]
   function roomMeasureItems(levelName, roomName){
@@ -15031,7 +15093,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var k = code.toLowerCase(); if (seen[k]) return; seen[k] = 1;
       var rec = joineryStatusCache ? findJoineryStatus(joineryStatusCache, levelName, roomName, code) : null;
       var done = !!(rec && joineryStatusRank(rec.status) >= joineryStatusRank("measured"));
-      out.push({ code: code, desc: desc || "", on: onPlan, off: done, note: done ? "Already check measured" : (onPlan ? "" : "No marker for it on this plan") });
+      out.push({ code: code, desc: desc || "", on: false, off: done, note: done ? "Already check measured" : (onPlan ? "" : "No marker for it on this plan") });
     }
     return registerProjectItemFiles(activeProjectHandle, { maxAgeMs: 60000 }).then(function(items){ return items || []; }, function(){ return []; }).then(function(items){
       var desc = {};
@@ -15040,6 +15102,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       items.forEach(function(it){
         if (it && String(it.level || "").toLowerCase() === lv && String(it.room || "").toLowerCase() === want) add(it.joineryId, it.description, !haveMarkers);
       });
+      out.mem = mem || null;
       return out;
     });
   }
@@ -21055,8 +21118,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   var confirmOkCallback = null;
   // (v68) opts.okLabel / opts.cancelLabel -- e.g. Yes / No
   var confirmItemsEl = document.getElementById("confirmItems");
+  var confirmPreview = null; // (v93) the plan preview inside the tick-list, only while that list is open
   function showConfirm(msg, opts){
     confirmOkCallback = null;
+    confirmPreview = null;
     confirmItemsEl.hidden = true; confirmItemsEl.innerHTML = "";
     confirmMsg.textContent = msg;
     confirmOk.textContent = (opts && opts.okLabel) || "Confirm";
@@ -21073,10 +21138,22 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // same code works fine on desktop.
   /* (v91) The confirm dialog with a tick-list under the message. items: [{ code, desc, on, off, note }]. Resolves with
      the array of ticked codes, or null when cancelled / Back. An "off" row is shown but can't be ticked (already done). */
+  function refreshTickPreview(){
+    if (!confirmPreview) return;
+    var on = {};
+    Array.prototype.forEach.call(confirmItemsEl.querySelectorAll("input[type=checkbox]"), function(cb){ if (cb.checked && !cb.disabled) on[String(cb.value).toLowerCase()] = true; });
+    confirmPreview.setTicked(on);
+  }
+  confirmItemsEl.addEventListener("change", refreshTickPreview);
   function showItemTickConfirm(msg, items, opts){
     var promise = showConfirm(msg, opts);
+    if (opts && opts.preview){
+      var pv = document.createElement("div"); pv.className = "ci-preview"; pv.appendChild(opts.preview.canvas);
+      confirmItemsEl.appendChild(pv);
+      confirmPreview = opts.preview;
+    }
     var tools = document.createElement("div"); tools.className = "ci-tools";
-    function setAll(on){ Array.prototype.forEach.call(confirmItemsEl.querySelectorAll("input[type=checkbox]"), function(cb){ if (!cb.disabled) cb.checked = on; }); }
+    function setAll(on){ Array.prototype.forEach.call(confirmItemsEl.querySelectorAll("input[type=checkbox]"), function(cb){ if (!cb.disabled) cb.checked = on; }); refreshTickPreview(); }
     [["Tick all", true], ["Untick all", false]].forEach(function(t){
       var b = document.createElement("button"); b.type = "button"; b.textContent = t[0];
       b.addEventListener("click", function(){ setAll(t[1]); });
@@ -21093,6 +21170,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       lab.appendChild(cb); lab.appendChild(txt); confirmItemsEl.appendChild(lab);
     });
     confirmItemsEl.hidden = false;
+    refreshTickPreview();
     return promise.then(function(ok){
       var ids = [];
       if (ok) Array.prototype.forEach.call(confirmItemsEl.querySelectorAll("input[type=checkbox]"), function(cb){ if (cb.checked && !cb.disabled) ids.push(cb.value); });

@@ -1,10 +1,18 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v91 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v93 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v93 (2026-10-02) — RC 1.0: the room tick-list shows a plan preview so you can check you've ticked the right item.**
+
+- Andrew: "when ticked, it shows the indicator overlay so you can ensure you have ticked the right one" — chosen: a plan preview in the dialog; "only while the tick menu is open". The room's Save & exit tick-list now has a small picture of the level plan around the room (the plan remembered when the room page was opened), with the room's markers drawn on it: unticked ones faint (30%), ticked ones solid with an orange ring and their code. It updates as you tick / Tick all / Untick all and disappears the moment the list closes (nothing is added to the page or saved). Items with no marker on the plan are listed but can't appear in the picture. Test `run_sm_room_measure_v89.js` (K–M).
+
+**v92 (2026-10-02) — RC 1.0: the room tick-list starts with nothing ticked.**
+
+- Andrew: "start unticked". On a room's Save & exit, every item in the tick-list now starts UNticked (items already check measured stay greyed); tick the ones that are done, then **Mark ticked**. Tick all / Untick all still there. Test `run_sm_room_measure_v89.js` (G–J updated).
 
 **v91 (2026-10-02) — RC 1.0: on a room's site measure, Save & exit asks which items are now check measured.**
 
