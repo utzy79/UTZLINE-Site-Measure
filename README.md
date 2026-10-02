@@ -1,10 +1,22 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v88 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v91 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v91 (2026-10-02) — RC 1.0: on a room's site measure, Save & exit asks which items are now check measured.**
+
+- Andrew (after trying room site measures): "can we still have an option to mark individual items in the room as measured". The per-item **Mark as check measured** (and **Site measure not required**) rows in the marker menu are unchanged. New: on a ROOM page, Save & exit no longer asks the single Yes/No "Mark check measure complete?" (which had no real item to mark there); it shows a tick-list of the room's items — markers on the plan ticked, any other item the project lists for the room unticked, items already check measured greyed — with **Mark ticked** / **Mark none**, plus Tick all / Untick all. Only the ticked items are marked; the toast says how many. An item's own page (older per-item measures) keeps the Yes/No. Tests `run_sm_room_measure_v89.js` (G–J).
+
+**v90 (2026-10-02) — RC 1.0: the right-click menu says which room is being site measured.**
+
+- Andrew: "we need a way to know that we are doing it as a room when there are merged items. this popup should maybe say in bold that we are site measuring the room (with room number)." The marker menu now shows a bold line under the item title, **Site measure: ROOM <room>**, and — when more than one marker on the plan belongs to that room — "One site measure covers all N items in this room". Not shown for an item with no room, or one still on its own older site measure. Test `run_sm_room_measure_v89.js` (E, F).
+
+**v89 (2026-10-02) — RC 1.0: one site measure per room.**
+
+- **One site measure covers every item linked to a room** (Andrew: "if a room has linked items, one site measure covers them all"). Create / Open site measure on ANY item of a room opens the same page, kept in `Project Saves/Site Measures/Room - <level> - <room>/` and named "<Level> — <Room>"; the measures drawn on it by anyone show as layers as before. An item with no room keeps its own page. An item that already has its own older site measure, in a room that has none yet, keeps opening that one, so earlier work is never hidden. Job notes, shop drawings, status and every event log stay per item. The Viewer's joinery summary lists the room's measures and the item's older ones. Test `run_sm_room_measure_v89.js`.
 
 **v88 (2026-10-02) — RC 1.0: crop window is a real modal, no drawing on the main plan, callout number pad.**
 

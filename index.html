@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v88">
+<link rel="manifest" href="./manifest.json?v=v91">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v88">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v88">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v91">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v91">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -988,6 +988,13 @@ window.__pdfImportLibFailed = false;
   .lock-popover-title{
     font-weight:700; font-size:14px; text-align:center; margin:0 0 4px; color:var(--text-primary);
   }
+  .lock-popover-roombanner{
+    display:flex; flex-direction:column; gap:2px; text-align:center; margin:0 0 4px; padding:7px 10px;
+    border:1px solid var(--accent); border-radius:8px; background:var(--surface-2); color:var(--text-primary);
+    font-size:12.5px; line-height:1.3; word-break:break-word;
+  }
+  .lock-popover-roombanner strong{ font-weight:800; font-size:13.5px; }
+  .lock-popover-roombanner span{ color:var(--text-secondary,var(--text-primary)); font-size:11.5px; }
   .lock-popover{
     display:flex; align-items:center; gap:8px;
     width:100%; box-sizing:border-box;
@@ -1050,6 +1057,15 @@ window.__pdfImportLibFailed = false;
     background:var(--surface-1); border:1px solid var(--border-strong); border-radius:10px;
     box-shadow:var(--shadow); padding:18px 20px; max-width:320px; width:calc(100% - 40px);
   }
+  /* (v91) tick-list inside the confirm dialog (which items of a room a site measure covers) */
+  .confirm-items{ display:flex; flex-direction:column; gap:4px; margin:-4px 0 14px; max-height:42vh; overflow:auto; }
+  .confirm-items label{ display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-2); font-size:13.5px; cursor:pointer; }
+  .confirm-items label.is-off{ opacity:.55; cursor:default; }
+  .confirm-items input[type=checkbox]{ width:20px; height:20px; flex:none; accent-color:var(--accent); }
+  .confirm-items .ci-code{ font-weight:700; }
+  .confirm-items .ci-note{ display:block; font-size:11.5px; color:var(--text-secondary,var(--text-primary)); }
+  .confirm-items .ci-tools{ display:flex; gap:8px; justify-content:flex-end; }
+  .confirm-items .ci-tools button{ font:inherit; font-size:12px; padding:4px 10px; border:1px solid var(--border-strong); border-radius:6px; background:var(--surface-1); color:var(--text-primary); cursor:pointer; }
   .modal-box p{ margin:0 0 16px; font-size:13.5px; line-height:1.45; color:var(--text-primary); }
   .rename-input{
     display:block; width:100%; box-sizing:border-box;
@@ -2171,6 +2187,7 @@ window.__pdfImportLibFailed = false;
     <div class="modal-backdrop" id="confirmBackdrop" hidden>
       <div class="modal-box" role="alertdialog" aria-modal="true" aria-labelledby="confirmMsg">
         <p id="confirmMsg"></p>
+        <div class="confirm-items" id="confirmItems" hidden></div>
         <div class="modal-actions">
           <button class="mbtn" id="confirmCancel">Cancel</button>
           <button class="mbtn mbtn-accent" id="confirmOk">Confirm</button>
@@ -2727,10 +2744,26 @@ window.__pdfImportLibFailed = false;
     return p(d.getFullYear() % 100) + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + "-" + p(d.getMinutes()) + "-" + p(d.getSeconds()) + (ms ? "-" + p(d.getMilliseconds(), 3) : "");
   }
 
+  // (2026-10-02) One site measure covers every item linked to a room: the folder under Site Measures that holds
+  // it is named by level + room ("Room - L1 - Room 101"), never by an item. A long name is cut and given a short
+  // hash so two long room names can't meet. -> a name that goes on disk as given.
+  function roomMeasureKey(level, room){
+    var l = clean(level, 14), r = clean(room, 24) || "Room";
+    var cut = String(level == null ? "" : level).length > 14 || String(room == null ? "" : room).length > 24;
+    var k = "Room - " + (l ? l + " - " : "") + r;
+    if (cut || l !== String(level == null ? "" : level).trim() || r !== String(room == null ? "" : room).trim()){
+      var h = 0, src = low(level) + "|" + low(room);
+      for (var i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
+      var hs = h.toString(36).slice(0, 4);
+      if (cut) k = k + " ~" + hs;
+    }
+    return k;
+  }
+
   window.UtzItemFiles = {
     version: 1, MAX: MAX,
     clean: clean, baseOf: baseOf, valid: valid, assign: assign, register: register, fileKey: fileKey,
-    initials: initials, stamp: stamp, tripleKey: tripleKey,
+    initials: initials, stamp: stamp, tripleKey: tripleKey, roomMeasureKey: roomMeasureKey,
     _maps: function(){ return maps; }
   };
 })();
@@ -9145,7 +9178,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v88";
+  var APP_VERSION = "v91";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -10789,8 +10822,22 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // v45.11, cached on the marker as obj.pageKey) is gone -- UTZLINE Projects
   // gives a repeated code its own file name ("X (2)") in joinery-items.json,
   // and a pageKey saved on an older marker is ignored.
-  function resolveJoineryItemPageKey(levelName, obj){
+  // The ITEM's own file key (job notes, shop drawings, status and event folders are always per item).
+  function itemOwnKey(levelName, obj){
     return joineryItemPageKey(levelName, (obj && obj.roomName) || "", (obj && obj.joineryCode) || "");
+  }
+  /* (2026-10-02) Andrew: "if a room has linked items, one site measure covers them all" (asked how: one page per
+     room). The SITE MEASURE's folder is named by level + room (UtzItemFiles.roomMeasureKey), so every item in a
+     room opens the same page; an item with no room keeps its own. An item that already has its own older site
+     measure and whose room has none yet keeps opening that one, so earlier work is never hidden. This is the
+     quick, synchronous answer (labels / status); the real open (openJoineryItemPageNow) checks the folders. */
+  var roomMeasureOffForTest = false; // test pages only (gen_test.py flips it so older per-item tests keep their per-item keys)
+  function roomMeasureKeyFor(levelName, obj){ return (!roomMeasureOffForTest && obj && obj.roomName) ? UtzItemFiles.roomMeasureKey(levelName, obj.roomName) : ""; }
+  function resolveJoineryItemPageKey(levelName, obj){
+    var own = itemOwnKey(levelName, obj), rk = roomMeasureKeyFor(levelName, obj);
+    if (!rk) return own;
+    if (!checkMeasureKeySet || checkMeasureKeySet.has(rk)) return rk;
+    return checkMeasureKeySet.has(own) ? own : rk;
   }
   function readJoineryItemPage(projectHandle, key){
     return getSiteMeasuresDir(projectHandle, false).then(function(dirH){
@@ -11994,7 +12041,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       });
     }).then(function(){ return { stamped: stamped, fileName: savedName, withPlan: withPlan, blob: finalBlob }; });
   }
-  function jobNoteKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
+  function jobNoteKeyFor(obj){ return itemOwnKey(activeLevelName, obj); }
 
   /* ---- Shop drawings (2026-09-23) ----
      Andrew, explicitly: "add a shop drawing (NOT A JOB NOTE) these are 2
@@ -12189,7 +12236,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // addShopDrawing() (the write side -- new/next-revision file creation)
   // was removed 2026-09-24 along with the popover's own "Add shop drawing"
   // row; see this file's own "Shop drawings" comment above.
-  function shopDrawingKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
+  function shopDrawingKeyFor(obj){ return itemOwnKey(activeLevelName, obj); }
 
   /* ---- (2026-10-01) Viewer: "Add shop drawing" is back ----
      Andrew: "on next update, we need to bring the upload shop drawings back
@@ -13358,9 +13405,18 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // this runs ahead of saveActiveWorkBeforeLeaving.
     var perf = cmPerfStart([activeLevelName, obj.roomName, obj.joineryCode].filter(Boolean).join(" · "));
     var preKey = resolveJoineryItemPageKey(activeLevelName, obj);
+    var ownKeyForOpen = itemOwnKey(activeLevelName, obj), roomKeyForOpen = roomMeasureKeyFor(activeLevelName, obj);
     var wantSnapshot = !VIEW_ONLY_MODE && onLevelPlanNow() && firstOpenSnapshotMode !== "off";
     // (v60) One rule, same as the button -- see loadCheckMeasureBase.
-    var preloadP = loadCheckMeasureBase(activeProjectHandle, preKey);
+    // (2026-10-02) room first; an item's own older site measure only while the room has none (see resolveJoineryItemPageKey)
+    function tagKey(k){ return function(pre){ pre._smKey = k; return pre; }; }
+    var preloadP = (roomKeyForOpen
+      ? loadCheckMeasureBase(activeProjectHandle, roomKeyForOpen).then(tagKey(roomKeyForOpen)).then(function(p1){
+          if (p1.exists) return p1;
+          return loadCheckMeasureBase(activeProjectHandle, ownKeyForOpen).then(tagKey(ownKeyForOpen)).then(function(p2){ return p2.exists ? p2 : p1; });
+        })
+      : loadCheckMeasureBase(activeProjectHandle, ownKeyForOpen).then(tagKey(ownKeyForOpen))
+    ).then(function(pre){ preKey = pre._smKey; return pre; });
     var firstOpenSnapshotP = preloadP.then(function(pre){
       perf.mark(pre.exists ? "read the check measure (layers list, drafts, the save it opens from)" : "checked: no check measure yet");
       if (pre.exists && checkMeasureKeySet) checkMeasureKeySet.add(preKey);
@@ -13414,7 +13470,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var joineryCode = obj.joineryCode || "";
       // resolveJoineryItemPageKey (2026-10-01: simply the item's file name --
       // a code used twice in the project is "X (2)" in joinery-items.json).
-      var key = resolveJoineryItemPageKey(levelName, obj);
+      var key = preKey; // chosen above (room page, or the item's own older one)
+      var roomPage = !!roomKeyForOpen && key === roomKeyForOpen;
+      if (roomPage) joineryCode = ""; // the page belongs to the room, not to one item
       var displayName = joineryItemPageDisplayName(levelName, roomName, joineryCode);
       var create = !VIEW_ONLY_MODE;
       // The old readJoineryItemPage(activeProjectHandle, key) single-file
@@ -14134,7 +14192,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     return nameP.then(function(){
       var seq = ++sdAddSeq;
       var level = activeLevelName, room = obj.roomName || "", code = obj.joineryCode || "";
-      var key = resolveJoineryItemPageKey(level, obj);
+      var key = itemOwnKey(level, obj);
       sdAdd = { obj: obj, key: key, level: level, room: room, code: code, file: opts.file || null, sentRevs: [], next: "REV 0", readOk: false, busy: false, seq: seq };
       var kind = shopKindOf(opts.kind);
       Array.prototype.forEach.call(sdAddBackdrop.querySelectorAll("input[name=shopDrawingKind]"), function(r){ r.checked = r.value === kind; });
@@ -14944,8 +15002,46 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // same "is this actually a joinery item page" gate the lock-all-on-exit
     // logic just below already uses, so the two stay in sync automatically.
     // (v68) Andrew: "is check measure complete should be mark check measure complete, with yes or no buttins"
-    var askComplete = exitToPlanAfter ? showConfirm("Mark check measure complete?", { okLabel: "Yes", cancelLabel: "No" }) : Promise.resolve(false);
+    /* (v91) Andrew (room site measures): "can we still have an option to mark individual items in the room as measured".
+       On a ROOM's page there's no single item to mark, so the question becomes a tick-list of the room's items
+       (the markers on the plan, ticked; any other item the project lists for the room, unticked; ones already
+       check measured are shown greyed). The ticked ones are marked; none ticked marks none. The marker menu's own
+       per-item "Mark as check measured" still works on every item. */
+    var pg = activeJoineryItemPage;
+    var onRoomPage = !!(exitToPlanAfter && pg && !pg.joineryCode && pg.roomName);
+    var askComplete;
+    if (onRoomPage){
+      askComplete = roomMeasureItems(pg.levelName, pg.roomName).then(function(items){
+        if (!items.length) return false; // nothing known in this room: nothing to mark
+        return showItemTickConfirm("Site measure of ROOM " + pg.roomName + " — which items are now check measured?", items, { okLabel: "Mark ticked", cancelLabel: "Mark none" });
+      }).then(function(ticked){ return ticked === null ? false : ticked; });
+    } else {
+      askComplete = exitToPlanAfter ? showConfirm("Mark check measure complete?", { okLabel: "Yes", cancelLabel: "No" }) : Promise.resolve(false);
+    }
     askComplete.then(function(markComplete){ runSaveAllProjectAware(exitToPlanAfter, markComplete); });
+  }
+  // The items of a room, for the tick-list above: [{ code, desc, on, off, note }]
+  function roomMeasureItems(levelName, roomName){
+    var want = String(roomName || "").toLowerCase(), lv = String(levelName || "").toLowerCase(), seen = {}, out = [], placed = {};
+    var mem = levelReturnMemory[levelMemoryKey(activeProjectName, levelName)];
+    var haveMarkers = !!(mem && mem.objects);
+    if (haveMarkers) mem.objects.forEach(function(o){ if (o && o.type === "roomlink" && o.joineryCode && String(o.roomName || "").toLowerCase() === want) placed[String(o.joineryCode).toLowerCase()] = String(o.joineryCode); });
+    function add(code, desc, onPlan){
+      code = String(code || ""); if (!code) return;
+      var k = code.toLowerCase(); if (seen[k]) return; seen[k] = 1;
+      var rec = joineryStatusCache ? findJoineryStatus(joineryStatusCache, levelName, roomName, code) : null;
+      var done = !!(rec && joineryStatusRank(rec.status) >= joineryStatusRank("measured"));
+      out.push({ code: code, desc: desc || "", on: onPlan, off: done, note: done ? "Already check measured" : (onPlan ? "" : "No marker for it on this plan") });
+    }
+    return registerProjectItemFiles(activeProjectHandle, { maxAgeMs: 60000 }).then(function(items){ return items || []; }, function(){ return []; }).then(function(items){
+      var desc = {};
+      items.forEach(function(it){ if (it && String(it.level || "").toLowerCase() === lv && String(it.room || "").toLowerCase() === want && it.joineryId) desc[String(it.joineryId).toLowerCase()] = it.description || ""; });
+      Object.keys(placed).forEach(function(k){ add(placed[k], desc[k], true); });
+      items.forEach(function(it){
+        if (it && String(it.level || "").toLowerCase() === lv && String(it.room || "").toLowerCase() === want) add(it.joineryId, it.description, !haveMarkers);
+      });
+      return out;
+    });
   }
   function runSaveAllProjectAware(exitToPlanAfter, markComplete){
     var workName = activeWorkName();
@@ -14992,7 +15088,16 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       // that's already measured/manufactured/installed is always a safe
       // no-op, same as the right-click popover's own "Mark as check
       // measured" row this reuses.
-      if (jsonOK && markComplete && activeJoineryItemPage){
+      if (jsonOK && Array.isArray(markComplete) && markComplete.length && activeJoineryItemPage){
+        // (v91) a room's page: mark each ticked item, one after another
+        var rp = activeJoineryItemPage, okN = 0, failN = 0;
+        return markComplete.reduce(function(chain, code){
+          return chain.then(function(){
+            return setJoineryStatusForward(activeProjectHandle, rp.levelName, rp.roomName, code, "measured", deviceUserName || "Site Measure").then(function(){ okN++; }, function(err){ failN++; console.error("Mark as check measured failed:", err); });
+          });
+        }, Promise.resolve()).then(function(){ return { ok: failN === 0, count: okN, failed: failN, multi: true }; });
+      }
+      if (jsonOK && markComplete === true && activeJoineryItemPage){
         var p = activeJoineryItemPage;
         return setJoineryStatusForward(activeProjectHandle, p.levelName, p.roomName, p.joineryCode || "", "measured", deviceUserName || "Site Measure").then(function(status){
           return { ok: true, status: status };
@@ -15014,7 +15119,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         msg = "Couldn't save to this level's folder (" + describeError(jsonErr) + ") — try again.";
       }
       var markFailed = markResult && !markResult.ok;
-      if (markResult && markResult.ok) msg += " Marked as check measured.";
+      if (markResult && markResult.multi){
+        if (markResult.count) msg += " Marked " + markResult.count + (markResult.count === 1 ? " item" : " items") + " as check measured.";
+        if (markResult.failed) msg += " Couldn't mark " + markResult.failed + " — use the marker menu.";
+      }
+      else if (markResult && markResult.ok) msg += " Marked as check measured.";
       else if (markFailed) msg += " Couldn't mark it as check measured — try the right-click menu instead.";
       showToast(msg, (jsonOK && pdfOK && !markFailed) ? 2400 : 8000);
       // Save & exit (see above): only once the plan file itself is safely
@@ -18340,6 +18449,26 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     titleEl.className = "lock-popover-title";
     titleEl.textContent = lockPopoverTitleFor(obj, isBaseImage);
     box.appendChild(titleEl);
+    /* (v90) Andrew: "we need a way to know that we are doing it as a room when there are merged items. this popup
+       should maybe say in bold that we are site measuring the room (with room number)". One site measure covers
+       the whole room, so the menu says so up front -- bold "Site measure: ROOM <room>", and how many items on
+       this plan it covers. Not shown for an item still on its own older site measure (that one is just the item's). */
+    if (isRealObject && obj.type === "roomlink" && obj.roomName && roomMeasureKeyFor(activeLevelName, obj) &&
+        resolveJoineryItemPageKey(activeLevelName, obj) === roomMeasureKeyFor(activeLevelName, obj)){
+      var rmCount = 0, rmWant = String(obj.roomName).toLowerCase();
+      state.objects.forEach(function(o){ if (o && o.type === "roomlink" && String(o.roomName || "").toLowerCase() === rmWant) rmCount++; });
+      var rmBanner = document.createElement("div");
+      rmBanner.className = "lock-popover-roombanner";
+      var rmStrong = document.createElement("strong");
+      rmStrong.textContent = "Site measure: ROOM " + obj.roomName;
+      rmBanner.appendChild(rmStrong);
+      if (rmCount > 1){
+        var rmNote = document.createElement("span");
+        rmNote.textContent = "One site measure covers all " + rmCount + " items in this room";
+        rmBanner.appendChild(rmNote);
+      }
+      box.appendChild(rmBanner);
+    }
 
     // (2026-10-01, Viewer only) "Add shop drawing" is back, FIRST -- Andrew:
     // "on next update, we need to bring the upload shop drawings back into
@@ -20925,8 +21054,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   var confirmResolve = null;
   var confirmOkCallback = null;
   // (v68) opts.okLabel / opts.cancelLabel -- e.g. Yes / No
+  var confirmItemsEl = document.getElementById("confirmItems");
   function showConfirm(msg, opts){
     confirmOkCallback = null;
+    confirmItemsEl.hidden = true; confirmItemsEl.innerHTML = "";
     confirmMsg.textContent = msg;
     confirmOk.textContent = (opts && opts.okLabel) || "Confirm";
     confirmCancel.textContent = (opts && opts.cancelLabel) || "Cancel";
@@ -20940,9 +21071,39 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // Chrome silently refuse to open input[type=file] once a Promise hop
   // separates the .click() from the tap that "caused" it, even though the
   // same code works fine on desktop.
+  /* (v91) The confirm dialog with a tick-list under the message. items: [{ code, desc, on, off, note }]. Resolves with
+     the array of ticked codes, or null when cancelled / Back. An "off" row is shown but can't be ticked (already done). */
+  function showItemTickConfirm(msg, items, opts){
+    var promise = showConfirm(msg, opts);
+    var tools = document.createElement("div"); tools.className = "ci-tools";
+    function setAll(on){ Array.prototype.forEach.call(confirmItemsEl.querySelectorAll("input[type=checkbox]"), function(cb){ if (!cb.disabled) cb.checked = on; }); }
+    [["Tick all", true], ["Untick all", false]].forEach(function(t){
+      var b = document.createElement("button"); b.type = "button"; b.textContent = t[0];
+      b.addEventListener("click", function(){ setAll(t[1]); });
+      tools.appendChild(b);
+    });
+    confirmItemsEl.appendChild(tools);
+    items.forEach(function(it){
+      var lab = document.createElement("label"); if (it.off) lab.className = "is-off";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.value = it.code; cb.checked = !!it.on && !it.off; cb.disabled = !!it.off;
+      var txt = document.createElement("span");
+      var c = document.createElement("span"); c.className = "ci-code"; c.textContent = it.code; txt.appendChild(c);
+      if (it.desc){ txt.appendChild(document.createTextNode(" — " + it.desc)); }
+      if (it.note){ var n = document.createElement("span"); n.className = "ci-note"; n.textContent = it.note; txt.appendChild(n); }
+      lab.appendChild(cb); lab.appendChild(txt); confirmItemsEl.appendChild(lab);
+    });
+    confirmItemsEl.hidden = false;
+    return promise.then(function(ok){
+      var ids = [];
+      if (ok) Array.prototype.forEach.call(confirmItemsEl.querySelectorAll("input[type=checkbox]"), function(cb){ if (cb.checked && !cb.disabled) ids.push(cb.value); });
+      confirmItemsEl.hidden = true; confirmItemsEl.innerHTML = "";
+      return ok ? ids : null;
+    });
+  }
   function showConfirmSync(msg, onOk){
     confirmResolve = null;
     confirmMsg.textContent = msg;
+    confirmItemsEl.hidden = true; confirmItemsEl.innerHTML = "";
     confirmOk.textContent = "Confirm"; confirmCancel.textContent = "Cancel"; // (v68)
     confirmBackdrop.hidden = false;
     confirmOkCallback = onOk;
@@ -24448,7 +24609,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   var vsState = null; // { obj, key, level, room, code, seq }
   var vsSeq = 0;
   var vsItemExtras = null;
-  function vsKeyFor(obj){ return resolveJoineryItemPageKey(activeLevelName, obj); }
+  function vsKeyFor(obj){ return itemOwnKey(activeLevelName, obj); }
   function vsEsc(x){ return String(x == null ? "" : x).replace(/[&<>"']/g, function(c){ return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function vsReadJsonSoft(fh){ return fh.getFile().then(function(f){ return f.text(); }).then(function(t){ if (!String(t).trim()) return null; try{ var v = JSON.parse(t); return (v && typeof v === "object") ? v : null; }catch(e){ return null; } }); }
   function vsWhen(iso){
@@ -24651,7 +24812,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           confirmPin: function(name, why){ return readUsersCsv().then(function(rows){ var r = findUserRowCI(rows, name); if (!r) return false; return openNumberpad({ title: "Confirm PIN", subtitle: why || "", verify: function(pin){ return Promise.resolve(r.pin === pin); } }).then(function(p){ return p !== null; }); }, function(){ return false; }); },
           statusLabel: vsStatusLabel, formatWhen: vsWhen, formatDate: vsDate,
           readOrders: function(row, h){ return vsReadSubOrders(row.level, row.room, row.joineryId).then(function(list){ return list.map(function(e){ return e.order; }); }); },
-          listOverlays: function(row, h){ return listJoineryOverlays(h, joineryItemPageKey(row.level, row.room, row.joineryId)).then(vsNamesForInitials); },
+          listOverlays: function(row, h){
+            var ik = joineryItemPageKey(row.level, row.room, row.joineryId), ks = row.room ? [UtzItemFiles.roomMeasureKey(row.level, row.room), ik] : [ik]; // (2026-10-02) the room's site measure + this item's older one
+            return Promise.all(ks.map(function(k){ return listJoineryOverlays(h, k).catch(function(){ return []; }); })).then(function(a){ return [].concat.apply([], a); }).then(vsNamesForInitials);
+          },
           listJobNotes: function(row, h){ return listJobNotes(h, joineryItemPageKey(row.level, row.room, row.joineryId)).then(readJobNoteSidecars); } }); // (2026-10-01) + .original/.by/.at from each note's .json
       }
       var old = vsBody.querySelector(".ix-cards"); if (old) old.remove();
@@ -25043,6 +25207,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     qrItemLinkForTest: function(o){ return window.UtzQr ? UtzQr.itemLink(o) : ""; },
     fxMarkersInCloneForTest: function(keepId, scale){ var c = fxPrepareClone(0, 0, state.imageW, state.imageH, keepId, scale); var n = 0, tf = ""; Array.prototype.forEach.call(c.querySelectorAll("g[data-id]"), function(g){ var o = findObj(g.getAttribute("data-id")); if (o && o.type === "roomlink"){ n++; tf = g.getAttribute("transform") || ""; } }); return { markers: n, transform: tf }; },
     // (v83) how many status icons the marker has on screen vs in the plan export, and whether its code label is still drawn
+    joineryStatusOfForTest: function(level, room, code){ var r = joineryStatusCache ? findJoineryStatus(joineryStatusCache, level, room, code) : null; return r ? r.status : ""; },
     refreshStatusCacheForTest: function(){ return Promise.resolve(refreshJoineryStatusCache(true)).then(function(){ renderAll(); return joineryStatusCache ? joineryStatusCache.length : -1; }); },
     fxStatusIconCountsForTest: function(id){
       var o = findObj(id), onScreen = 0, inExport = 0, label = false;
