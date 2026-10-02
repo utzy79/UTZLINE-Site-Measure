@@ -1,10 +1,17 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v87 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v88 (RC 1.0)** (bump this line, and add a dated changelog
 entry below, every time a new build ships — see `next-version-notes.md`
 in the project for the full per-version changelog; v40 through v45.6
 shipped without this README's own version line being kept in sync, so
 that file is the authoritative record for that stretch.)
+
+**v88 (2026-10-02) — RC 1.0: crop window is a real modal, no drawing on the main plan, callout number pad.**
+
+- **Crop window (Create site measure)**: it now covers the whole screen, toolbar included (before, the toolbar and plan behind it still took touches, so an accidental drag panned the plan and could blank the page). Nothing pans / zooms / draws behind it; the plan is put back exactly as it was; the device Back button or an edge swipe **cancels** the open (stay on the plan, nothing changed) instead of carrying on half-way.
+- **No site measures on the main plan**: on a level (main) plan the Dimension, Line, Angle, Rectangle, Text and Callout tools and Insert image are hidden (and ignored: shortcuts, paste, file insert). Select and Pan stay. Every tool is available on a joinery item's own site measure page.
+- **Callout** labels use the same on-screen number pad as a dimension (with ABC for the full keyboard).
+- Tests: `run_sm_crop_drag_touch_v88.js`, `run_sm_crop_back_v88.js`, `run_sm_level_lock_v88.js`, `run_v59_measure_pad.js` (callout now gets the pad).
 
 **v87 (2026-10-02) — RC 1.0: sharp crop on a new site measure.**
 

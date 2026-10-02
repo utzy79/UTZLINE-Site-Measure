@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v87">
+<link rel="manifest" href="./manifest.json?v=v88">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v87">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v87">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v88">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v88">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1065,6 +1065,8 @@ window.__pdfImportLibFailed = false;
   }
   /* ---------- crop-before-insert dialog ---------- */
   .crop-box{ max-width:min(92vw, 600px); }
+  /* (v88) a real modal: fixed over the WHOLE screen, toolbar included (the old absolute backdrop left the toolbar live behind it) */
+  #cropBackdrop{ position:fixed; z-index:90000; touch-action:none; overscroll-behavior:contain; }
   .crop-stage{
     position:relative; display:flex; align-items:center; justify-content:center;
     max-height:60vh; margin-bottom:16px; background:#000; border-radius:6px; overflow:hidden;
@@ -1606,6 +1608,17 @@ window.__pdfImportLibFailed = false;
      remain real editor-only controls. */
   body.viewer-mode #exportAllRoomPdfsBtn,
   body.viewer-mode #exportAllProjectPdfsBtn{
+    display: none !important;
+  }
+  /* (v88) Andrew: "do not allow site measures on the main plans" -- the level plan only pans, zooms and opens
+     items; every measuring / drawing tool is hidden there (see levelPlanLocked) */
+  body.level-plan-locked #toolButtons [data-tool="dimension"],
+  body.level-plan-locked #toolButtons [data-tool="line"],
+  body.level-plan-locked #toolButtons [data-tool="angle"],
+  body.level-plan-locked #toolButtons [data-tool="rect"],
+  body.level-plan-locked #toolButtons [data-tool="text"],
+  body.level-plan-locked #toolButtons [data-tool="callout"],
+  body.level-plan-locked #insertImageBtn{
     display: none !important;
   }
   /* Viewer-only accent recolor: the same in-app blue used for the Viewer's
@@ -9132,7 +9145,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v87";
+  var APP_VERSION = "v88";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -13358,10 +13371,21 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         // live, then that area alone is rendered again at the plan's native resolution -- never cut
         // out of the screen-density preview (that was "when its cropped the new image is really blurry").
         var dn = joineryItemPageDisplayName(activeLevelName, obj.roomName || "", obj.joineryCode || "");
+        var viewAtOpen = { scale: state.view.scale, tx: state.view.tx, ty: state.view.ty };
         return showCropDialog(prev.dataUrl, prev.w, prev.h, {
           label: "Crop the plan snapshot for “" + dn + "” — drag the corners, then Crop, or keep the whole view:",
           skipLabel: "Use full view"
         }).then(function(res){
+          // whatever happened to the plan behind the dialog, it is exactly as it was when the tap was made
+          if (cropClosedByBack){ // Back / an accidental edge swipe: cancel the whole open, stay on the plan, change nothing
+            cropClosedByBack = false;
+            state.view.scale = viewAtOpen.scale; state.view.tx = viewAtOpen.tx; state.view.ty = viewAtOpen.ty; applyView();
+            showToast("Cancelled — nothing was changed.");
+            var ce = new Error("check measure open cancelled from the crop window"); ce.code = "nav_cancelled"; throw ce;
+          }
+          if (state.view.scale !== viewAtOpen.scale || state.view.tx !== viewAtOpen.tx || state.view.ty !== viewAtOpen.ty){
+            state.view.scale = viewAtOpen.scale; state.view.tx = viewAtOpen.tx; state.view.ty = viewAtOpen.ty; applyView();
+          }
           var reg = prev.region, fr = res && res.frac;
           var region = fr
             ? { x0: reg.x0 + fr.x * reg.w, y0: reg.y0 + fr.y * reg.h, x1: reg.x0 + (fr.x + fr.w) * reg.w, y1: reg.y0 + (fr.y + fr.h) * reg.h }
@@ -16658,6 +16682,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   }
   function renderAll(){
     renderQueued = false;
+    refreshLevelPlanLock();
     objectsLayer.innerHTML = "";
     state.objects.forEach(function(o){ if (o.hidden) return; objectsLayer.appendChild(renderObject(o, false)); });
     renderHandles();
@@ -17005,7 +17030,24 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     hideLockPopover();
   });
 
+  // (2026-10-02, v88) Andrew: "if you accidentally drag the plan while the crop window is open, it blacks the
+  // site measure plan". While the crop window is up nothing may pan / zoom / draw on the plan behind it.
+  // (v88) the level (main) plan is for finding things, never for measuring: no drawing tools, no inserted images.
+  // Measures are made on a joinery item's own page. (Viewer is already read-only; legacy room plans are unchanged.)
+  var LEVEL_LOCK_MSG = "Site measures aren't made on the main plan — open an item (tap its marker, then Create site measure).";
+  var levelLockOffForTest = false; // test pages only (gen_test.py flips it so older drawing tests still run on the level plan)
+  function levelPlanLocked(){ return !levelLockOffForTest && !VIEW_ONLY_MODE && onLevelPlanNow(); }
+  function refreshLevelPlanLock(){
+    var on = levelPlanLocked();
+    if (document.body.classList.contains("level-plan-locked") !== on) document.body.classList.toggle("level-plan-locked", on);
+    if (on && !VIEW_ONLY_ALLOWED_TOOLS[state.tool]){
+      state.tool = "select"; state.drawing = null; dragMode = null;
+      document.querySelectorAll("#toolButtons .ibtn").forEach(function(b){ b.classList.toggle("active", b.dataset.tool === "select"); });
+    }
+  }
+  function planInputBlocked(){ return !!(typeof cropBackdrop !== "undefined" && cropBackdrop && !cropBackdrop.hidden); }
   function onPointerDown(e){
+    if (planInputBlocked()) return;
     // Right mouse button doesn't drive selection or panning — its own
     // "contextmenu" event (below) handles it instead, so letting it fall
     // through here as well would select/drag/pan an object out from under
@@ -17212,6 +17254,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   }
 
   function onPointerMove(e){
+    if (planInputBlocked()) return;
     // Normally movement only matters while a pointer is actively down
     // (tracked in `pointers` from its pointerdown until its pointerup).
     // An in-progress angle's phase 2 is the one exception — leg 1's
@@ -17374,6 +17417,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
 
   function onWheel(e){
     e.preventDefault();
+    if (planInputBlocked()) return;
     // Ctrl/Cmd+scroll zooms (this also covers trackpad pinch-to-zoom, which
     // browsers report as a wheel event with ctrlKey set even though no
     // actual Ctrl key is down) -- everything else (plain mouse wheel or a
@@ -17697,10 +17741,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // normal text keyboard. This only changes which keypad the OS offers by
     // default -- switching keyboards by hand still works exactly as before.
     editorEl.inputMode = (obj.type === "dimension" || obj.type === "angle") ? "decimal" : "text";
-    // (v59) Measures get the app's own small number pad (with quick text)
+    // (v59; callouts too from v88) Measures and callouts get the app's own small number pad (with quick text)
     // instead: inputMode "none" keeps the tablet's keyboard from covering
     // half the plan, while a real keyboard (PC) still types straight in.
-    var usePad = obj.type === "dimension" || obj.type === "angle";
+    var usePad = obj.type === "dimension" || obj.type === "angle" || obj.type === "callout"; // (v88) Andrew: "give the callout the same numberpad setup as the dimension"
     if (usePad) editorEl.inputMode = "none";
     stage.appendChild(editorEl);
     reflowInlineEditor();
@@ -17962,6 +18006,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // -- they only move the view or highlight something, never create or
     // change a mark on the plan.
     if (VIEW_ONLY_MODE && !VIEW_ONLY_ALLOWED_TOOLS[tool]) return;
+    if (levelPlanLocked() && !VIEW_ONLY_ALLOWED_TOOLS[tool]){ showToast(LEVEL_LOCK_MSG); return; }
     // Switching tools mid-way through an angle's two-phase draw (leg 1
     // placed, waiting on leg 2) needs to properly abandon it — angle is
     // the one tool that stays "drawing" across a pointerup, so a plain
@@ -19586,7 +19631,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     for (var i = 0; i < pairs.length; i++){
       var bd = document.getElementById(pairs[i][0]);
       if (!bd || bd.hidden) continue;
-      if (pairs[i][0] === "cropBackdrop"){ closeCropDialog(null); return true; }
+      if (pairs[i][0] === "cropBackdrop"){ cropClosedByBack = true; closeCropDialog(null); return true; }
       var btn = pairs[i][1] ? document.getElementById(pairs[i][1]) : null;
       if (btn) btn.click(); else bd.hidden = true;
       return true;
@@ -22034,6 +22079,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   var cropSkipBtn = document.getElementById("cropSkipBtn");
   var cropApplyBtn = document.getElementById("cropApplyBtn");
   var cropResolve = null;
+  var cropClosedByBack = false; // (v88) the device Back button / an edge swipe closed the crop window: that means CANCEL, not "use the whole view"
   var cropSrc = null; // { dataUrl, w, h } -- the ORIGINAL, uncropped photo
   var cropRect = null; // current crop rect in DISPLAYED image-relative px (0,0 at the displayed image's own top-left)
   var CROP_DEFAULT_LABEL = "Crop this photo before it's added — drag the corners or edges, or skip to use it as-is:";
@@ -22044,6 +22090,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function showCropDialog(dataUrl, naturalW, naturalH, opts){
     opts = opts || {};
     return new Promise(function(resolve){
+      cropClosedByBack = false;
+      pointers.clear(); dragMode = null; pinchStart = null; // a half-finished drag / pinch on the plan must not carry on behind the dialog
       cropResolve = resolve;
       cropSrc = { dataUrl: dataUrl, w: naturalW, h: naturalH };
       document.getElementById("cropLabel").textContent = opts.label || CROP_DEFAULT_LABEL;
@@ -22775,6 +22823,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     }
   });
   function insertImageFile(file){
+    if (levelPlanLocked()){ showToast(LEVEL_LOCK_MSG); return; } // (v88) nothing is inserted on the main plan
     if (VIEW_ONLY_MODE) return; // defensive -- Insert image (button and Ctrl+V paste) is hidden/blocked in viewer mode
     if (isPdfFile(file)){
       showToast("Inserting PDF page(s)…");
