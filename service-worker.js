@@ -1218,7 +1218,7 @@
 // v78 (2026-10-01): RC 1.0 -- Windows' 260-character path limit: shorter record and backup names (see README)
 // v84 (2026-10-02): RC 1.0 -- Share from the check measure, builder logo far right, older layers off by default / deletable, Viewer room list
 // v85 (2026-10-02): RC 1.0 -- logos folder, reversed Machined, drag and drop only, Viewer button ink.
-var CACHE_NAME = "utzline-sitemeasure-cache-v104";
+var CACHE_NAME = "utzline-sitemeasure-cache-v111";
 var ICON_VERSION = CACHE_NAME.replace("utzline-sitemeasure-cache-", "");
 
 var PRECACHE_URLS = [
@@ -1229,6 +1229,7 @@ var PRECACHE_URLS = [
   "./svg2pdf.umd.min.js",
   "./pdf.min.js",
   "./pdf.worker.min.js",
+  "./pdf-lib.min.js", // (2026-10-04) stamps shop drawings NOT FOR CONSTRUCTION / job notes AS BUILT offline (loaded only when one is added)
   "./sans.woff2",
   "./mono.woff2",
   "./icons/icon-192.png?v=" + ICON_VERSION,
