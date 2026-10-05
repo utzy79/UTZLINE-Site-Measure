@@ -1,6 +1,6 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v124 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v127 (RC 1.0)** (bump this line, and add a dated changelog
 
 **v108 (2026-10-04): summary page fixes.** Viewer: "Recolour everything" is now "Recolour text" -- it recolours text only (text, dimensions, labels, room names), and the colour you pick is remembered on that device until the arrow is pressed. Joinery ID is orange and bold. Job notes and Set-out drawings cards have a drop area and an add button, like Shop drawings. Open check measure shows only when a check measure is saved for the item. The Sent / Returned / Approved buttons are really gone from Add shop drawing, and the "What is this drawing?" popup, the Add job note dialog, the PIN pad (cutting file padlock) and the other questions asked from the summary now open on top of it, not under it. "Share entire job note" on the floor plan popup shares the job note joined to the plan pages (like Print entire job note). Version raised so devices that already loaded v107 fetch these files.
 
