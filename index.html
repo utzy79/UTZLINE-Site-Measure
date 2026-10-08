@@ -12374,12 +12374,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       idbSet(LAST_ACTIVE_WORK_KEY, null).catch(function(){});
       return;
     }
-    idbSet(LAST_ACTIVE_WORK_KEY, {
-      projectHandle: activeProjectHandle,
-      projectName: activeProjectName,
-      levelName: activeLevelName,
-      roomName: activeRoomName || ""
-    }).catch(function(){});
+    var ptr = { projectName: activeProjectName, levelName: activeLevelName, roomName: activeRoomName || "" };
+    // the handle is kept when it can be (it can't always be stored); the project is also found again by name from the Projects root
+    idbSet(LAST_ACTIVE_WORK_KEY, Object.assign({ projectHandle: activeProjectHandle }, ptr)).catch(function(){ return idbSet(LAST_ACTIVE_WORK_KEY, ptr).catch(function(){}); });
   }
   // Called once at boot, right after the top project list is confirmed
   // reachable (see bootIntoProjectGate) -- tries to step straight back down
@@ -12396,9 +12393,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // convenience on top of normal boot, not a user-initiated action.
   // (2026-10-08) Andrew: "when sharing a site measure it needs to go back to the page you were on ... goes all the way back to the start".
   // Android can drop the app while the share sheet is open and reload it afterwards, which lands on the project list (it opens there every
-  // time on purpose). A tap on any Share button leaves a timestamp; if the app starts again within 20 minutes of one, it steps back into the
+  // time on purpose). A tap on any Share button leaves a timestamp; if the app starts again within 2 hours of one, it steps back into the
   // project / level / room that was open. A share that comes back with the page still alive clears the stamp, so a normal open is unchanged.
-  var RESUME_SHARE_KEY = "utzline-resume-after-share", RESUME_SHARE_MS = 20 * 60 * 1000;
+  var RESUME_SHARE_KEY = "utzline-resume-after-share", RESUME_SHARE_MS = 2 * 60 * 60 * 1000;
   document.addEventListener("click", function(e){
     var b = e.target && e.target.closest ? e.target.closest("button, [role=button]") : null;
     if (!b || !(/share/i.test((b.id || "") + " " + (b.getAttribute("data-a") || "") + " " + (b.textContent || "")))) return;
@@ -12406,22 +12403,31 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     setTimeout(function(){ try{ localStorage.removeItem(RESUME_SHARE_KEY); }catch(x){} }, 45000);
   }, true);
   document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") setTimeout(function(){ try{ localStorage.removeItem(RESUME_SHARE_KEY); }catch(x){} }, 1500); });
-  function resumeAfterShareDue(){
+  // read ONCE when the page loads (the stamp is then cleared): the folder may need Reconnect first, which comes later, so the answer is kept
+  var resumePending = (function(){
     var t = 0; try{ t = parseInt(localStorage.getItem(RESUME_SHARE_KEY) || "0", 10) || 0; localStorage.removeItem(RESUME_SHARE_KEY); }catch(x){}
     return !!t && Date.now() - t < RESUME_SHARE_MS;
-  }
+  })();
+  function resumeAfterShareDue(){ var d = resumePending; resumePending = false; return d; }
   function tryRestoreLastActiveWork(){
     return idbGet(LAST_ACTIVE_WORK_KEY).then(function(saved){
-      if (!saved || !saved.projectHandle || !saved.levelName) return;
-      return saved.projectHandle.queryPermission({ mode: "readwrite" }).then(function(perm){
-        if (perm !== "granted") return;
-        return openProjectFromHandle(saved.projectHandle, saved.projectName).then(function(){
-          return openLevel(saved.levelName);
-        }).then(function(){
-          if (saved.roomName) return openRoom(saved.roomName);
+      if (!saved || !saved.levelName || (!saved.projectHandle && !saved.projectName)) return;
+      // the project folder is found again from the Projects root by name (the handle kept from before the reload may have lost its permission even
+      // when the root was just reconnected); the kept handle is the fallback
+      var fresh = (projectsRootHandle && saved.projectName) ? projectsRootHandle.getDirectoryHandle(saved.projectName, { create: false }).catch(function(){ return null; }) : Promise.resolve(null);
+      return fresh.then(function(ph){
+        ph = ph || saved.projectHandle;
+        if (!ph) throw new Error("the project folder wasn't found");
+        return ph.queryPermission({ mode: "readwrite" }).then(function(perm){
+          if (perm !== "granted") throw new Error("no permission for the project folder");
+          return openProjectFromHandle(ph, saved.projectName).then(function(){
+            return openLevel(saved.levelName);
+          }).then(function(){
+            if (saved.roomName) return openRoom(saved.roomName);
+          });
         });
       });
-    }).catch(function(){ /* stale pointer: stay on the project list */ });
+    }).catch(function(err){ console.error("Going back to where you were failed:", err); showToast("Couldn't go back to where you were — pick it from the list."); });
   }
     // ---- periodic local backup ----
   // Separate from the IndexedDB autosave above (which only restores your
@@ -18918,6 +18924,34 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     }).then(function(dirH){ return dirH.getFileHandle(statusEventFileName(by, statusEventStamp(), "set"), { create: true }); })
       .then(function(fh){ return verifiedHandleWrite(fh, new Blob([JSON.stringify(payload)], { type: "application/json" })); });
   }
+  /* (2026-10-08) Andrew: "need to fix the can't update schedule date issue". On the tablet the folder write sometimes fails (the sync app is rewriting folders,
+     Android drops the permission). A date that can't be written is no longer lost or blocked: it is kept on this device and written as soon as the folder
+     answers -- when the app starts, when it comes back to the front, and every minute while it is open. The event is the same file the Scheduler reads. */
+  var CM_PENDING_KEY = "utzline-pending-schedule", cmFlushing = false;
+  function cmPendingRead(){ try{ var a = JSON.parse(localStorage.getItem(CM_PENDING_KEY) || "[]"); return Array.isArray(a) ? a : []; }catch(e){ return []; } }
+  function cmPendingWrite(a){ try{ if (a.length) localStorage.setItem(CM_PENDING_KEY, JSON.stringify(a)); else localStorage.removeItem(CM_PENDING_KEY); }catch(e){} }
+  function cmPendingAdd(projectName, it, fields){
+    var a = cmPendingRead();
+    a.push({ project: projectName, level: it.level, room: it.room || "", joineryId: it.joineryId || "", fields: Object.assign({ by: deviceUserName || "Site Measure", at: new Date().toISOString() }, fields) });
+    cmPendingWrite(a);
+  }
+  function cmFlushPending(){
+    if (cmFlushing || !projectsRootHandle) return Promise.resolve(0);
+    var a = cmPendingRead(); if (!a.length) return Promise.resolve(0);
+    cmFlushing = true;
+    var done = 0;
+    return a.reduce(function(chain, e){
+      return chain.then(function(){
+        return projectsRootHandle.getDirectoryHandle(e.project, { create: false }).then(function(ph){
+          return cmWriteSchedule(ph, { level: e.level, room: e.room, joineryId: e.joineryId }, e.fields);
+        }).then(function(){
+          done++; cmPendingWrite(cmPendingRead().filter(function(x){ return !(x.project === e.project && x.level === e.level && x.room === e.room && x.joineryId === e.joineryId && x.fields && x.fields.at === e.fields.at); }));
+        }, function(err){ console.warn("Pending delivery date not written yet:", err); });
+      });
+    }, Promise.resolve()).then(function(){ cmFlushing = false; if (done) showToast(done === 1 ? "A saved delivery date has now gone into the project." : done + " saved delivery dates have now gone into the project."); return done; }, function(){ cmFlushing = false; return done; });
+  }
+  setInterval(function(){ cmFlushPending(); }, 60000);
+  document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") setTimeout(cmFlushPending, 1500); });
   function runDeliveryDatePrompt(){
     if (cmDateBusy || !cmDateQueue.length) return;
     cmDateBusy = true;
@@ -18952,29 +18986,29 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var btn = document.getElementById("cmDateSave"); btn.disabled = true;
       var phNow = ph;
       function writeAll(){ return items.reduce(function(chain, it){ return chain.then(function(){ return cmWriteSchedule(phNow, it, { requiredDeliveryDate: delivery, manufactureLeadTimeDays: leadN, manufactureStartDate: start }); }); }, Promise.resolve()); }
-      // (2026-10-08) Andrew's tablet: "Couldn't save the date". A lapsed folder permission (Android drops it) is asked for again here, inside the tap, and the save tried once more;
-      // any other failure now says what it was instead of the same line every time
-      // (2026-10-08) "A folder it needs wasn't found": the folder handles kept from earlier go stale when the sync app (OneSync) rewrites the project's folders
-      // under the app. Forget them, find the project folder again by name, and save once more before giving up.
-      writeAll().catch(function(e){
-        if (!(e && e.name === "NotFoundError") || !projectsRootHandle) return Promise.reject(e);
-        eventsDirMemo = {}; try{ UtzEvents.refresh(); }catch(x){}
-        return projectsRootHandle.getDirectoryHandle(ph.name, { create: false }).then(function(fresh){ phNow = fresh; return writeAll(); });
-      }).catch(function(e){
-        var n = e && e.name;
-        if (n !== "NotAllowedError" && n !== "SecurityError" || !ph.requestPermission) return Promise.reject(e);
-        return ph.requestPermission({ mode: "readwrite" }).then(function(p){ if (p !== "granted") return Promise.reject(e); return writeAll(); });
-      }).then(function(){
+      function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+      // A lapsed folder permission is asked for again inside the tap; a folder the sync app has been rewriting is found again by name and the save tried again
+      // (twice, a moment apart). If it still can't be written the date is kept on this device and goes in as soon as the folder answers (cmFlushPending).
+      function fresh(){ eventsDirMemo = {}; try{ UtzEvents.refresh(); }catch(x){} return projectsRootHandle ? projectsRootHandle.getDirectoryHandle(ph.name, { create: false }).then(function(f){ phNow = f; }, function(){}) : Promise.resolve(); }
+      function attempt(n){
+        return writeAll().catch(function(e){
+          var nm = e && e.name;
+          if ((nm === "NotAllowedError" || nm === "SecurityError") && ph.requestPermission && n === 0)
+            return ph.requestPermission({ mode: "readwrite" }).then(function(p){ if (p !== "granted") return Promise.reject(e); return fresh().then(function(){ return attempt(n + 1); }); });
+          if (n >= 2 || (e && e.code === "path_long")) return Promise.reject(e);
+          return wait(700 * (n + 1)).then(fresh).then(function(){ return attempt(n + 1); });
+        });
+      }
+      attempt(0).then(function(){
         showToast(items.length > 1 ? "Delivery date set for " + items.length + " items." : "Delivery date set.");
         done();
       }, function(e){
-        console.error("Saving the delivery date failed:", e); err.hidden = false;
-        var n = e && (e.name || e.code), why = e && e.code === "path_long" ? pathLongMessage()
-          : (n === "NotAllowedError" || n === "SecurityError") ? "The folder isn't allowed to be changed on this device — open Home and choose the Projects folder again, then allow editing."
-          : (n === "NotFoundError") ? "A folder it needs wasn't found (the project may still be syncing)."
-          : (n === "QuotaExceededError") ? "The device is out of space."
-          : "(" + (n || (e && e.message) || "unknown error") + ")";
-        err.textContent = "Couldn't save the date — " + why + " Try again, or Keep existing date.";
+        console.error("Saving the delivery date failed:", e);
+        var n = e && (e.name || e.code);
+        if (e && e.code === "path_long"){ err.hidden = false; err.textContent = pathLongMessage(); return; }
+        items.forEach(function(it){ cmPendingAdd(ph.name, it, { requiredDeliveryDate: delivery, manufactureLeadTimeDays: leadN, manufactureStartDate: start }); });
+        showToast("Couldn't reach the project folder just now (" + (n || "error") + ") — the date is saved on this device and goes in as soon as it can.", 7000);
+        done();
       }).then(function(){ btn.disabled = false; });
     };
   }
@@ -23671,6 +23705,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       return populateProjectList().then(function(){
         gateListFolderLabel.textContent = "Projects folder: “" + projectsRootName + "”";
         showGateState("list");
+        cmFlushPending();
+        if (resumeAfterShareDue()) return tryRestoreLastActiveWork();   // the app was reloaded while sharing: Reconnect, then straight back to where you were
       });
     }).catch(function(err){
       console.error("Reconnect Projects folder failed:", err);
@@ -23991,6 +24027,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       viewJobNoteItemPageBtn.style.display = (activeJoineryItemPage && vjnRec && vjnRec.jobNote) ? "" : "none";
     var dwBtn = document.getElementById("drawingsItemPageBtn");
     if (dwBtn) dwBtn.style.display = activeJoineryItemPage ? "" : "none";
+    // (2026-10-08) Andrew: "don't need share in the main site measure page anymore, just in the individual site measures"
+    var shBtn = document.getElementById("shareBtn");
+    if (shBtn) shBtn.style.display = activeJoineryItemPage ? "" : "none";
     var saBtn = document.getElementById("startAgainItemPageBtn");
     if (saBtn) saBtn.style.display = (activeJoineryItemPage && !VIEW_ONLY_MODE) ? "" : "none";
     }
@@ -27382,7 +27421,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   var shareBtn = document.getElementById("shareBtn");
   // (v84) Andrew: "can we reintroduce the share function ... from within the joinery item check measure". The button used to appear only where
   // the device has a share sheet; it is always there now (on a PC it saves the file instead).
-  shareBtn.style.display = "";
+  shareBtn.style.display = activeJoineryItemPage ? "" : "none";   // (2026-10-08) only on an individual site measure (item page), not on the level plan
   shareBtn.addEventListener("click", shareCurrentPlan);
 
   /* ============================== resize ============================== */
@@ -27760,6 +27799,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           return populateProjectList().then(function(){
             gateListFolderLabel.textContent = "Projects folder: “" + projectsRootName + "”";
             showGateState("list");
+            cmFlushPending();
             if (resumeAfterShareDue()) return tryRestoreLastActiveWork();
           }); // (2026-10-04) Andrew: "the site measure and viewer apps to open on home screen each time, currently they go back to
               // wherever you were last" -- the project list every time; the last project / level is no longer re-opened
