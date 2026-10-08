@@ -1744,6 +1744,16 @@ window.__pdfImportLibFailed = false;
   .measure-pad button.mp-hit{ filter:brightness(0.82); transform:scale(0.96); }
   .measure-pad button.mp-quick{ font-size:14px; background:var(--accent-soft); color:var(--accent-ink); border-color:var(--accent); }
   .measure-pad button.mp-fn{ font-size:14px; }
+  /* (2026-10-08) calculator + fast keys (-13 / -26 / -39) */
+  .measure-pad button.mp-listening{ background:var(--danger,#d44); color:#fff; }
+  .measure-pad button.mp-minus{ font-size:15px; background:var(--surface-2); color:var(--danger,#d44); border-color:var(--danger,#d44); }
+  .measure-pad button.mp-wide{ grid-column:span 2; }
+  .measure-pad .mp-calc{ grid-column:1 / -1; display:none; flex-direction:column; gap:5px; padding-bottom:5px; border-bottom:1px solid var(--border-strong); }
+  .measure-pad.calc-on .mp-calc{ display:flex; }
+  .measure-pad .mp-calc-disp{ min-height:30px; padding:4px 8px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border-strong); font-size:18px; font-weight:600; text-align:right; word-break:break-all; color:var(--text-primary); }
+  .measure-pad .mp-calc-disp small{ display:block; font-size:12px; font-weight:400; color:var(--text-secondary); }
+  .measure-pad .mp-calc-row{ display:flex; gap:5px; }
+  .measure-pad .mp-calc-row button{ flex:1; height:38px; }
   .measure-pad button.mp-done{ grid-column:span 2; background:var(--accent); border-color:var(--accent-ink); color:var(--on-accent,#fff); font-size:15px; }
 
   svg text{cursor:default;}
@@ -12359,7 +12369,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     // detectFolderShape) has no project handle to anchor a restore on
     // either -- left unpersisted rather than half-restored; this only
     // ever covers the normal project -> level [-> room] shape.
-    if (VIEW_ONLY_MODE || !PROJECTS_ROOT_SUPPORTED) return;
+    if (!PROJECTS_ROOT_SUPPORTED) return;   // (2026-10-08) the Viewer keeps the pointer too (device-local only): it is used after a share
     if (!activeProjectHandle || !activeLevelName){
       idbSet(LAST_ACTIVE_WORK_KEY, null).catch(function(){});
       return;
@@ -12384,6 +12394,35 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // since, or anything else) just leaves the person on the project list
   // they'd have landed on regardless, with no error toast -- this is a
   // convenience on top of normal boot, not a user-initiated action.
+  // (2026-10-08) Andrew: "when sharing a site measure it needs to go back to the page you were on ... goes all the way back to the start".
+  // Android can drop the app while the share sheet is open and reload it afterwards, which lands on the project list (it opens there every
+  // time on purpose). A tap on any Share button leaves a timestamp; if the app starts again within 20 minutes of one, it steps back into the
+  // project / level / room that was open. A share that comes back with the page still alive clears the stamp, so a normal open is unchanged.
+  var RESUME_SHARE_KEY = "utzline-resume-after-share", RESUME_SHARE_MS = 20 * 60 * 1000;
+  document.addEventListener("click", function(e){
+    var b = e.target && e.target.closest ? e.target.closest("button, [role=button]") : null;
+    if (!b || !(/share/i.test((b.id || "") + " " + (b.getAttribute("data-a") || "") + " " + (b.textContent || "")))) return;
+    try{ localStorage.setItem(RESUME_SHARE_KEY, String(Date.now())); }catch(x){}
+    setTimeout(function(){ try{ localStorage.removeItem(RESUME_SHARE_KEY); }catch(x){} }, 45000);
+  }, true);
+  document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") setTimeout(function(){ try{ localStorage.removeItem(RESUME_SHARE_KEY); }catch(x){} }, 1500); });
+  function resumeAfterShareDue(){
+    var t = 0; try{ t = parseInt(localStorage.getItem(RESUME_SHARE_KEY) || "0", 10) || 0; localStorage.removeItem(RESUME_SHARE_KEY); }catch(x){}
+    return !!t && Date.now() - t < RESUME_SHARE_MS;
+  }
+  function tryRestoreLastActiveWork(){
+    return idbGet(LAST_ACTIVE_WORK_KEY).then(function(saved){
+      if (!saved || !saved.projectHandle || !saved.levelName) return;
+      return saved.projectHandle.queryPermission({ mode: "readwrite" }).then(function(perm){
+        if (perm !== "granted") return;
+        return openProjectFromHandle(saved.projectHandle, saved.projectName).then(function(){
+          return openLevel(saved.levelName);
+        }).then(function(){
+          if (saved.roomName) return openRoom(saved.roomName);
+        });
+      });
+    }).catch(function(){ /* stale pointer: stay on the project list */ });
+  }
     // ---- periodic local backup ----
   // Separate from the IndexedDB autosave above (which only restores your
   // in-progress edits if you reopen this same tab/browser): this actually
@@ -18911,10 +18950,17 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var leadN = lead.value === "" ? CM_DEFAULT_LEAD_DAYS : Math.max(0, parseInt(lead.value, 10) || 0), start = cmSubBusiness(delivery, leadN);
       if (start < cmIso(new Date())){ err.hidden = false; err.textContent = "The manufacture start date (" + cmShow(start) + ") is already in the past. Change the delivery date or shorten the lead time."; return; }
       var btn = document.getElementById("cmDateSave"); btn.disabled = true;
-      function writeAll(){ return items.reduce(function(chain, it){ return chain.then(function(){ return cmWriteSchedule(ph, it, { requiredDeliveryDate: delivery, manufactureLeadTimeDays: leadN, manufactureStartDate: start }); }); }, Promise.resolve()); }
+      var phNow = ph;
+      function writeAll(){ return items.reduce(function(chain, it){ return chain.then(function(){ return cmWriteSchedule(phNow, it, { requiredDeliveryDate: delivery, manufactureLeadTimeDays: leadN, manufactureStartDate: start }); }); }, Promise.resolve()); }
       // (2026-10-08) Andrew's tablet: "Couldn't save the date". A lapsed folder permission (Android drops it) is asked for again here, inside the tap, and the save tried once more;
       // any other failure now says what it was instead of the same line every time
+      // (2026-10-08) "A folder it needs wasn't found": the folder handles kept from earlier go stale when the sync app (OneSync) rewrites the project's folders
+      // under the app. Forget them, find the project folder again by name, and save once more before giving up.
       writeAll().catch(function(e){
+        if (!(e && e.name === "NotFoundError") || !projectsRootHandle) return Promise.reject(e);
+        eventsDirMemo = {}; try{ UtzEvents.refresh(); }catch(x){}
+        return projectsRootHandle.getDirectoryHandle(ph.name, { create: false }).then(function(fresh){ phNow = fresh; return writeAll(); });
+      }).catch(function(e){
         var n = e && e.name;
         if (n !== "NotAllowedError" && n !== "SecurityError" || !ph.requestPermission) return Promise.reject(e);
         return ph.requestPermission({ mode: "readwrite" }).then(function(p){ if (p !== "granted") return Promise.reject(e); return writeAll(); });
@@ -20550,8 +20596,158 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     ed.setSelectionRange(a, a);
     ed.dispatchEvent(new Event("input", { bubbles: true }));
   }
-  function measurePadKey(k){
+  // ---- (2026-10-08) Andrew: "all need a calculator on the check measure page with copy into measure function and fast keys of -13 and -26 and -39" ----
+  // Calc: an expression typed on the pad (+ - x / and brackets), "=" works it out, "Copy into measure" puts the answer into the label being typed.
+  // Fast keys: -13 / -26 / -39 take that much off the number in the label (or off the calculator's answer while the calculator is open).
+  var measureCalc = { on: false, expr: "" };
+  function calcEval(src){
+    var t = String(src || "").replace(/[\u00d7x*]/g, "*").replace(/[\u00f7]/g, "/").replace(/[\u2212\u2013]/g, "-").replace(/\s+/g, ""), i = 0;
+    if (!t) return null;
+    function num(){ var m = /^\d*\.?\d+/.exec(t.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); }
+    function atom(){
+      if (t[i] === "-"){ i++; return -atom(); }
+      if (t[i] === "("){ i++; var v = sum(); if (t[i] !== ")") throw 0; i++; return v; }
+      return num();
+    }
+    function prod(){ var v = atom(); while (t[i] === "*" || t[i] === "/"){ var o = t[i++], r = atom(); if (o === "/" && r === 0) throw 0; v = o === "*" ? v * r : v / r; } return v; }
+    function sum(){ var v = prod(); while (t[i] === "+" || t[i] === "-"){ var o = t[i++], r = prod(); v = o === "+" ? v + r : v - r; } return v; }
+    try{ var out = sum(); if (i !== t.length || !isFinite(out)) return null; return Math.round(out * 100) / 100; }catch(e){ return null; }
+  }
+  function calcShow(){
+    var pad = measurePadEl; if (!pad) return;
+    var d = pad.querySelector(".mp-calc-disp"); if (!d) return;
+    var v = calcEval(measureCalc.expr);
+    d.innerHTML = "";
+    var e = document.createElement("span"); e.textContent = measureCalc.expr || "0"; d.appendChild(e);
+    var r = document.createElement("small"); r.textContent = (measureCalc.expr && v != null) ? "= " + v : (measureCalc.expr ? "…" : "type a sum, e.g. 2450-13"); d.appendChild(r);
+  }
+  function calcLabelNumber(){
+    var m = editorEl && /-?\d*\.?\d+/.exec(editorEl.value || "");
+    return m ? parseFloat(m[0]) : null;
+  }
+  function calcSetLabel(v){
+    var ed = editorEl; if (!ed) return;
+    var rest = (ed.value || "").replace(/-?\d*\.?\d+/, "").trim();   // a quick text (ctr, ftc...) stays
+    ed.value = String(v) + (rest ? " " + rest : "");
+    ed.setSelectionRange(ed.value.length, ed.value.length);
+    ed.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function measureCalcKey(k){
+    var pad = measurePadEl;
+    if (k === "calc"){
+      measureCalc.on = !measureCalc.on; if (pad) pad.classList.toggle("calc-on", measureCalc.on);
+      if (measureCalc.on && !measureCalc.expr){ var n = calcLabelNumber(); if (n != null) measureCalc.expr = String(n); }
+      calcShow(); positionMeasurePad(); return;
+    }
+    if (k === "c:C"){ measureCalc.expr = ""; calcShow(); return; }
+    if (k === "c:="){ var v = calcEval(measureCalc.expr); if (v != null) measureCalc.expr = String(v); calcShow(); return; }
+    if (k === "c:copy"){
+      var r = calcEval(measureCalc.expr);
+      if (r == null){ showToast("Finish the sum first."); return; }
+      calcSetLabel(r);
+      measureCalc.expr = ""; measureCalc.on = false; if (pad) pad.classList.remove("calc-on");
+      calcShow(); positionMeasurePad(); return;
+    }
+    if (/^c:/.test(k)){ measureCalc.expr += k.slice(2); calcShow(); return; }
+  }
+  function measureFastKey(n){
+    if (measureCalc.on){
+      var cur = calcEval(measureCalc.expr); if (cur == null){ var l = calcLabelNumber(); cur = l; }
+      if (cur == null){ showToast("Type a number first."); return; }
+      measureCalc.expr = String(Math.round((cur - n) * 100) / 100); calcShow(); return;
+    }
+    var v = calcLabelNumber();
+    if (v == null){ showToast("Type the measure first, then tap \u2212" + n + "."); return; }
+    calcSetLabel(Math.round((v - n) * 100) / 100);
+  }
+  // (2026-10-08) Andrew: "text to speech button" -- reads the measure (or the calculator's answer while it is open) out loud so it can be checked without looking
+  var SAY_WORDS = { ctr: "centre", ftc: "floor to ceiling", bhead: "bulkhead", oall: "overall" };
+  function measureSay(){
+    var text = "";
+    if (measureCalc.on){ var v = calcEval(measureCalc.expr); text = v != null ? String(v) : ""; }
+    if (!text) text = (editorEl && editorEl.value) || "";
+    text = String(text).trim();
+    if (!text){ showToast("Nothing to read out yet."); return; }
+    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance !== "function"){ showToast("This device can't read out loud."); return; }
+    var words = text.replace(/[a-z]+/gi, function(w){ return SAY_WORDS[w.toLowerCase()] || w; }).replace(/-/g, " minus ").replace(/\./g, " point ");
+    try{ window.speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance(words); u.lang = "en-AU"; u.rate = 0.9; window.speechSynthesis.speak(u); }catch(e){ showToast("This device can't read out loud."); }
+  }
+  // (2026-10-08) Andrew: "speech to text" -- the mic key listens (Chrome / Android's own recogniser; it needs the internet) and types what it hears:
+  // "two thousand four hundred and fifty", "2450", "two four five zero", "point five", and the quick words (centre, floor to ceiling, bulkhead, overall).
+  // With the calculator open it also takes "plus / minus / times / divided by" and builds the sum.
+  var SPEECH_ONES = { zero: 0, oh: 0, one: 1, two: 2, to: 2, too: 2, three: 3, four: 4, for: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+  var SPEECH_TENS = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+  var SPEECH_QUICK = { centre: "ctr", center: "ctr", ceiling: "ftc", bulkhead: "bhead", overall: "oall", ctr: "ctr", ftc: "ftc", bhead: "bhead", oall: "oall" };
+  var SPEECH_OPS = { plus: "+", add: "+", minus: "-", take: "-", less: "-", times: "*", x: "*", multiplied: "*", divided: "/", over: "/" };
+  // words -> { numbers / operators / quick texts } as one string; exported for the test
+  function speechToMeasure(said, calcOn){
+    var w = String(said || "").toLowerCase().replace(/[,]/g, " ").replace(/(\d)\s*mm\b/g, "$1").replace(/\bmillimet(?:er|re)s?\b|\bmm\b/g, " ").split(/\s+/).filter(Boolean);
+    var out = [], i = 0;
+    function pushNum(n){ out.push(String(n)); }
+    while (i < w.length){
+      var t = w[i];
+      if (/^\d+(\.\d+)?$/.test(t)){ out.push(t); i++; continue; }
+      if (t === "point" || t === "dot"){ var ds = ""; i++; while (i < w.length && (SPEECH_ONES[w[i]] != null && SPEECH_ONES[w[i]] < 10 || /^\d$/.test(w[i]))){ ds += /^\d$/.test(w[i]) ? w[i] : SPEECH_ONES[w[i]]; i++; } if (ds) out.push("." + ds); continue; }
+      if (SPEECH_QUICK[t]){ out.push(SPEECH_QUICK[t]); i += (t === "ceiling" ? 1 : 1); continue; }
+      if (SPEECH_OPS[t] && (calcOn || (t === "minus" && !out.length))){ if (t === "divided" && w[i + 1] === "by") i++; out.push(SPEECH_OPS[t]); i++; continue; }
+      if (SPEECH_ONES[t] != null || SPEECH_TENS[t] != null || t === "hundred" || t === "thousand" || t === "and" || t === "a"){
+        // a run of number words; a run of single digits ("two four five zero") is read digit by digit
+        var run = [];
+        while (i < w.length && (SPEECH_ONES[w[i]] != null || SPEECH_TENS[w[i]] != null || w[i] === "hundred" || w[i] === "thousand" || w[i] === "and" || (w[i] === "a" && (w[i + 1] === "hundred" || w[i + 1] === "thousand")))){ run.push(w[i]); i++; }
+        while (run.length && (run[0] === "and" || run[0] === "a" && run.length === 1)) run.shift();
+        while (run.length && run[run.length - 1] === "and") run.pop();
+        if (!run.length) continue;
+        var allDigits = run.every(function(x){ return SPEECH_ONES[x] != null && SPEECH_ONES[x] < 10; });
+        if (allDigits && run.length > 1){ pushNum(run.map(function(x){ return SPEECH_ONES[x]; }).join("")); continue; }
+        var total = 0, cur = 0;
+        run.forEach(function(x){
+          if (x === "and" || x === "a") return;
+          if (x === "hundred") cur = (cur || 1) * 100;
+          else if (x === "thousand"){ total += (cur || 1) * 1000; cur = 0; }
+          else cur += SPEECH_ONES[x] != null ? SPEECH_ONES[x] : SPEECH_TENS[x];
+        });
+        pushNum(total + cur); continue;
+      }
+      i++;   // a word it doesn't know
+    }
+    // glue: numbers and quick texts apart by a space; operators attached
+    var res = "";
+    out.forEach(function(x){ var op = /^[-+*\/]$/.test(x); res += (op || /^\./.test(x) || !res || /[-+*\/]$/.test(res)) ? x : " " + x; });
+    return res;
+  }
+  var measureListening = null;
+  function measureListen(btn){
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR){ showToast("Speaking a measure isn't available on this device."); return; }
+    if (measureListening){ try{ measureListening.stop(); }catch(e){} return; }
+    var rec = new SR(); rec.lang = "en-AU"; rec.interimResults = false; rec.maxAlternatives = 1; measureListening = rec;
+    if (btn) btn.classList.add("mp-listening");
+    function end(){ measureListening = null; if (btn) btn.classList.remove("mp-listening"); }
+    rec.onresult = function(ev){
+      var said = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : "";
+      var txt = speechToMeasure(said, measureCalc.on);
+      if (!txt){ showToast("Didn't catch a measure in \u201c" + said + "\u201d."); return; }
+      if (measureCalc.on){ measureCalc.expr += txt; calcShow(); }
+      else {
+        var ed = editorEl; if (!ed) return;
+        var quickOnly = /^[a-z ]+$/.test(txt);
+        if (quickOnly) measurePadInsert(txt, true);
+        else { ed.value = txt; ed.setSelectionRange(txt.length, txt.length); ed.dispatchEvent(new Event("input", { bubbles: true })); }
+      }
+      showToast("Heard: " + said);
+    };
+    rec.onerror = function(ev){ showToast(ev && ev.error === "not-allowed" ? "Allow the microphone to speak a measure." : (ev && ev.error === "network" ? "Speech needs the internet." : "Couldn't hear that — try again.")); end(); };
+    rec.onend = end;
+    try{ rec.start(); }catch(e){ end(); showToast("Couldn't start the microphone."); }
+  }
+  function measurePadKey(k, btn){
     if (!editorEl) return;
+    if (k === "mic") return measureListen(btn);
+    if (k === "say") return measureSay();
+    if (k === "calc" || /^c:/.test(k)) return measureCalcKey(k);
+    if (/^-\d+$/.test(k)) return measureFastKey(parseInt(k.slice(1), 10));
+    if (measureCalc.on && /^[0-9.]$/.test(k)){ measureCalc.expr += k; calcShow(); return; }
+    if (measureCalc.on && k === "back"){ measureCalc.expr = measureCalc.expr.slice(0, -1); calcShow(); return; }
     if (k === "back") measurePadBackspace();
     else if (k === "space") measurePadInsert(" ", false);
     else if (k === "done") commitInlineEdit();
@@ -20579,9 +20775,16 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       ["7", "8", "9", "back", "ctr"],
       ["4", "5", "6", "space", "ftc"],
       ["1", "2", "3", "abc", "bhead"],
-      [".", "0", "done", "oall"]
+      [".", "0", "done", "oall"],
+      ["-13", "-26", "-39", "calc", "mic"]
     ];
-    var LABELS = { back: "\u232B", space: "Space", abc: "ABC", done: "Done" };
+    var LABELS = { back: "\u232B", space: "Space", abc: "ABC", done: "Done", "-13": "\u221213", "-26": "\u221226", "-39": "\u221239", calc: "Calc", mic: "\ud83c\udfa4" };
+    measureCalc = { on: false, expr: "" };
+    var calcBox = document.createElement("div"); calcBox.className = "mp-calc";
+    calcBox.innerHTML = '<div class="mp-calc-disp"></div>' +
+      '<div class="mp-calc-row"><button type="button" tabindex="-1" data-key="c:+">+</button><button type="button" tabindex="-1" data-key="c:-">\u2212</button><button type="button" tabindex="-1" data-key="c:*">\u00d7</button><button type="button" tabindex="-1" data-key="c:/">\u00f7</button><button type="button" tabindex="-1" data-key="c:(">(</button><button type="button" tabindex="-1" data-key="c:)">)</button><button type="button" tabindex="-1" data-key="c:=" class="mp-fn">=</button><button type="button" tabindex="-1" data-key="c:C" class="mp-fn">C</button></div>' +
+      '<div class="mp-calc-row"><button type="button" tabindex="-1" data-key="c:copy" class="mp-done" style="grid-column:auto;flex:1">Copy into measure</button><button type="button" tabindex="-1" data-key="say" class="mp-fn" style="flex:0 0 64px" aria-label="Read out loud">\ud83d\udd0a Say</button></div>';
+    pad.appendChild(calcBox);
     layout.forEach(function(row){
       row.forEach(function(k){
         var b = document.createElement("button");
@@ -20590,6 +20793,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         b.setAttribute("data-key", k);
         b.textContent = LABELS[k] || k;
         if (MEASURE_QUICK_TEXTS.indexOf(k) !== -1) b.className = "mp-quick";
+        else if (/^-\d+$/.test(k)) b.className = "mp-minus";
+        else if (k === "calc" || k === "mic") b.className = "mp-fn";
         else if (k === "done") b.className = "mp-done";
         else if (LABELS[k]) b.className = "mp-fn";
         if (k === "back") b.setAttribute("aria-label", "Backspace");
@@ -20606,7 +20811,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       measurePadHolding = true;
       b.classList.add("mp-hit");
       setTimeout(function(){ b.classList.remove("mp-hit"); }, 120);
-      try{ measurePadKey(b.getAttribute("data-key")); }
+      try{ measurePadKey(b.getAttribute("data-key"), b); }
       finally{ setTimeout(function(){ measurePadHolding = false; }, 0); }
     }
     pad.addEventListener("pointerdown", press);
@@ -20615,6 +20820,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     });
     stage.appendChild(pad);
     measurePadEl = pad;
+    calcShow();
     positionMeasurePad();
   }
   function closeMeasurePad(){
@@ -27554,6 +27760,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           return populateProjectList().then(function(){
             gateListFolderLabel.textContent = "Projects folder: “" + projectsRootName + "”";
             showGateState("list");
+            if (resumeAfterShareDue()) return tryRestoreLastActiveWork();
           }); // (2026-10-04) Andrew: "the site measure and viewer apps to open on home screen each time, currently they go back to
               // wherever you were last" -- the project list every time; the last project / level is no longer re-opened
               // (tryRestoreLastActiveWork is kept, unused)
