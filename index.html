@@ -8454,7 +8454,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (!A || !A.pickName) return;
     if (noAccess(name)){ revoke(name); return; }
     S.pendingName = name;
-    Promise.resolve().then(function(){ return A.pickName(name); }).then(function(){
+    // the tap that picked the name is the moment the browser lets the app ask for the Projects folder back (see UtzUsers.ensureAccess)
+    var access = (window.UtzUsers && UtzUsers.ensureAccess) ? UtzUsers.ensureAccess() : Promise.resolve(true);
+    access.then(function(ok){ if (!ok) return Promise.reject(new Error("no folder access")); return A.pickName(name); }).then(function(){
       if (curName() && curName().toLowerCase() === String(name).toLowerCase()) unlocked();
       else S.pendingName = "";
     }, function(){ S.pendingName = ""; });
@@ -9188,7 +9190,18 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     window.addEventListener("resize", function(){ placePill(); });
     setTimeout(placePill, 600);
   }
-  window.UtzUsers = { canUse: canUse, noAccessNames: noAccessNames, defaultApps: defaultApps, refreshDefaults: refreshDefaults, DEPARTMENTS: DEPARTMENTS, departmentsOf: departmentsOf, setDepartments: setDepartments, pickDepartments: pickDepartments, APP_CODES: APP_CODES, init: init, filterNames: filterNames, showsHere: showsHere, needsApproval: needsApproval, request: request, poke: poke, loadAdmins: loadAdmins, isAdmin: isAdminName, PENDING_FILE: PENDING_FILE, openUsers: openManage, ADMIN_FILE: ADMIN_FILE };
+  // (2026-10-08) Andrew: "the pin issue is it loses contact with the project folder". Android drops the folder permission between visits; the PIN is
+  // checked against utzline-users.csv in that folder, and the sign-in cover sat above the app's own Reconnect screen, so there was no way to restore it.
+  // Called from the tap on a name: asks for the folder's editing permission again (instant when it is still granted). Resolves true/false.
+  function ensureAccess(){
+    var r = root();
+    if (!r || typeof r.requestPermission !== "function") return Promise.resolve(true);
+    return Promise.resolve(r.requestPermission({ mode: "readwrite" })).then(function(p){
+      if (p !== "granted") toast("Allow access to the Projects folder to sign in (the PIN is checked against it).");
+      return p === "granted";
+    }, function(){ return false; });
+  }
+  window.UtzUsers = { ensureAccess: ensureAccess, canUse: canUse, noAccessNames: noAccessNames, defaultApps: defaultApps, refreshDefaults: refreshDefaults, DEPARTMENTS: DEPARTMENTS, departmentsOf: departmentsOf, setDepartments: setDepartments, pickDepartments: pickDepartments, APP_CODES: APP_CODES, init: init, filterNames: filterNames, showsHere: showsHere, needsApproval: needsApproval, request: request, poke: poke, loadAdmins: loadAdmins, isAdmin: isAdminName, PENDING_FILE: PENDING_FILE, openUsers: openManage, ADMIN_FILE: ADMIN_FILE };
 })();
 </script>
 <!-- UTZLINE-USERS END -->
@@ -18898,10 +18911,25 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var leadN = lead.value === "" ? CM_DEFAULT_LEAD_DAYS : Math.max(0, parseInt(lead.value, 10) || 0), start = cmSubBusiness(delivery, leadN);
       if (start < cmIso(new Date())){ err.hidden = false; err.textContent = "The manufacture start date (" + cmShow(start) + ") is already in the past. Change the delivery date or shorten the lead time."; return; }
       var btn = document.getElementById("cmDateSave"); btn.disabled = true;
-      items.reduce(function(chain, it){ return chain.then(function(){ return cmWriteSchedule(ph, it, { requiredDeliveryDate: delivery, manufactureLeadTimeDays: leadN, manufactureStartDate: start }); }); }, Promise.resolve()).then(function(){
+      function writeAll(){ return items.reduce(function(chain, it){ return chain.then(function(){ return cmWriteSchedule(ph, it, { requiredDeliveryDate: delivery, manufactureLeadTimeDays: leadN, manufactureStartDate: start }); }); }, Promise.resolve()); }
+      // (2026-10-08) Andrew's tablet: "Couldn't save the date". A lapsed folder permission (Android drops it) is asked for again here, inside the tap, and the save tried once more;
+      // any other failure now says what it was instead of the same line every time
+      writeAll().catch(function(e){
+        var n = e && e.name;
+        if (n !== "NotAllowedError" && n !== "SecurityError" || !ph.requestPermission) return Promise.reject(e);
+        return ph.requestPermission({ mode: "readwrite" }).then(function(p){ if (p !== "granted") return Promise.reject(e); return writeAll(); });
+      }).then(function(){
         showToast(items.length > 1 ? "Delivery date set for " + items.length + " items." : "Delivery date set.");
         done();
-      }, function(e){ console.error("Saving the delivery date failed:", e); err.hidden = false; err.textContent = "Couldn't save the date — try again, or Keep existing date."; }).then(function(){ btn.disabled = false; });
+      }, function(e){
+        console.error("Saving the delivery date failed:", e); err.hidden = false;
+        var n = e && (e.name || e.code), why = e && e.code === "path_long" ? pathLongMessage()
+          : (n === "NotAllowedError" || n === "SecurityError") ? "The folder isn't allowed to be changed on this device — open Home and choose the Projects folder again, then allow editing."
+          : (n === "NotFoundError") ? "A folder it needs wasn't found (the project may still be syncing)."
+          : (n === "QuotaExceededError") ? "The device is out of space."
+          : "(" + (n || (e && e.message) || "unknown error") + ")";
+        err.textContent = "Couldn't save the date — " + why + " Try again, or Keep existing date.";
+      }).then(function(){ btn.disabled = false; });
     };
   }
   // Re-reads the whole file and re-renders once it lands -- called right
