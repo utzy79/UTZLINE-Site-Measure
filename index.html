@@ -1745,6 +1745,9 @@ window.__pdfImportLibFailed = false;
   .measure-pad button.mp-quick{ font-size:14px; background:var(--accent-soft); color:var(--accent-ink); border-color:var(--accent); }
   .measure-pad button.mp-fn{ font-size:14px; }
   /* (2026-10-08) calculator + fast keys (-13 / -26 / -39) */
+  /* (2026-10-08) Andrew: "don't need this (name) visible in the site measure app main page" -- the name chip at the bottom left is out of sight in Site Measure
+     (still in the page so sign-in keeps working; the Viewer too, 2026-10-08) */
+  #utzNameCorner, #utzNameCorner select{ opacity:0 !important; pointer-events:none !important; }
   .measure-pad button.mp-listening{ background:var(--danger,#d44); color:#fff; }
   .measure-pad button.mp-minus{ font-size:15px; background:var(--surface-2); color:var(--danger,#d44); border-color:var(--danger,#d44); }
   .measure-pad button.mp-wide{ grid-column:span 2; }
@@ -2509,6 +2512,7 @@ window.__pdfImportLibFailed = false;
                in / out" -- shown only for a site measure's plan snapshot (opts.onZoom) -->
           <button class="mbtn" id="cropZoomOutBtn" type="button" hidden title="Show more of the plan">− Zoom out</button>
           <button class="mbtn" id="cropZoomInBtn" type="button" hidden title="Show less of the plan">+ Zoom in</button>
+          <button class="mbtn" id="cropCancelBtn" type="button" hidden title="Don't open this site measure — stay on the plan">Cancel</button>
           <button class="mbtn" id="cropSkipBtn">Use full photo</button>
           <button class="mbtn mbtn-accent" id="cropApplyBtn">Crop</button>
         </div>
@@ -11810,7 +11814,20 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
      sync client or antivirus can hold a brand-new file for a moment and the
      save fails as it finishes (UTZLINE Projects v43 found this). */
   var SAVE_RETRY_MS = [500, 1500];
+  // (2026-10-08) Andrew: "why won't the schedule popup work? ... would it be as it's still saving the file". Every verified write is counted while it runs, so the
+  // delivery date (which opens the moment a check measure is ticked, while its own save is still writing and the sync app is busy) can wait until the folder is quiet.
+  var writesInFlight = 0;
+  function whenWritesIdle(maxMs){
+    var t0 = Date.now();
+    return new Promise(function(res){
+      (function poll(){ if (writesInFlight <= 0 || Date.now() - t0 > (maxMs || 25000)) return setTimeout(res, writesInFlight <= 0 ? 250 : 0); setTimeout(poll, 150); })();
+    });
+  }
   function verifiedHandleWrite(handle, blob){
+    writesInFlight++;
+    return verifiedHandleWriteInner(handle, blob).then(function(v){ writesInFlight--; return v; }, function(e){ writesInFlight--; throw e; });
+  }
+  function verifiedHandleWriteInner(handle, blob){
     var tries = 0;
     function attempt(){
       return handle.createWritable().then(function(w){
@@ -15540,6 +15557,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
             ? "CAPTURE THE WHOLE ROOM — this site measure covers all " + roomCount + " items in " + obj.roomName + ". Drag the corners around the whole room, then Crop (zoom out if it doesn't all show):"
             : "Crop the plan snapshot for “" + dn + "” — drag the corners, then Crop, or keep the whole view:",
           skipLabel: "Use full view",
+          cancelable: true,
           onZoom: function(f){
             var r0 = prev.region, cx = r0.x0 + r0.w / 2, cy = r0.y0 + r0.h / 2, w = r0.w * f, h = r0.h * f;
             return safeRenderPlanViewSnapshotForItem({ region: { x0: cx - w / 2, y0: cy - h / 2, x1: cx + w / 2, y1: cy + h / 2 } }).then(function(n){ if (n) prev = n; return n; });
@@ -15653,8 +15671,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
             }
             return showCropDialog(snap.dataUrl, snap.w, snap.h, {
               label: "Crop the plan snapshot for “" + displayName + "” — drag the corners, then Crop, or keep the whole view:",
-              skipLabel: "Use full view"
+              skipLabel: "Use full view",
+              cancelable: true
             }).then(function(res){
+              if (cropClosedByBack){ cropClosedByBack = false; showToast("Cancelled — nothing was changed."); var ce2 = new Error("check measure open cancelled from the crop window"); ce2.code = "nav_cancelled"; throw ce2; }
               var pick = res && res.dataUrl ? res : snap;
               applyLoadedImage(pick.dataUrl, pick.w, pick.h, displayName);
               unsavedSinceLastSave = false; });
@@ -17546,7 +17566,15 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     } else {
       askComplete = exitToPlanAfter ? showConfirm("Mark check measure complete?", { okLabel: "Yes", cancelLabel: "No" }) : Promise.resolve(false);
     }
-    askComplete.then(function(markComplete){ runSaveAllProjectAware(exitToPlanAfter, markComplete); });
+    askComplete.then(function(markComplete){
+      // (2026-10-08) Andrew: "can it do the file writes after the schedule date is picked (saves all)": the delivery date is asked FIRST, before anything is written
+      var codes = markComplete === true && pg ? [pg.joineryCode || ""] : (Array.isArray(markComplete) ? markComplete : []);
+      var todo = pg ? codes.map(function(c){ return { level: pg.levelName, room: pg.roomName, joineryId: c }; }).filter(function(it){
+        var rec = joineryStatusCache ? findJoineryStatus(joineryStatusCache, it.level, it.room, it.joineryId) : null;
+        return !(rec && joineryStatusRank(rec.status) >= joineryStatusRank("measured"));
+      }) : [];
+      return askDeliveryDatesFirst(todo).then(function(){ runSaveAllProjectAware(exitToPlanAfter, markComplete); });
+    });
   }
   /* (v94) Andrew: "30% opaque indicator -- add shop drawing or job note should reflect the same (selector to chose what items in
      the room the drawing are for)". In the Viewer's Add shop drawing / Add job note dialogs, when the marker's room has more
@@ -18895,9 +18923,26 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   function cmIso(d){ function p(n){ return (n < 10 ? "0" : "") + n; } return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()); }
   function cmAddDays(iso, n){ var d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return cmIso(d); }
   function cmSubBusiness(iso, n){ var d = new Date(iso + "T00:00:00"); n = Math.max(0, parseInt(n, 10) || 0); while (n > 0){ d.setDate(d.getDate() - 1); if (d.getDay() !== 0 && d.getDay() !== 6) n--; } return cmIso(d); }
+  function cmAddBusiness(iso, n){ var d = new Date(iso + "T00:00:00"); n = Math.max(0, parseInt(n, 10) || 0); while (n > 0){ d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) n--; } return cmIso(d); }
+  function cmBusinessBetween(fromIso, toIso){ var d = new Date(fromIso + "T00:00:00"), e = new Date(toIso + "T00:00:00"), n = 0; while (d < e){ d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) n++; } return n; }
   function cmShow(iso){ var d = iso ? new Date(iso + "T00:00:00") : null; return d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : ""; }
+  var cmAskedFirst = {}, cmDateWaiters = [];
+  function cmAskKey(level, room, joineryId){ return String(level || "") + "\u0000" + String(room || "") + "\u0000" + String(joineryId || ""); }
+  // The date popup straight away (not 0.7 s after the save), for the items about to be marked check measured; resolves when it is closed. The later marking of
+  // those items does not ask again.
+  function askDeliveryDatesFirst(items){
+    if (VIEW_ONLY_MODE || window.__utzNoCmDatePrompt || !activeProjectHandle || !items || !items.length) return Promise.resolve();
+    return new Promise(function(resolve){
+      cmDateWaiters.push(resolve);
+      items.forEach(function(it){ cmAskedFirst[cmAskKey(it.level, it.room, it.joineryId)] = true; cmDateQueue.push({ ph: activeProjectHandle, level: it.level, room: it.room || "", joineryId: it.joineryId || "" }); });
+      clearTimeout(cmDateTimer); runDeliveryDatePrompt();
+      // safety: if the popup never came up the save must not wait for it
+      setTimeout(function(){ var bd = document.getElementById("cmDateBackdrop"); if (bd && bd.hidden && cmDateWaiters.indexOf(resolve) !== -1){ cmDateWaiters = cmDateWaiters.filter(function(w){ return w !== resolve; }); resolve(); } }, 4000);
+    });
+  }
   function queueDeliveryDatePrompt(projectHandle, level, room, joineryId){
     if (VIEW_ONLY_MODE || window.__utzNoCmDatePrompt || !projectHandle) return;
+    var ak = cmAskKey(level, room, joineryId); if (cmAskedFirst[ak]){ delete cmAskedFirst[ak]; return; }
     cmDateQueue.push({ ph: projectHandle, level: level, room: room || "", joineryId: joineryId || "" });
     clearTimeout(cmDateTimer); cmDateTimer = setTimeout(runDeliveryDatePrompt, 700);
   }
@@ -18940,7 +18985,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     var a = cmPendingRead(); if (!a.length) return Promise.resolve(0);
     cmFlushing = true;
     var done = 0;
-    return a.reduce(function(chain, e){
+    return whenWritesIdle().then(function(){ return a; }).then(function(a){ return a.reduce(function(chain, e){
       return chain.then(function(){
         return projectsRootHandle.getDirectoryHandle(e.project, { create: false }).then(function(ph){
           return cmWriteSchedule(ph, { level: e.level, room: e.room, joineryId: e.joineryId }, e.fields);
@@ -18948,7 +18993,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           done++; cmPendingWrite(cmPendingRead().filter(function(x){ return !(x.project === e.project && x.level === e.level && x.room === e.room && x.joineryId === e.joineryId && x.fields && x.fields.at === e.fields.at); }));
         }, function(err){ console.warn("Pending delivery date not written yet:", err); });
       });
-    }, Promise.resolve()).then(function(){ cmFlushing = false; if (done) showToast(done === 1 ? "A saved delivery date has now gone into the project." : done + " saved delivery dates have now gone into the project."); return done; }, function(){ cmFlushing = false; return done; });
+    }, Promise.resolve()); }).then(function(){ cmFlushing = false; if (done) showToast(done === 1 ? "A saved delivery date has now gone into the project." : done + " saved delivery dates have now gone into the project."); return done; }, function(){ cmFlushing = false; return done; });
   }
   setInterval(function(){ cmFlushPending(); }, 60000);
   document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") setTimeout(cmFlushPending, 1500); });
@@ -18959,7 +19004,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     cmDateQueue.forEach(function(q){ var k = q.level + "\u0000" + q.room + "\u0000" + q.joineryId; if (q.ph === ph && !seen[k]){ seen[k] = 1; items.push(q); } });
     cmDateQueue = cmDateQueue.filter(function(q){ return q.ph !== ph; });
     var bd = document.getElementById("cmDateBackdrop"), inp = document.getElementById("cmDateInput"), lead = document.getElementById("cmLeadInput"), err = document.getElementById("cmDateErr");
-    function done(){ bd.hidden = true; cmDateBusy = false; if (cmDateQueue.length) runDeliveryDatePrompt(); }
+    function done(){ bd.hidden = true; cmDateBusy = false; var ws = cmDateWaiters; cmDateWaiters = []; ws.forEach(function(w){ try{ w(); }catch(e){} }); if (cmDateQueue.length) runDeliveryDatePrompt(); }
     function refresh(){
       document.getElementById("cmDateShown").textContent = cmShow(inp.value);
       var st = inp.value ? cmSubBusiness(inp.value, lead.value === "" ? CM_DEFAULT_LEAD_DAYS : lead.value) : "";
@@ -18975,9 +19020,29 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var leadWas = cur && cur.manufactureLeadTimeDays != null && items.length === 1 ? Number(cur.manufactureLeadTimeDays) : CM_DEFAULT_LEAD_DAYS, left = 0, dd = new Date(today + "T00:00:00"), end = new Date(inp.value + "T00:00:00");
       while (dd < end){ dd.setDate(dd.getDate() + 1); if (dd.getDay() !== 0 && dd.getDay() !== 6) left++; }
       lead.value = Math.max(0, Math.min(leadWas, left));
+      startAnchor = cmSubBusiness(inp.value, lead.value);
       err.hidden = true; refresh(); bd.hidden = false;
     });
-    inp.oninput = lead.oninput = refresh;
+    // (2026-10-08) Andrew: "with delivery date popup, changing date changes the days and vice versa": the manufacture start date is the fixed point between them --
+    // a new delivery date works out the lead days to it, new lead days work out the delivery date from it
+    var startAnchor = "";
+    inp.oninput = function(){
+      if (inp.value){
+        if (!startAnchor) startAnchor = cmSubBusiness(inp.value, lead.value === "" ? CM_DEFAULT_LEAD_DAYS : lead.value);
+        if (inp.value <= startAnchor){ lead.value = 0; startAnchor = inp.value; }
+        else {
+          // the lead days that put the start exactly on the fixed start date (a weekend delivery date is one day out from a plain count)
+          var n0 = cmBusinessBetween(startAnchor, inp.value), n = n0, k;
+          for (k = Math.max(0, n0 - 1); k <= n0 + 2; k++){ if (cmSubBusiness(inp.value, k) === startAnchor){ n = k; break; } }
+          lead.value = n; startAnchor = cmSubBusiness(inp.value, n);
+        }
+      }
+      refresh();
+    };
+    lead.oninput = function(){
+      if (lead.value !== "" && startAnchor){ inp.value = cmAddBusiness(startAnchor, lead.value); }
+      refresh();
+    };
     document.getElementById("cmDateKeep").onclick = done;
     document.getElementById("cmDateSave").onclick = function(){
       var delivery = inp.value; if (!delivery){ err.hidden = false; err.textContent = "A required delivery date is needed."; return; }
@@ -18999,7 +19064,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           return wait(700 * (n + 1)).then(fresh).then(function(){ return attempt(n + 1); });
         });
       }
-      attempt(0).then(function(){
+      btn.textContent = "Saving…";
+      whenWritesIdle().then(function(){ return attempt(0); }).then(function(){
         showToast(items.length > 1 ? "Delivery date set for " + items.length + " items." : "Delivery date set.");
         done();
       }, function(e){
@@ -19009,7 +19075,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         items.forEach(function(it){ cmPendingAdd(ph.name, it, { requiredDeliveryDate: delivery, manufactureLeadTimeDays: leadN, manufactureStartDate: start }); });
         showToast("Couldn't reach the project folder just now (" + (n || "error") + ") — the date is saved on this device and goes in as soon as it can.", 7000);
         done();
-      }).then(function(){ btn.disabled = false; });
+      }).then(function(){ btn.disabled = false; btn.textContent = "Save date"; });
     };
   }
   // Re-reads the whole file and re-renders once it lands -- called right
@@ -25333,6 +25399,10 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       // (2026-10-04) zoom: the caller re-renders the plan snapshot wider / closer and hands back the new picture
       var zIn = document.getElementById("cropZoomInBtn"), zOut = document.getElementById("cropZoomOutBtn");
       zIn.hidden = zOut.hidden = !opts.onZoom;
+      // (2026-10-08) Andrew: "give a cancel button here (crop screen)" -- for the plan snapshot only: same as the Back button, nothing is opened or changed
+      var cancelBtn = document.getElementById("cropCancelBtn");
+      cancelBtn.hidden = !opts.cancelable;
+      cancelBtn.onclick = opts.cancelable ? function(){ cropClosedByBack = true; closeCropDialog(null); } : null;
       function zoom(f){
         zIn.disabled = zOut.disabled = true;
         Promise.resolve(opts.onZoom(f)).then(function(n){
