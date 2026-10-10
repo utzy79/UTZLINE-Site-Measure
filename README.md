@@ -1,6 +1,10 @@
 # UTZLINE Site Measure — installable app
 
-**Current version: v130 (RC 1.0)** (bump this line, and add a dated changelog
+**Current version: v132 (RC 1.0)** (bump this line, and add a dated changelog
+
+**v132 (2026-10-10): more tables.** (Andrew: "all tables need to be sortable, selectable columns".) Rework register: the Columns menu (show / hide / move, remembered per device) beside its existing heading sort (Site Measure + Viewer, in step).
+
+**v131 (2026-10-10): zones are not levels.** A level that UTZLINE Projects split over several floor plans ("LEVEL 1 (H1a)", "LEVEL 1 (H1b)") is one row on the level list (the level opens its first plan, its plans listed under it); the top bar reads the real level with its zone ("LEVEL 1 · H1a") and has the level's plans as tabs while its plan is open. Nothing on disk changes: items keep the plan's name as their level, folders stay as they are.
 
 **v130 (2026-10-07):** **Names only appear in apps the person has permission for** (Andrew: "when opening any app, your name should only appear if you have permission to be in that app."). A name with no apps ticked and no department default is listed nowhere; a department with no Apps list gives no apps; the name signed in on the device is no longer an exception -- with no permission for this app it is signed out and the cover says "No access to this app. Ask an administrator". Administrators still see everything; while there is no administrator yet (a new setup) nobody is locked out; the last-read users / departments / department apps are used when the folder can't be read. The first time an administrator opens an app a note says "N names have no app access set. Open Users to assign." Also: a department's default apps + per-person extras (Users screen), the site measure opens as the PDF first. Nothing is deleted.
 

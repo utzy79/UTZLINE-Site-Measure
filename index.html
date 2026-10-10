@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <title>UTZLINE Site Measure</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="./manifest.json?v=v130">
+<link rel="manifest" href="./manifest.json?v=v132">
 <meta name="theme-color" content="#1b2224">
-<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v130">
-<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v130">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png?v=v132">
+<link rel="apple-touch-icon" href="./icons/icon-192.png?v=v132">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1734,6 +1734,7 @@ window.__pdfImportLibFailed = false;
     background:var(--surface-1); border:1px solid var(--border-strong); box-shadow:var(--shadow);
     touch-action:manipulation;
   }
+  .measure-pad .mp-text{ grid-column:1 / -1; min-height:30px; padding:4px 8px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border-strong); font:700 18px/1.3 system-ui,sans-serif; color:var(--text); text-align:left; overflow-wrap:anywhere; }
   .measure-pad button{
     height:44px; border-radius:7px; border:1px solid var(--border-strong);
     background:var(--surface-2); color:var(--text-primary);
@@ -1755,6 +1756,9 @@ window.__pdfImportLibFailed = false;
   .measure-pad.calc-on .mp-calc{ display:flex; }
   .measure-pad .mp-calc-disp{ min-height:30px; padding:4px 8px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border-strong); font-size:18px; font-weight:600; text-align:right; word-break:break-all; color:var(--text-primary); }
   .measure-pad .mp-calc-disp small{ display:block; font-size:12px; font-weight:400; color:var(--text-secondary); }
+  .measure-pad .mp-calc-hist{ display:flex; flex-direction:column; gap:3px; max-height:92px; overflow-y:auto; }
+  .measure-pad .mp-calc-hist button{ height:auto; min-height:26px; padding:2px 8px; text-align:left; font-size:13px; font-weight:500; border-radius:6px; }
+  .measure-pad .mp-calc-hist .mp-h-none{ font-size:12px; color:var(--text-secondary); padding:0 2px; }
   .measure-pad .mp-calc-row{ display:flex; gap:5px; }
   .measure-pad .mp-calc-row button{ flex:1; height:38px; }
   .measure-pad button.mp-done{ grid-column:span 2; background:var(--accent); border-color:var(--accent-ink); color:var(--on-accent,#fff); font-size:15px; }
@@ -1999,7 +2003,7 @@ window.__pdfImportLibFailed = false;
          huge monitors, where there's enough room for that to actually help
          instead of just being a coincidence of window width. -->
     <div class="toolbar-row" id="toolbarRowFile">
-    <div class="brand"><img class="brand-icon" id="brandIcon" src="" alt="" aria-hidden="true"><span><span id="brandName">UTZ<b>LINE</b> Site Measure</span><span class="rc-tag" title="Release candidate 1.0">RC 1.0</span><small id="brandSubtitle">plan markup</small></span></div>
+    <div class="brand"><img class="brand-icon" id="brandIcon" src="" alt="" aria-hidden="true"><span><span id="brandName">UTZ<b>LINE</b> Site Measure</span><span class="rc-tag" title="Release candidate 1.0">RC 1.0</span><small id="brandSubtitle">plan markup</small></span><span class="utz-lz-tabs" id="brandPlanTabs" hidden></span></div>
     <div class="sep"></div>
 
     <!-- Requested directly by Andrew, 2026-09-18: "we need a back button on
@@ -2692,6 +2696,10 @@ window.__pdfImportLibFailed = false;
           <div class="vs-drop" id="vsShopDrop" tabindex="0" role="button">Drop a shop drawing PDF here</div>
           <div class="row" style="margin-top:10px;"><button class="btn" id="vsAddShopDrawingBtn" type="button">Add shop drawing</button></div>
         </div>
+        <!-- (2026-10-09) Andrew: shop drawing comments (add + Print); they head the first page of the shop drawing when it is opened -->
+        <!-- (2026-10-09) Andrew: "and in joinery summary" -- the CNC files (each with its own machine) sent for this item + add / change -->
+        <div class="card" id="vsCncCard"><h2 class="section-title">Sent to CNC</h2><div id="vsCnc"></div></div>
+        <div class="card" id="vsSdCommentsCard"><h2 class="section-title">Shop drawing comments</h2><div id="vsSdComments"></div></div>
         <!-- (2026-10-04) Andrew: "and these should have drag and drops also" -- a PDF dropped on the card (or the button) opens the Add job note dialog -->
         <div class="card" id="vsJobNoteCard"><h2 class="section-title">Job notes</h2><div id="vsJobNotes" class="vs-list"></div>
           <div class="vs-drop" id="vsJobNoteDrop" tabindex="0" role="button">Drop a job note PDF here</div>
@@ -2716,6 +2724,10 @@ window.__pdfImportLibFailed = false;
           <input id="fxCncFile" type="text" maxlength="120" placeholder="CNC file name" autocomplete="off" style="width:100%;box-sizing:border-box;font:inherit;min-height:42px;padding:6px 10px;border-radius:8px;margin-bottom:8px;">
           <select id="fxCncMachine" style="width:100%;box-sizing:border-box;font:inherit;min-height:42px;padding:6px 10px;border-radius:8px;"></select>
           <input id="fxCncNew" type="text" maxlength="60" placeholder="New machine name" hidden style="width:100%;box-sizing:border-box;font:inherit;min-height:42px;padding:6px 10px;border-radius:8px;margin-top:8px;">
+          <textarea id="fxCncComment" rows="2" maxlength="500" placeholder="Comments (optional) — shown on the summary and the Drafting Schedule, and on the first page of the shop drawing" style="width:100%;box-sizing:border-box;font:inherit;padding:8px 10px;border-radius:8px;margin-top:8px;"></textarea>
+          <button type="button" class="mbtn" id="fxCncAddBtn" hidden style="margin-top:8px;">Add this machine</button>
+          <div id="fxCncMore"></div>
+          <button type="button" class="mbtn" id="fxCncMoreBtn" style="margin-top:8px;">+ Add another file (and machine)</button>
           <p id="fxCncErr" hidden style="margin:8px 0 0;color:#e77;font-size:13px;"></p>
         </div>
         <div class="modal-actions">
@@ -3161,7 +3173,8 @@ window.__pdfImportLibFailed = false;
     if (s === "installed") return "🏆";
     if (s === "delivered") return "🚚";
     if (s === "manufactured") return "📦";
-    if (s === "machined") return "⚙️";
+    if (s === "machined") return "🔨";
+    if (s === "cut") return "⚙️";
     if (s === "in_manufacture") return "🏭";
     if (rec.jobNote) return "🏭";
     if (s === "measured") return "📏";
@@ -3194,7 +3207,7 @@ window.__pdfImportLibFailed = false;
     parent.appendChild(g);
     return g;
   }
-  function fontStack(f){ return f === "mono" ? "-apple-system, 'Segoe UI', Roboto, 'IBM Plex Sans', Arial, sans-serif" : "'IBM Plex Sans',Arial,sans-serif"; }
+  function fontStack(f){ return f === "mono" ? "'IBM Plex Mono',monospace" : "'IBM Plex Sans',Arial,sans-serif"; }
   function drawLabel(parent, o){
     var fs = Number(o.fontSize) > 0 ? Number(o.fontSize) : 16;
     var lines = String(o.text == null ? "" : o.text).split("\n");
@@ -3835,6 +3848,356 @@ window.__pdfImportLibFailed = false;
 })();
 </script>
 <!-- UTZLINE-ITEM-FILES END -->
+<!-- UTZLINE-LEVEL-ZONES BEGIN (generated from shared/level-zones -- don't edit here) -->
+<script>
+/* ============================== UTZLINE level zones (2026-10-10) ==============================
+   Andrew: "zones are not levels". UTZLINE Projects saves a level split over several floor plans as one level file PER PLAN, named
+   "<Level> (<Zone>)" on disk ("LEVEL 1 (H1b)"), and keeps the split in Project Saves\level-zones.json
+   ({ byLevel: { "<disk name>": { level, zone, codes } } }). Items carry the disk name as their level. An app that SHOWS levels reads
+   this to show the real level ("LEVEL 1") -- the zone is which plan the room is drawn on, not a level.
+     UtzLevelZones.read(projectHandle) -> Promise<meta>  ({ byLevel: {} } when the project has none; never throws)
+     UtzLevelZones.split(diskName, meta) -> { level, zone }   (the file, else the "(zone)" pattern of the name, else the name itself)
+     UtzLevelZones.label(diskName, meta) -> the level to show      UtzLevelZones.full(diskName, meta) -> "LEVEL 1 · H1b" (the name when no zone)
+     UtzLevelZones.groups(names, meta) -> [{ level, members: [{ name, zone }] }]   UtzLevelZones.siblings(name, names, meta) -> the group when split, else null
+     UtzLevelZones.optionsHtml(names, meta, esc) -> <option>s for a <select>: a split level is an <optgroup> of its plans (values stay the disk names)
+     UtzLevelZones.tabs(el, name, names, meta, onPick(diskName)) -> the level's plans as tabs in el (hidden when the level has one plan)
+     UtzLevelZones.use(ph, onLoaded) -> the cached meta for this project at once ({ byLevel: {} } before the file is read), onLoaded(meta) once read
+   Plain ES5, no dependencies. Generated into each app between UTZLINE-LEVEL-ZONES markers -- edit here, run shared/sync_app_blocks.py. */
+(function(){
+  "use strict";
+  if (window.UtzLevelZones) return;
+  var RE = /^(.*\S)\s*\(([^()]+)\)\s*$/;
+  function read(ph){
+    if (!ph) return Promise.resolve({ byLevel: {} });
+    return ph.getDirectoryHandle("Project Saves", { create: false }).then(function(d){ return d.getFileHandle("level-zones.json", { create: false }); })
+      .then(function(fh){ return fh.getFile(); }).then(function(f){ return f.text(); })
+      .then(function(t){ var j = JSON.parse(t); return j && j.byLevel && typeof j.byLevel === "object" ? j : { byLevel: {} }; }, function(){ return { byLevel: {} }; })
+      .then(null, function(){ return { byLevel: {} }; });
+  }
+  function split(name, meta){
+    name = String(name == null ? "" : name);
+    var m = meta && meta.byLevel && meta.byLevel[name];
+    if (m && m.level) return { level: String(m.level), zone: String(m.zone || "") };
+    var mm = RE.exec(name);
+    return mm ? { level: mm[1], zone: mm[2] } : { level: name, zone: "" };
+  }
+  function label(name, meta){ return split(name, meta).level; }
+  function full(name, meta){ var s = split(name, meta); return s.zone ? s.level + " · " + s.zone : s.level; }
+  function groups(names, meta){
+    var out = [], by = {};
+    (names || []).forEach(function(n){ var sp = split(n, meta), k = sp.level.toLowerCase(); if (!by[k]){ by[k] = { level: sp.level, members: [] }; out.push(by[k]); } by[k].members.push({ name: n, zone: sp.zone }); });
+    return out;
+  }
+  function siblings(name, names, meta){
+    var gs = groups(names, meta);
+    for (var i = 0; i < gs.length; i++){ var g = gs[i]; if (g.members.length >= 2 && g.members.some(function(m){ return m.name === name; })) return g; }
+    return null;
+  }
+  function esc0(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function optionsHtml(names, meta, esc){
+    esc = esc || esc0;
+    return groups(names, meta).map(function(g){
+      if (g.members.length < 2) return '<option value="' + esc(g.members[0].name) + '">' + esc(g.members[0].zone ? g.level : g.members[0].name) + "</option>";
+      return '<optgroup label="' + esc(g.level) + '">' + g.members.map(function(m){ return '<option value="' + esc(m.name) + '">' + esc(m.zone || m.name) + "</option>"; }).join("") + "</optgroup>";
+    }).join("");
+  }
+  var cssDone = false;
+  function css(){
+    if (cssDone || !document.head) return; cssDone = true;
+    var st = document.createElement("style"); st.id = "utzLevelZonesCss";
+    st.textContent = ".utz-lz-tabs{display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center;margin:0 0 0 10px;vertical-align:middle}" +
+      ".utz-lz-tabs.block{display:flex;margin:2px 0 10px;border-bottom:1px solid var(--border,#555)}" +
+      ".utz-lz-tabs button{background:transparent;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;color:var(--muted,#999);font:inherit;font-size:13px;font-weight:700;padding:4px 10px;cursor:pointer;touch-action:manipulation}" +
+      ".utz-lz-tabs.block button{padding:8px 12px;font-size:14px}" +
+      ".utz-lz-tabs button.on{color:var(--text,#fff);border-bottom-color:var(--accent,#3db2ff)}";
+    document.head.appendChild(st);
+  }
+  function tabs(el, name, names, meta, onPick){
+    if (!el) return null;
+    css();
+    var g = siblings(name, names, meta);
+    el.innerHTML = ""; el.hidden = !g;
+    if (!g) return null;
+    g.members.forEach(function(m){
+      var b = document.createElement("button"); b.type = "button"; b.textContent = m.zone || m.name; b.className = m.name === name ? "on" : "";
+      b.setAttribute("data-plan", m.name); b.title = "Open this plan of " + g.level;
+      b.addEventListener("click", function(){ if (m.name !== name) onPick(m.name); });
+      el.appendChild(b);
+    });
+    return g;
+  }
+  var cache = {}, pending = {};
+  function use(ph, onLoaded){
+    var k = ph && ph.name; if (!k) return { byLevel: {} };
+    if (cache[k]) return cache[k];
+    if (!pending[k]){ pending[k] = read(ph).then(function(m){ cache[k] = m; delete pending[k]; if (onLoaded) onLoaded(m); }); }
+    return { byLevel: {} };
+  }
+  function forget(ph){ var k = ph && ph.name; if (k) delete cache[k]; else cache = {}; }
+  // load(ph) -> Promise<meta>: reads once and seeds use()'s cache so the next use(ph) is the real file (for screens that can wait for it)
+  function load(ph){ var k = ph && ph.name; if (!k) return Promise.resolve({ byLevel: {} }); if (cache[k]) return Promise.resolve(cache[k]); return read(ph).then(function(m){ cache[k] = m; return m; }); }
+  window.UtzLevelZones = { read: read, split: split, label: label, full: full, groups: groups, siblings: siblings, optionsHtml: optionsHtml, tabs: tabs, use: use, load: load, forget: forget };
+})();
+</script>
+<!-- UTZLINE-LEVEL-ZONES END -->
+<!-- UTZLINE-COLUMNS BEGIN (generated from shared/columns -- don't edit here) -->
+<script>
+/* ============================== UTZLINE columns: hide / rearrange (2026-09-30) ==============================
+   Andrew: "all schedules need the option to hide, rearrange columns".
+   A "Columns" button beside a table's Text size bar opens a list of its columns: tick to show / untick to
+   hide, ▲ ▼ to move. The frozen identity columns at the left (Level / Room / Joinery ID …) and the trailing
+   actions column stay where they are. The choice is remembered per device, per table, and re-applied every
+   time the app redraws the rows (a MutationObserver on the body -- the apps' own render code is untouched).
+     UtzColumns.attach(tableEl, { storageKey, frozen: N, fixedEnd: M, mountBefore: el, onApply: fn })
+       - columns are identified by <th data-col>, else the header text, else their index
+       - frozen (default 0): the first N columns can't be hidden or moved; fixedEnd (default: the trailing
+         <th> with no text and no data-col, e.g. the row-actions column) likewise
+       - toggle: ids of frozen columns that stay in place but can still be ticked off (2026-10-04: the item "No.")
+       - mountBefore: the button goes inside this element (the .tv-zoom bar) or before the table's box
+       - sort: true (2026-10-10, Andrew: "all tables need to be sortable, selectable columns"): tap a column heading to sort by it
+         (ascending, then descending, then the original order; remembered per device). Numbers, $ amounts, %, dd.mm.yyyy dates and text
+         sort properly; empty cells go last. Rows with data-sort-fixed (group headings, totals) are boundaries: the rows between two of
+         them are sorted among themselves; a row with data-sort-last stays at the end of its group. A row with data-utz-span (a group
+         heading with one cell) is stretched across the visible columns. A cell's data-sv attribute overrides what is sorted on.
+     UtzColumns.ensure(tableEl, key, opts) -> attaches (once the table has its heading row), and re-attaches under a new key when the app
+       switches the table to another set of columns (e.g. Variations / RFIs); detach(tableEl) removes it
+     UtzColumns.apply(tableEl) / reset(tableEl) / state(tableEl) -> { order, hidden, sort }
+   Plain ES5. */
+(function(){
+  "use strict";
+  if (window.UtzColumns) return;
+  var openPop = null;
+  function lsGet(k){ try{ return JSON.parse(localStorage.getItem(k) || "null"); }catch(e){ return null; } }
+  function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function colId(th, i){ return th.getAttribute("data-col") || (th.textContent || "").trim() || ("col" + i); }
+  function headRow(t){ return t && t.tHead && t.tHead.rows.length ? t.tHead.rows[0] : null; }
+  function tagRow(st, row){
+    // cells the app just drew are in the ORIGINAL order; cells this module already moved carry their id
+    var cells = Array.prototype.slice.call(row.cells);
+    if (cells.length && !cells[0].hasAttribute("data-utz-col")){
+      cells.forEach(function(c, i){ if (i < st.ids.length) c.setAttribute("data-utz-col", st.ids[i]); });
+    }
+    return cells;
+  }
+  function desiredOrder(st){
+    var mov = st.order.filter(function(id){ return st.movable.indexOf(id) !== -1; });
+    st.movable.forEach(function(id){ if (mov.indexOf(id) === -1) mov.push(id); }); // a column the app added since
+    return st.front.concat(mov, st.end);
+  }
+  function applyRow(st, row, order, hiddenSet){
+    if (row.hasAttribute("data-utz-span")) return; // stretched over the visible columns in apply()
+    var cells = tagRow(st, row), byId = {};
+    cells.forEach(function(c){ byId[c.getAttribute("data-utz-col")] = c; });
+    var frag = document.createDocumentFragment(), extra = cells.filter(function(c){ return order.indexOf(c.getAttribute("data-utz-col")) === -1; });
+    order.forEach(function(id){ var c = byId[id]; if (c){ c.classList.toggle("utz-col-hidden", hiddenSet[id] === true); frag.appendChild(c); } });
+    extra.forEach(function(c){ frag.appendChild(c); });
+    row.appendChild(frag);
+  }
+  function apply(t){
+    var st = t && t.__utzCols; if (!st) return;
+    var order = desiredOrder(st), hiddenSet = {};
+    st.hidden.forEach(function(id){ if (canHide(st, id)) hiddenSet[id] = true; });
+    st.applying = true;
+    try{
+      var hr = headRow(t); if (hr) applyRow(st, hr, order, hiddenSet);
+      Array.prototype.forEach.call(t.tBodies, function(tb){ Array.prototype.forEach.call(tb.rows, function(r){ applyRow(st, r, order, hiddenSet); }); });
+      if (st.sortable){ sortBodies(st); markSort(st); }
+      var visible = order.filter(function(id){ return !hiddenSet[id]; }).length;
+      Array.prototype.forEach.call(t.tBodies, function(tb){ Array.prototype.forEach.call(tb.rows, function(r){ if (r.hasAttribute("data-utz-span") && r.cells[0]) r.cells[0].colSpan = Math.max(1, visible); }); });
+    } finally { st.applying = false; }
+    if (st.btn) st.btn.classList.toggle("utz-cols-on", st.hidden.length > 0 || JSON.stringify(st.order) !== JSON.stringify(st.movable));
+    if (st.onApply){ try{ st.onApply(t); }catch(e){} }
+  }
+  // ---- sorting (opt-in: sort: true) ----
+  function cellKey(c){
+    if (!c) return null;
+    var t = c.hasAttribute("data-sv") ? c.getAttribute("data-sv") : null;
+    if (t === null){ var inp = c.querySelector("input,select"); t = inp ? inp.value : (c.textContent || ""); }
+    t = String(t).replace(/\s+/g, " ").trim();
+    if (!t) return null;
+    var d = /^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/.exec(t); if (d) return { n: +d[3] * 10000 + +d[2] * 100 + +d[1] };
+    var n = t.replace(/[$,%\s]/g, ""); if (/^-?\d+(\.\d+)?$/.test(n)) return { n: parseFloat(n) };
+    return { s: t.toLowerCase() };
+  }
+  function cmpKeys(a, b){
+    if (a.n !== undefined && b.n !== undefined) return a.n - b.n;
+    var x = a.n !== undefined ? String(a.n) : a.s, y = b.n !== undefined ? String(b.n) : b.s;
+    return x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" });
+  }
+  function sortBodies(st){
+    var s = st.sort;
+    Array.prototype.forEach.call(st.table.tBodies, function(tb){
+      var rows = Array.prototype.slice.call(tb.rows), out = [], run = [], i0 = 0;
+      rows.forEach(function(r){ if (!r.hasAttribute("data-utz-i")) r.setAttribute("data-utz-i", String(i0)); i0++; });
+      function idx(r){ return +r.getAttribute("data-utz-i"); }
+      function flush(){
+        if (!run.length) return;
+        var body = run.filter(function(r){ return !r.hasAttribute("data-sort-last"); }), tail = run.filter(function(r){ return r.hasAttribute("data-sort-last"); });
+        if (s && s.id){
+          var keyed = body.map(function(r){ var cell = null; for (var k = 0; k < r.cells.length; k++) if (r.cells[k].getAttribute("data-utz-col") === s.id){ cell = r.cells[k]; break; } return { r: r, k: cellKey(cell) }; });
+          keyed.sort(function(a, b){
+            if (!a.k && !b.k) return idx(a.r) - idx(b.r);
+            if (!a.k) return 1; if (!b.k) return -1;   // empty last, whichever way it is sorted
+            var c = cmpKeys(a.k, b.k); if (s.dir === "desc") c = -c;
+            return c || idx(a.r) - idx(b.r);
+          });
+          body = keyed.map(function(x){ return x.r; });
+        } else body.sort(function(a, b){ return idx(a) - idx(b); });
+        out = out.concat(body, tail); run = [];
+      }
+      rows.forEach(function(r){ if (r.hasAttribute("data-sort-fixed") || r.hasAttribute("data-utz-span")){ flush(); out.push(r); } else run.push(r); });
+      flush();
+      var changed = false; for (var i = 0; i < rows.length; i++) if (rows[i] !== out[i]){ changed = true; break; }
+      if (changed){ var frag = document.createDocumentFragment(); out.forEach(function(r){ frag.appendChild(r); }); tb.appendChild(frag); }
+    });
+  }
+  function markSort(st){
+    var hr = headRow(st.table); if (!hr) return;
+    Array.prototype.forEach.call(hr.cells, function(th, i){
+      var id = th.getAttribute("data-utz-col") || st.ids[i], on = st.sort && st.sort.id === id;
+      th.classList.add("utz-sortable"); th.classList.toggle("utz-sort-asc", !!on && st.sort.dir === "asc"); th.classList.toggle("utz-sort-desc", !!on && st.sort.dir === "desc");
+      th.setAttribute("aria-sort", on ? (st.sort.dir === "asc" ? "ascending" : "descending") : "none");
+    });
+  }
+  function canHide(st, id){ return st.movable.indexOf(id) !== -1 || st.toggle.indexOf(id) !== -1; }
+  function save(st){ if (st.storageKey) lsSet(st.storageKey, { order: st.order, hidden: st.hidden, sort: st.sort || null }); }
+  function label(st, id){ var th = st.thById[id]; return th ? ((th.textContent || "").trim() || id) : id; }
+  function buildPop(st){
+    var pop = st.pop; pop.innerHTML = "";
+    var h = document.createElement("div"); h.className = "utz-cols-head"; h.textContent = "Columns — tick to show, ▲ ▼ to move" + (st.sortable ? ". Tap a heading to sort." : ""); pop.appendChild(h);
+    var order = desiredOrder(st).filter(function(id){ return st.movable.indexOf(id) !== -1; });
+    st.toggle.forEach(function(id){ // fixed in place: a tick box, no arrows
+      var row = document.createElement("div"); row.className = "utz-cols-row";
+      var lab = document.createElement("label");
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = st.hidden.indexOf(id) === -1; cb.setAttribute("data-col", id);
+      cb.addEventListener("change", function(){ var k = st.hidden.indexOf(id); if (cb.checked && k !== -1) st.hidden.splice(k, 1); else if (!cb.checked && k === -1) st.hidden.push(id); save(st); apply(st.table); });
+      var sp = document.createElement("span"); sp.textContent = label(st, id);
+      lab.appendChild(cb); lab.appendChild(sp); row.appendChild(lab); pop.appendChild(row);
+    });
+    order.forEach(function(id, i){
+      var row = document.createElement("div"); row.className = "utz-cols-row";
+      var lab = document.createElement("label");
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = st.hidden.indexOf(id) === -1; cb.setAttribute("data-col", id);
+      cb.addEventListener("change", function(){ var k = st.hidden.indexOf(id); if (cb.checked && k !== -1) st.hidden.splice(k, 1); else if (!cb.checked && k === -1) st.hidden.push(id); save(st); apply(st.table); });
+      var sp = document.createElement("span"); sp.textContent = label(st, id);
+      lab.appendChild(cb); lab.appendChild(sp);
+      var up = document.createElement("button"); up.type = "button"; up.className = "utz-cols-move"; up.textContent = "▲"; up.title = "Move left"; up.disabled = i === 0;
+      var dn = document.createElement("button"); dn.type = "button"; dn.className = "utz-cols-move"; dn.textContent = "▼"; dn.title = "Move right"; dn.disabled = i === order.length - 1;
+      up.addEventListener("click", function(){ move(st, id, -1); });
+      dn.addEventListener("click", function(){ move(st, id, 1); });
+      row.appendChild(lab); row.appendChild(up); row.appendChild(dn); pop.appendChild(row);
+    });
+    var reset = document.createElement("button"); reset.type = "button"; reset.className = "utz-cols-reset"; reset.textContent = "Show all, original order";
+    reset.addEventListener("click", function(){ st.order = st.movable.slice(); st.hidden = []; st.sort = null; save(st); apply(st.table); buildPop(st); });
+    pop.appendChild(reset);
+  }
+  function move(st, id, dir){
+    var order = desiredOrder(st).filter(function(x){ return st.movable.indexOf(x) !== -1; });
+    var i = order.indexOf(id), j = i + dir;
+    if (i === -1 || j < 0 || j >= order.length) return;
+    order.splice(i, 1); order.splice(j, 0, id);
+    st.order = order; save(st); apply(st.table); buildPop(st);
+  }
+  function close(){ if (openPop){ openPop.pop.hidden = true; openPop.btn.setAttribute("aria-expanded", "false"); openPop = null; } }
+  function attach(t, o){
+    if (!t || t.__utzCols) return t && t.__utzCols;
+    o = o || {};
+    var hr = headRow(t); if (!hr) return null;
+    var ths = Array.prototype.slice.call(hr.cells);
+    var ids = ths.map(colId), thById = {};
+    ths.forEach(function(th, i){ thById[ids[i]] = th; });
+    var frozen = o.frozen || 0;
+    var fixedEnd = o.fixedEnd;
+    if (fixedEnd === undefined){ fixedEnd = 0; for (var k = ths.length - 1; k >= 0; k--){ var th = ths[k]; if (!th.getAttribute("data-col") && !(th.textContent || "").trim()) fixedEnd++; else break; } }
+    var st = { table: t, ids: ids, thById: thById, front: ids.slice(0, frozen), end: fixedEnd ? ids.slice(ids.length - fixedEnd) : [], movable: ids.slice(frozen, ids.length - fixedEnd),
+               toggle: (o.toggle || []).filter(function(id){ return ids.slice(0, frozen).indexOf(id) !== -1; }),
+               order: [], hidden: [], sort: null, sortable: !!o.sort, storageKey: o.storageKey || null, onApply: o.onApply || null, applying: false };
+    var saved = st.storageKey ? lsGet(st.storageKey) : null;
+    if (saved && typeof saved === "object"){
+      if (Array.isArray(saved.order)) st.order = saved.order.filter(function(id){ return st.movable.indexOf(id) !== -1; });
+      if (Array.isArray(saved.hidden)) st.hidden = saved.hidden.filter(function(id){ return canHide(st, id); });
+      if (st.sortable && saved.sort && ids.indexOf(saved.sort.id) !== -1 && (saved.sort.dir === "asc" || saved.sort.dir === "desc")) st.sort = { id: saved.sort.id, dir: saved.sort.dir };
+    }
+    if (st.sortable){ // a tap on a column heading: ascending, descending, original order
+      t.addEventListener("click", function(e){
+        if (t.__utzCols !== st) return;
+        var th = e.target && e.target.closest ? e.target.closest("th") : null;
+        if (!th || !t.tHead || th.parentNode.parentNode !== t.tHead || e.target.closest("input,select,button,a")) return;
+        var id = th.getAttribute("data-utz-col") || ids[Array.prototype.indexOf.call(th.parentNode.cells, th)];
+        if (!id || !(th.textContent || "").trim()) return;
+        st.sort = !st.sort || st.sort.id !== id ? { id: id, dir: "asc" } : st.sort.dir === "asc" ? { id: id, dir: "desc" } : null;
+        save(st); apply(t);
+      });
+    }
+    if (!st.order.length) st.order = st.movable.slice();
+    t.__utzCols = st;
+    // the button + popover
+    var wrap = document.createElement("span"); wrap.className = "utz-cols";
+    var btn = document.createElement("button"); btn.type = "button"; btn.className = "utz-cols-btn"; btn.setAttribute("aria-haspopup", "true"); btn.setAttribute("aria-expanded", "false"); btn.textContent = "Columns ▾";
+    var pop = document.createElement("div"); pop.className = "utz-cols-pop"; pop.hidden = true;
+    wrap.appendChild(btn); wrap.appendChild(pop);
+    st.btn = btn; st.pop = pop;
+    var host = o.mountBefore || null;
+    if (host && host.parentNode){ host.appendChild(wrap); }
+    else { var box = t.parentNode; box.parentNode.insertBefore(wrap, box); }
+    btn.addEventListener("click", function(e){ e.preventDefault(); e.stopPropagation(); if (openPop && openPop !== st) close(); if (pop.hidden){ buildPop(st); pop.hidden = false; btn.setAttribute("aria-expanded", "true"); openPop = st; } else close(); });
+    pop.addEventListener("click", function(e){ e.stopPropagation(); });
+    // re-apply after every redraw of the rows
+    try{
+      var raf = 0;
+      var mo = new MutationObserver(function(){ if (st.applying || t.__utzCols !== st) return; if (!raf) raf = requestAnimationFrame(function(){ raf = 0; apply(t); }); });
+      Array.prototype.forEach.call(t.tBodies, function(tb){ mo.observe(tb, { childList: true }); });
+      if (t.tHead) mo.observe(t.tHead, { childList: true }); // rows replaced only -- never subtree, this module's own cell moves must not re-trigger it
+      st.mo = mo;
+    }catch(e){}
+    apply(t);
+    return st;
+  }
+  function detach(t){
+    var st = t && t.__utzCols; if (!st) return;
+    try{ if (st.mo) st.mo.disconnect(); }catch(e){}
+    if (openPop === st) close();
+    if (st.btn && st.btn.parentNode && st.btn.parentNode.parentNode) st.btn.parentNode.parentNode.removeChild(st.btn.parentNode);
+    t.__utzCols = null;
+    if (t.tHead) Array.prototype.forEach.call(t.tHead.querySelectorAll("th"), function(th){ th.classList.remove("utz-sortable", "utz-sort-asc", "utz-sort-desc"); th.removeAttribute("data-utz-col"); });
+  }
+  function ensure(t, key, o){
+    if (!t || !t.tHead || !t.tHead.rows.length) return null;
+    var st = t.__utzCols;
+    if (st && st.key !== key){ detach(t); st = null; }
+    if (st) return st;
+    o = o || {}; o.storageKey = key; st = attach(t, o); if (st) st.key = key; return st;
+  }
+  function reset(t){ var st = t && t.__utzCols; if (!st) return; st.order = st.movable.slice(); st.hidden = []; st.sort = null; save(st); apply(t); }
+  function state(t){ var st = t && t.__utzCols; return st ? { order: desiredOrder(st).filter(function(x){ return st.movable.indexOf(x) !== -1; }), hidden: st.hidden.slice(), sort: st.sort ? { id: st.sort.id, dir: st.sort.dir } : null } : null; }
+  document.addEventListener("click", function(){ close(); });
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape") close(); });
+  window.UtzColumns = { attach: attach, ensure: ensure, detach: detach, apply: apply, reset: reset, state: state, close: close };
+})();
+</script>
+<style>
+  /* ---- UTZLINE columns: hide / rearrange (2026-09-30) -- see shared/columns/columns.js ---- */
+  .utz-col-hidden{ display: none !important; }
+  .utz-cols{ position: relative; display: inline-block; margin-left: 10px; }
+  .utz-cols-btn{ min-height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; touch-action: manipulation; }
+  .utz-cols-btn.utz-cols-on{ border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .utz-cols-pop{ position: absolute; top: calc(100% + 4px); right: 0; z-index: 60; min-width: 280px; max-height: 70vh; overflow-y: auto; padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.35); text-align: left; }
+  .utz-cols-pop[hidden]{ display: none; }
+  .utz-cols-head{ font-size: 12px; color: var(--muted); padding: 4px 6px 8px; }
+  .utz-cols-row{ display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 2px 6px; border-radius: 8px; }
+  .utz-cols-row:hover{ background: var(--panel2); }
+  .utz-cols-row label{ flex: 1; display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
+  .utz-cols-row input{ width: 20px; height: 20px; margin: 0; accent-color: var(--accent); flex: none; }
+  .utz-cols-move{ width: 34px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel2); color: var(--text); font-size: 12px; cursor: pointer; touch-action: manipulation; }
+  .utz-cols-move:disabled{ opacity: .35; cursor: default; }
+  .utz-cols-reset{ display: block; width: 100%; margin-top: 8px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
+  /* sortable headings (sort: true) */
+  th.utz-sortable{ cursor: pointer; user-select: none; -webkit-user-select: none; }
+  th.utz-sortable:hover{ color: var(--text); }
+  th.utz-sort-asc::after{ content: " \25B2"; font-size: 9px; color: var(--accent); }
+  th.utz-sort-desc::after{ content: " \25BC"; font-size: 9px; color: var(--accent); }
+</style>
+<!-- UTZLINE-COLUMNS END -->
 <!-- UTZLINE-EVENT-STORE BEGIN (generated from shared/event-store -- don't edit here) -->
 <script>
 /* ============================== UTZLINE event store v2 (2026-09-30) ==============================
@@ -5411,7 +5774,7 @@ window.__pdfImportLibFailed = false;
       });
       return out;
     }
-    var CUTS = { carcase: "Carcase", colourBoard: "Colour board", solidSurface: "Solid surface" };
+    var CUTS = { carcase: "Carcase cut", colourBoard: "CB cut", carcaseEdged: "Carcase edged / bored", cbEdged: "CB edged / bored", solidSurface: "Solid surface" };
     function histFromEvents(branch, evs){
       var out = [];
       if (branch === "Joinery Status") evs.forEach(function(e){
@@ -5875,6 +6238,554 @@ window.__pdfImportLibFailed = false;
 /* UTZLINE-ADMIN-GATE END */
 </script>
 <!-- UTZLINE-ADMIN-GATE END -->
+<!-- UTZLINE-SOLID-TICK BEGIN (generated from shared/solid-tick -- don't edit here) -->
+<script>
+/* ============================== UTZLINE "Has solid surface" tick on the joinery summary pages (2026-10-09) ==============================
+   Andrew: "add a tick button here on all joinery summary pages for has solid surface" and "thats locked and changes require the pin".
+   One tick under "Shop drawing" on every joinery summary page. It reads the item's hasSolidSurface (joinery-items.json) and is LOCKED:
+   a tap asks the signed-in person's PIN (the same name/PIN list the apps sign in with), then writes the flag AND an editHistory entry
+   ("Has Solid Surface: No -> Yes", who, when) -- the same record UTZLINE Projects' Edit joinery item writes. Nothing is deleted.
+   UtzSolidTick.mount(el, { projectHandle, level, room, code, has, toast, onChange(newValue) })   fills el with the tick.
+   Needs UtzUsers (name(), rows()), UtzAdminGate.pad and UtzPin (all inlined in every app that has a summary page). Plain ES5. */
+(function(){
+  "use strict";
+  if (window.UtzSolidTick) return;
+  var FILE = "joinery-items.json", FIELD = "Has Solid Surface";
+  function lc(s){ return String(s == null ? "" : s).toLowerCase(); }
+  function match(it, o){ return it && lc(it.level) === lc(o.level) && lc(it.room) === lc(o.room) && lc(it.joineryId) === lc(o.code); }
+  function findRow(rows, name){
+    var n = lc(name);
+    for (var i = 0; i < (rows || []).length; i++) if (rows[i] && lc(rows[i].name) === n) return rows[i];
+    return null;
+  }
+  // the PIN of whoever is signed in on this device; resolves true when it was right
+  function confirmPin(who){
+    return window.UtzUsers.rows().then(function(rows){
+      if (!findRow(rows, who)) throw new Error("“" + who + "” is no longer in the name/PIN list — sign in again.");
+      return window.UtzAdminGate.pad("to change Has solid surface as “" + who + "”", function(pin){
+        return window.UtzUsers.rows().then(function(fresh){ var r = findRow(fresh, who); return !!(r && window.UtzPin.eq(r.pin, pin)); });
+      }, "Confirm PIN");
+    });
+  }
+  function write(o, value, who){
+    return o.projectHandle.getFileHandle(FILE, { create: false }).then(function(fh){
+      return fh.getFile().then(function(f){ return f.text(); }).then(function(t){
+        var items = JSON.parse(t); if (!Array.isArray(items)) throw new Error("joinery-items.json isn't readable just now");
+        var rec = null; for (var i = 0; i < items.length; i++) if (match(items[i], o)){ rec = items[i]; break; }
+        if (!rec) throw new Error("This item isn't in joinery-items.json.");
+        var from = !!rec.hasSolidSurface;
+        if (from === value) return value;
+        rec.hasSolidSurface = value;
+        if (!Array.isArray(rec.editHistory)) rec.editHistory = [];
+        rec.editHistory.push({ at: new Date().toISOString(), by: who, changes: [{ field: FIELD, from: from, to: value }] });
+        return fh.createWritable().then(function(w){ return w.write(JSON.stringify(items)).then(function(){ return w.close(); }); }).then(function(){ return value; });
+      });
+    });
+  }
+  function mount(el, o){
+    if (!el) return;
+    var has = !!o.has, busy = false;
+    el.innerHTML = "<label class=\"ust\" style=\"display:inline-flex;align-items:center;gap:10px;cursor:pointer;\"><input type=\"checkbox\" style=\"width:22px;height:22px;\"><span>Has solid surface</span><span title=\"Locked: changing it needs your PIN\" aria-hidden=\"true\">🔒</span></label>";
+    var cb = el.querySelector("input");
+    function paint(){ cb.checked = has; }
+    paint();
+    cb.addEventListener("change", function(){
+      var want = cb.checked; paint(); // stays as it was until the PIN is right
+      if (busy) return; busy = true;
+      var who = (window.UtzUsers && window.UtzUsers.name && window.UtzUsers.name()) || "";
+      function toast(m){ if (o.toast) o.toast(m); }
+      if (!who){ toast("Sign in with your name first — changing this needs your PIN."); busy = false; return; }
+      confirmPin(who).then(function(ok){
+        if (!ok){ toast("Not changed."); return null; }
+        return write(o, want, who).then(function(v){ has = v; paint(); toast("Has solid surface: " + (v ? "Yes" : "No") + "."); if (o.onChange) o.onChange(v); });
+      }).then(function(){ busy = false; }, function(err){ busy = false; console.error("Has solid surface change failed:", err); toast((err && err.message) || "Couldn't save that — nothing was changed."); });
+    });
+  }
+  window.UtzSolidTick = { mount: mount, _confirmPin: confirmPin };
+})();
+</script>
+<!-- UTZLINE-SOLID-TICK END -->
+<!-- UTZLINE-SD-COMMENTS BEGIN (generated from shared/sd-comments -- don't edit here) -->
+<script>
+/* ============================== UTZLINE shop drawing comments (2026-10-09) ==============================
+   Andrew: "shop drawings require the ability to add comments, to the summary with a print button. if there are comments and a shop
+   drawing is opened, the first page has those comments on it".
+   - Comments belong to a DRAWING (Andrew: "these need to be per drawing"): one small file each, Project Saves\Shop Drawing Comments\<Level>\<Room>\<item>\<drawing id>\<stamp> - <initials> - comment.json
+     ({ at, by, text }); <drawing id> is the drawing's folder name under PDFs\SD. A comment with no drawing (typed in a Sent to CNC popup, or older ones) sits in the item's folder
+     itself as a GENERAL comment and shows with every drawing of the item. They are only ever added -- nothing is deleted.
+   - UtzSdComments.mount(el, o)  the summary card: the comments, an "Add comment" box and a Print button.
+   - UtzSdComments.withCover(file, o)  -> Promise<File>: the shop drawing PDF with a first page of the item's comments (the file itself on
+     disk is never changed). No comments, no pdf-lib, or anything going wrong -> the file as it was, so a drawing always opens.
+   o = { projectHandle, level, room, code, label (display name), toast, onChange }.  Needs UtzItemFiles; pdf-lib (./pdf-lib.min.js, loaded
+   only when a drawing with comments is opened); UtzUsers.name() for who is adding.  Plain ES5. */
+(function(){
+  "use strict";
+  if (window.UtzSdComments) return;
+  var ROOT = ["Project Saves", "Shop Drawing Comments"];
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function itemKey(o){ return window.UtzItemFiles.fileKey(o.level, o.room, o.code, o.projectHandle && o.projectHandle.name); }
+  function when(iso){
+    var d = new Date(iso); if (isNaN(d.getTime())) return "";
+    function p(n){ return (n < 10 ? "0" : "") + n; }
+    return p(d.getDate()) + "." + p(d.getMonth() + 1) + "." + d.getFullYear() + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function dirFor(o, create){
+    return window.UtzItemFiles.itemDir(o.projectHandle, ROOT, itemKey(o), create).then(function(dir){
+      return dir && o.groupId ? dir.getDirectoryHandle(String(o.groupId), { create: !!create }) : dir;
+    });
+  }
+  // the comment files of one folder (not its sub folders)
+  function readFolder(dir, group){
+    var out = [];
+    if (!dir || typeof dir.values !== "function") return Promise.resolve(out);
+    var it = dir.values();
+    function step(){
+      return it.next().then(function(r){
+        if (r.done) return out;
+        var e = r.value;
+        if (!e || e.kind !== "file" || !/ - comment\.json$/i.test(e.name)) return step();
+        return e.getFile().then(function(f){ return f.text(); }).then(function(t){ try{ var j = JSON.parse(t); if (j && j.text) out.push({ at: j.at || "", by: j.by || "", text: String(j.text), group: group || "", source: j.source || "" }); }catch(x){} }, function(){}).then(step);
+      });
+    }
+    return step();
+  }
+  function subFolders(dir){
+    var out = [];
+    if (!dir || typeof dir.values !== "function") return Promise.resolve(out);
+    var it = dir.values();
+    function step(){ return it.next().then(function(r){ if (r.done) return out; if (r.value && r.value.kind === "directory") out.push(r.value); return step(); }); }
+    return step();
+  }
+  // o.groupId: that drawing's comments + the item's general ones; o.all: every drawing's + general; neither: the general ones
+  function read(o){
+    var IF = window.UtzItemFiles;
+    return IF.itemDir(o.projectHandle, ROOT, itemKey(o), false).then(function(item){
+      if (!item) return [];
+      return readFolder(item, "").then(function(general){
+        if (o.all) return subFolders(item).then(function(subs){ return Promise.all(subs.map(function(d){ return readFolder(d, d.name); })); }).then(function(lists){ return general.concat([].concat.apply([], lists)); });
+        if (o.groupId) return item.getDirectoryHandle(String(o.groupId), { create: false }).then(function(g){ return readFolder(g, String(o.groupId)); }, function(){ return []; }).then(function(own){ return general.concat(own); });
+        return general;
+      });
+    }).then(function(list){
+      // comments taken from a returned / approved PDF (source "return") belong to the shop drawing apps only: every other reader leaves them out
+      // (o.returns: include them as well; o.returnsOnly: just those)
+      list = list.filter(function(c){ return o.returnsOnly ? c.source === "return" : (o.returns || c.source !== "return"); });
+      list.sort(function(a, b){ return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; }); return list;
+    }, function(){ return []; });
+  }
+  function add(o, text, who, meta){
+    var now = new Date(), IF = window.UtzItemFiles;
+    return dirFor(o, true).then(function(dir){
+      var base = IF.stamp(now, true) + " - " + IF.initials(who) + " - comment.json";
+      // never overwrite: two comments in the same instant get "-2", "-3" ... in the stamp's place (nothing is ever replaced)
+      function pick(n){
+        var name = n < 2 ? base : base.replace(/ - comment\.json$/, "-" + n + " - comment.json");
+        return dir.getFileHandle(name, { create: false }).then(function(){ return n > 50 ? name : pick(n + 1); }, function(){ return name; });
+      }
+      return pick(1).then(function(name){
+        return dir.getFileHandle(name, { create: true }).then(function(fh){
+          return fh.createWritable().then(function(w){ var rec = { at: now.toISOString(), by: who, text: text }; if (meta && meta.source) rec.source = meta.source;
+          return w.write(JSON.stringify(rec)).then(function(){ return w.close(); }); });
+        });
+      });
+    }).then(function(){ try{ window.dispatchEvent(new Event("utz-sd-comments-changed")); }catch(e){} });
+  }
+  // ---- the first page ----
+  var libP = null;
+  function loadPdfLib(){
+    if (window.PDFLib && window.PDFLib.PDFDocument) return Promise.resolve(window.PDFLib);
+    if (libP) return libP;
+    libP = new Promise(function(resolve, reject){
+      var el = document.createElement("script"); el.src = "./pdf-lib.min.js"; el.async = true;
+      el.onload = function(){ if (window.PDFLib && window.PDFLib.PDFDocument) resolve(window.PDFLib); else { libP = null; reject(new Error("pdf-lib missing")); } };
+      el.onerror = function(){ libP = null; reject(new Error("pdf-lib missing")); };
+      document.head.appendChild(el);
+    });
+    return libP;
+  }
+  function safe(s){ return String(s).replace(/\r/g, "").replace(/[^\n\x20-\x7E\xA0-\xFF–—‘’“”•…]/g, "?"); }
+  function drawCover(doc, L, comments, o){
+    return doc.embedFont(L.StandardFonts.Helvetica).then(function(font){ return doc.embedFont(L.StandardFonts.HelveticaBold).then(function(bold){
+      var W = 595.28, H = 841.89, M = 48, pages = [], pg, y;
+      function newPage(){ pg = doc.insertPage(pages.length, [W, H]); pages.push(pg); y = H - M; }
+      function wrap(text, f, size, width){
+        var lines = [];
+        safe(text).split("\n").forEach(function(par){
+          var line = "";
+          par.split(/ +/).forEach(function(w){
+            var t = line ? line + " " + w : w;
+            if (f.widthOfTextAtSize(t, size) <= width) { line = t; return; }
+            if (line) lines.push(line);
+            while (f.widthOfTextAtSize(w, size) > width){ var k = w.length; while (k > 1 && f.widthOfTextAtSize(w.slice(0, k), size) > width) k--; lines.push(w.slice(0, k)); w = w.slice(k); }
+            line = w;
+          });
+          lines.push(line);
+        });
+        return lines;
+      }
+      function put(text, f, size, gap, color){
+        wrap(text, f, size, W - 2 * M).forEach(function(l){
+          if (y < M + size){ newPage(); }
+          pg.drawText(l, { x: M, y: y - size, size: size, font: f, color: color || L.rgb(0.1, 0.1, 0.1) }); y -= size + gap;
+        });
+      }
+      newPage();
+      put("SHOP DRAWING COMMENTS", bold, 20, 6);
+      put(o.label || o.code || "", bold, 12, 4);
+      if (o.drawingLabel) put("Drawing: " + o.drawingLabel, font, 10, 4, L.rgb(0.35, 0.35, 0.35));
+      put((o.projectHandle && o.projectHandle.name ? o.projectHandle.name + "  ·  " : "") + [o.level, o.room].filter(Boolean).join(" · "), font, 10, 14, L.rgb(0.35, 0.35, 0.35));
+      comments.forEach(function(c){
+        y -= 4;
+        put(when(c.at) + (c.by ? "  —  " + c.by : "") + (o.groupId && !c.group ? "  (whole item)" : ""), bold, 10, 3, L.rgb(0.3, 0.3, 0.3));
+        put(c.text, font, 11, 3);
+        y -= 8;
+      });
+    }); });
+  }
+  function withCover(file, o){
+    return read(o).then(function(comments){
+      if (!comments.length) return file;
+      return Promise.all([loadPdfLib(), file.arrayBuffer()]).then(function(r){
+        var L = r[0];
+        return L.PDFDocument.load(r[1], { ignoreEncryption: true }).then(function(doc){
+          return drawCover(doc, L, comments, o).then(function(){ return doc.save(); });
+        });
+      }).then(function(bytes){
+        var buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        try{ return new File([buf], file.name || "shop drawing.pdf", { type: "application/pdf" }); }catch(e){ return new Blob([buf], { type: "application/pdf" }); }
+      });
+    }).then(null, function(err){ console.error("Shop drawing comments page failed — opening the drawing as saved:", err); return file; });
+  }
+  // ---- print ----
+  // (2026-10-09) Andrew: "print button does nothing, make it open the same thing as open job note" -- the comments page as a PDF, opened the way
+  // Open job note opens its PDF (the in-app viewer on a tablet / phone, a new window on a computer: its own Print is right there)
+  function printComments(comments, o){
+    var say = function(m){ if (o.toast) o.toast(m); };
+    if (!comments.length){ say("There are no saved comments to print yet — add the comment first."); return Promise.resolve(); }
+    return loadPdfLib().then(function(L){
+      return L.PDFDocument.create().then(function(doc){ return drawCover(doc, L, comments, o).then(function(){ return doc.save(); }); });
+    }).then(function(bytes){
+      var buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), name = "Shop drawing comments - " + (o.label || o.code || "item") + ".pdf", blob;
+      try{ blob = new File([buf], name, { type: "application/pdf" }); }catch(e){ blob = new Blob([buf], { type: "application/pdf" }); }
+      var url = URL.createObjectURL(blob), w = null;
+      try{ w = window.open(url, "_blank"); }catch(e){}
+      if (!w){ var a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 120000);
+    }).then(null, function(err){ console.error("Printing the comments failed:", err); say("Couldn't open the comments to print — try again."); });
+  }
+  // ---- the summary card ----
+  // o.drawings: [{ id, label }] -- the item's shop drawings (a drawing's id is its folder name under PDFs\SD); comments are kept per drawing.
+  // Returns { setDrawings(list) } so a card that mounted before the drawings were read can be given them.
+  function mount(el, o){
+    if (!el) return null;
+    var list = [], drawings = (o.drawings || []).slice(), sel = "";
+    el.innerHTML = "<div class=\"usc-pick\" hidden style=\"margin:0 0 8px;\"><label style=\"font-size:12px;opacity:.75;display:block;margin-bottom:3px;\">Drawing</label><select class=\"usc-sel\" style=\"width:100%;box-sizing:border-box;font:inherit;min-height:40px;padding:6px 10px;border-radius:8px;border:1px solid rgba(128,128,128,.5);background:transparent;color:inherit;\"></select></div>" +
+      "<div class=\"usc-list\"></div><textarea class=\"usc-box\" rows=\"3\" placeholder=\"Add a comment on this shop drawing…\" style=\"width:100%;box-sizing:border-box;margin-top:8px;font:inherit;padding:8px;border-radius:8px;border:1px solid rgba(128,128,128,.5);background:transparent;color:inherit;\"></textarea>" +
+      "<div style=\"display:flex;gap:8px;margin-top:8px;\"><button type=\"button\" class=\"mbtn usc-add\">Add comment</button><button type=\"button\" class=\"mbtn usc-print\">Print</button></div>" +
+      "<p class=\"usc-note\" style=\"margin:6px 0 0;font-size:12px;opacity:.7;\">Comments are kept per drawing and appear on the first page when that drawing is opened (a comment on the whole item appears on every drawing of it).</p>";
+    var pick = el.querySelector(".usc-pick"), sl = el.querySelector(".usc-sel"), box = el.querySelector(".usc-list"), ta = el.querySelector(".usc-box"), addB = el.querySelector(".usc-add"), prB = el.querySelector(".usc-print");
+    function say(m){ if (o.toast) o.toast(m); }
+    function ctx(){ var c = {}; for (var k in o) if (o.hasOwnProperty(k)) c[k] = o[k]; c.groupId = sel || ""; var d = drawings.filter(function(x){ return x.id === sel; })[0]; c.drawingLabel = d ? d.label : ""; return c; }
+    function paintSel(){
+      pick.hidden = !drawings.length;
+      sl.innerHTML = drawings.map(function(d){ return "<option value=\"" + esc(d.id) + "\">" + esc(d.label) + "</option>"; }).join("") + "<option value=\"\">The whole item (every drawing)</option>";
+      sl.value = sel;
+    }
+    function paint(){
+      box.innerHTML = list.length ? list.map(function(c){ return "<div style=\"margin:0 0 10px;\"><div style=\"font-size:12px;opacity:.7;\">" + esc(when(c.at)) + (c.by ? " — " + esc(c.by) : "") + (sel && !c.group ? " · whole item" : "") + "</div><div style=\"white-space:pre-wrap;\">" + esc(c.text) + "</div></div>"; }).join("") : "<p style=\"opacity:.7;margin:0;\">No comments yet.</p>";
+    }
+    function refresh(){ return read(ctx()).then(function(l){ list = l; paint(); }); }
+    function setDrawings(l, keep){
+      drawings = (l || []).slice();
+      if (!drawings.some(function(d){ return d.id === sel; })) sel = drawings.length ? drawings[0].id : "";
+      paintSel(); return refresh();
+    }
+    sl.addEventListener("change", function(){ sel = sl.value; refresh(); });
+    if (drawings.length) sel = drawings[0].id;
+    paintSel(); paint(); refresh();
+    window.addEventListener("utz-sd-comments-changed", function(){ if (document.body.contains(el)) refresh(); }); // comments saved from elsewhere (e.g. found in a returned drawing)
+    addB.addEventListener("click", function(){
+      var text = ta.value.trim(); if (!text){ say("Type the comment first."); return; }
+      var who = (window.UtzUsers && window.UtzUsers.name && window.UtzUsers.name()) || "";
+      if (!who){ say("Sign in with your name first."); return; }
+      addB.disabled = true;
+      add(ctx(), text, who).then(function(){ ta.value = ""; return refresh(); }).then(function(){ say("Comment added."); if (o.onChange) o.onChange(list); }, function(err){ console.error("Add comment failed:", err); say("Couldn't save that comment — try again."); }).then(function(){ addB.disabled = false; });
+    });
+    prB.addEventListener("click", function(){
+      if (ta.value.trim()){ say("The comment in the box isn't added yet — press Add comment first, then Print."); return; }
+      read(ctx()).then(function(l){ list = l; paint(); return printComments(list, ctx()); });
+    });
+    return { setDrawings: setDrawings };
+  }
+  window.UtzSdComments = { mount: mount, read: read, add: add, withCover: withCover, print: printComments };
+})();
+</script>
+<!-- UTZLINE-SD-COMMENTS END -->
+<!-- UTZLINE-PDF-MARKUPS BEGIN (generated from shared/pdf-markups -- don't edit here) -->
+<script>
+/* ============================== UTZLINE comments found in a returned / approved shop drawing (2026-10-09) ==============================
+   Andrew: "when a returned or approved sd is uploaded, can it find all the comments added to the pdf and give a summary? ... yes build it, returned and approved,
+   all comments". The PDF's own comments (the notes, text boxes, highlights, stamps and replies Bluebeam / Acrobat / Foxit keep inside the file) are read with pdf.js
+   and listed by page with who wrote them; every one is ticked and "Save ticked comments" files them as shop drawing comments on the item(s) of the drawing
+   (shared/sd-comments, marked source "return"): "From REV A returned, p.3, Jane Smith: <text>". Andrew: "comments taken from shop drawing returns only show in
+   shop drawing apps, nowhere else" -- they are only SHOWN by the Shop Drawings app (its drawing details + the first page of a drawing opened there) the Drafting Schedule's joinery summary page and the Viewer ("and shop drawing
+   schedule and viewer", "i meant drafting schedule": its summary card + drawings opened there); every other reader leaves them out.
+   Markings with no text (pen, cloud, a highlight with no note) are counted by page. A flattened / printed-to-PDF markup, a scan, or a pen / pencil mark-up has no typed comment inside the file and cannot be read: the
+   summary says so (and notes it in the dialog). The PDF is read, never changed.
+   UtzPdfMarkups.read(file) -> Promise<{ pages, comments: [{ page, author, date, kind, text }], plain: [{ page, kind }] }>
+   UtzPdfMarkups.review(file, { kind: "returned"|"approved", revLabel, projectHandle, items: [{ level, room, joineryId, groupId }]  (groupId = that item's folder of the drawing, so the comments are kept per drawing), toast })  -> reads, then shows the summary.
+   Needs pdf.js (./pdf.min.js + ./pdf.worker.min.js beside the app, as the in-app PDF viewer) and UtzSdComments. Plain ES5. */
+(function(){
+  "use strict";
+  if (window.UtzPdfMarkups) return;
+  var SKIP = { Link: 1, Widget: 1, Popup: 1 };
+  var KINDS = { Text: "Note", FreeText: "Text box", Highlight: "Highlight", Underline: "Underline", StrikeOut: "Strike-out", Squiggly: "Squiggly", Stamp: "Stamp", Line: "Line", Square: "Rectangle", Circle: "Ellipse", Polygon: "Polygon", PolyLine: "Polyline", Ink: "Pen", Caret: "Caret", FileAttachment: "Attachment" };
+  var libP = null;
+  function loadLib(){
+    if (window.pdfjsLib && window.pdfjsLib.getDocument) return Promise.resolve(window.pdfjsLib);
+    if (libP) return libP;
+    var LIB = ["./pdf.min.js", "./pdf.min.js"], WORKER = ["./pdf.worker.min.js", "./pdf.worker.min.js"];
+    libP = new Promise(function(resolve, reject){
+      var i = 0;
+      function next(){
+        if (i >= LIB.length){ libP = null; reject(new Error("pdf.js couldn't load")); return; }
+        var src = LIB[i], w = WORKER[i]; i++;
+        var el = document.createElement("script"); el.src = src; el.async = true;
+        el.onload = function(){ if (window.pdfjsLib && window.pdfjsLib.getDocument){ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc = w; }catch(e){} resolve(window.pdfjsLib); } else next(); };
+        el.onerror = function(){ if (el.parentNode) el.parentNode.removeChild(el); next(); };
+        document.head.appendChild(el);
+      }
+      next();
+    });
+    return libP;
+  }
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function clean(t){ return String(t == null ? "" : t).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim(); }
+  function dateOf(a){
+    var d = a.modificationDate || a.creationDate || "", m = /^D:(\d{4})(\d{2})(\d{2})/.exec(String(d));
+    return m ? m[3] + "." + m[2] + "." + m[1] : "";
+  }
+  function read(file){
+    return Promise.all([loadLib(), file.arrayBuffer()]).then(function(r){
+      return r[0].getDocument({ data: new Uint8Array(r[1]) }).promise.then(function(doc){
+        var out = { pages: doc.numPages, comments: [], plain: [] }, p = Promise.resolve();
+        function page(n){
+          return doc.getPage(n).then(function(pg){ return pg.getAnnotations(); }).then(function(list){
+            (list || []).forEach(function(a){
+              if (!a || SKIP[a.subtype]) return;
+              var text = clean(a.contents || (a.richText && a.richText.str) || "");
+              var kind = KINDS[a.subtype] || a.subtype || "Markup";
+              if (text) out.comments.push({ page: n, author: clean(a.titleObj && a.titleObj.str || a.title || ""), date: dateOf(a), kind: kind, text: text });
+              else out.plain.push({ page: n, kind: kind });
+            });
+          });
+        }
+        for (var n = 1; n <= doc.numPages; n++) (function(n){ p = p.then(function(){ return page(n); }); })(n);
+        return p.then(function(){ try{ doc.destroy(); }catch(e){} return out; });
+      });
+    });
+  }
+  function dialog(res, o, save){
+    var back = document.createElement("div");
+    back.style.cssText = "position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px;";
+    var box = document.createElement("div");
+    box.style.cssText = "background:var(--surface-1,#1c1f22);color:var(--text-primary,#eee);border:1px solid var(--border-strong,#555);border-radius:12px;max-width:560px;width:100%;max-height:92vh;overflow:auto;padding:16px;box-sizing:border-box;";
+    var title = res.comments.length + " comment" + (res.comments.length === 1 ? "" : "s") + " in the " + (o.kind === "approved" ? "approved" : "returned") + " drawing" + (o.revLabel ? " (" + esc(o.revLabel) + ")" : "");
+    var byPage = {}; res.comments.forEach(function(c, i){ (byPage[c.page] = byPage[c.page] || []).push(i); });
+    var html = "<h2 style=\"margin:0 0 4px;font-size:18px;\">" + title + "</h2><p style=\"margin:0 0 10px;opacity:.75;font-size:13px;\">Tick the ones to keep with this drawing. They are kept with the drawing and shown only in the Shop Drawings app, the Drafting Schedule and the Viewer (and on the first page of the drawing opened there) — nowhere else.</p><div class=\"upm-list\">";
+    Object.keys(byPage).sort(function(a, b){ return a - b; }).forEach(function(pg){
+      html += "<div style=\"font-weight:700;margin:10px 0 4px;\">Page " + pg + "</div>";
+      byPage[pg].forEach(function(i){
+        var c = res.comments[i];
+        html += "<label style=\"display:flex;gap:10px;align-items:flex-start;margin:0 0 8px;cursor:pointer;\"><input type=\"checkbox\" checked data-i=\"" + i + "\" style=\"width:20px;height:20px;margin-top:2px;flex:none;\"><span><span style=\"opacity:.7;font-size:12px;\">" + esc(c.kind + (c.author ? " · " + c.author : "") + (c.date ? " · " + c.date : "")) + "</span><br><span style=\"white-space:pre-wrap;\">" + esc(c.text) + "</span></span></label>";
+      });
+    });
+    html += "</div>";
+    if (res.plain.length){
+      var pages = {}; res.plain.forEach(function(x){ pages[x.page] = (pages[x.page] || 0) + 1; });
+      html += "<p style=\"margin:10px 0 0;opacity:.8;font-size:13px;\">Also " + res.plain.length + " marking" + (res.plain.length === 1 ? "" : "s") + " with no text (pen, cloud, highlight…) on page" + (Object.keys(pages).length === 1 ? " " : "s ") + Object.keys(pages).sort(function(a, b){ return a - b; }).join(", ") + " — open the drawing to see them.</p>";
+    }
+    html += "<p style=\"margin:10px 0 0;opacity:.8;font-size:12px;\">Note: scanned drawings and pen / pencil mark-ups can't be read — only typed comments are found. Open the drawing to see everything that was drawn on it.</p>";
+    html += "<p class=\"upm-err\" hidden style=\"margin:8px 0 0;color:#e77;font-size:13px;\"></p><div style=\"display:flex;gap:8px;justify-content:flex-end;margin-top:12px;\"><button type=\"button\" class=\"mbtn upm-skip\">Don't save</button><button type=\"button\" class=\"mbtn mbtn-accent upm-save\">Save ticked comments</button></div>";
+    box.innerHTML = html; back.appendChild(box); document.body.appendChild(back);
+    function close(){ if (back.parentNode) back.parentNode.removeChild(back); }
+    box.querySelector(".upm-skip").addEventListener("click", close);
+    back.addEventListener("click", function(e){ if (e.target === back) close(); });
+    box.querySelector(".upm-save").addEventListener("click", function(){
+      var picked = Array.prototype.slice.call(box.querySelectorAll("input[type=checkbox]:checked")).map(function(cb){ return res.comments[+cb.getAttribute("data-i")]; });
+      if (!picked.length){ close(); return; }
+      var btn = this; btn.disabled = true;
+      save(picked).then(close, function(err){ console.error("Saving the drawing's comments failed:", err); btn.disabled = false; var e = box.querySelector(".upm-err"); e.hidden = false; e.textContent = "Couldn't save them just now — try again."; });
+    });
+    return box;
+  }
+  function review(file, o){
+    o = o || {}; var say = function(m){ if (o.toast) o.toast(m); };
+    if (!file || (o.kind !== "returned" && o.kind !== "approved")) return Promise.resolve(null);
+    return read(file).then(function(res){
+      if (!res.comments.length && !res.plain.length){ say("No comments found inside that PDF. (Scanned drawings and pen / pencil mark-ups can't be read.)"); return res; }
+      if (!res.comments.length){ say(res.plain.length + " marking" + (res.plain.length === 1 ? "" : "s") + " with no text in that PDF — no comments to save. (Pen / pencil mark-ups and scans can't be read.)"); return res; }
+      var who = (window.UtzUsers && window.UtzUsers.name && window.UtzUsers.name()) || "Shop drawing";
+      dialog(res, o, function(picked){
+        var head = "From " + (o.revLabel ? o.revLabel + " " : "") + (o.kind === "approved" ? "approved" : "returned");
+        return picked.reduce(function(chain, c){
+          return (o.items || []).reduce(function(ch, it){
+            return ch.then(function(){
+              return window.UtzSdComments.add({ projectHandle: o.projectHandle, level: it.level, room: it.room, code: it.joineryId, groupId: it.groupId || "" }, head + ", p." + c.page + (c.author ? ", " + c.author : "") + ": " + c.text, who, { source: "return" });
+            });
+          }, chain);
+        }, Promise.resolve()).then(function(){ say(picked.length + " comment" + (picked.length === 1 ? "" : "s") + " saved on the item" + ((o.items || []).length > 1 ? "s" : "") + "."); if (o.onSaved) o.onSaved(); });
+      });
+      return res;
+    }).then(null, function(err){ console.error("Reading the PDF's comments failed:", err); return null; });
+  }
+  window.UtzPdfMarkups = { read: read, review: review };
+})();
+</script>
+<!-- UTZLINE-PDF-MARKUPS END -->
+<!-- UTZLINE-CNC-SEND BEGIN (generated from shared/cnc-send -- don't edit here) -->
+<script>
+/* ============================== UTZLINE Sent to CNC card (2026-10-09) ==============================
+   Andrew: "add option to add multiple filenames (and different machines per filename)", then "and these can be added in the shop drawing
+   schedule also" / "and in joinery summary". One card, used on every joinery summary page and in the Shop Drawings register: the CNC files
+   sent for an item (each with its own machine) and a button to add / change them -- the same Sent to CNC entry the Drafting Schedule and the
+   Viewer's job note popup write (Project Saves\Drafting Schedule\<L>\<R>\<item>\<stamp> - <initials> - sent.json; { fileName, machine, files: [{ fileName,
+   machine }], comment, by, at } -- the first file is also in fileName / machine). Nothing is overwritten or deleted: a change is a new entry.
+   The machine list is utzline-machines.json at the Projects root (shared with the reworks); a new machine typed on a row is added to it.
+   A comment typed here is also a shop drawing comment (shared/sd-comments).
+   UtzCncSend.mount(el, { projectHandle, getRoot, items: [{ level, room, joineryId }], label, toast, onChange })
+   Needs UtzItemFiles and UtzUsers.name().  Plain ES5. */
+(function(){
+  "use strict";
+  if (window.UtzCncSend) return;
+  var ROOT = ["Project Saves", "Drafting Schedule"], MACHINES = "utzline-machines.json";
+  function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function key(o, it){ return window.UtzItemFiles.fileKey(it.level, it.room, it.joineryId, o.projectHandle && o.projectHandle.name); }
+  function filesOf(ev){ return ev ? (Array.isArray(ev.files) && ev.files.length ? ev.files : [{ fileName: ev.fileName || "", machine: ev.machine || "" }]) : []; }
+  function dayOf(iso){ var d = new Date(iso); if (isNaN(d.getTime())) return ""; function p(n){ return (n < 10 ? "0" : "") + n; } return p(d.getDate()) + "." + p(d.getMonth() + 1) + "." + d.getFullYear(); }
+  function readItem(o, it){
+    return window.UtzItemFiles.itemDir(o.projectHandle, ROOT, key(o, it), false, { level: it.level, room: it.room }).then(function(dir){
+      var best = null; if (!dir || typeof dir.values !== "function") return null;
+      var iter = dir.values();
+      function step(){ return iter.next().then(function(r){
+        if (r.done) return best;
+        var e = r.value; if (!e || e.kind !== "file" || !/ - sent\.json$/i.test(e.name)) return step();
+        return e.getFile().then(function(f){ return f.text(); }).then(function(t){ try{ var j = JSON.parse(t); if (j && (!best || String(j.at || "") > String(best.at || ""))) best = j; }catch(x){} }, function(){}).then(step);
+      }); }
+      return step();
+    }, function(){ return null; });
+  }
+  function readMachines(o){
+    var root = o.getRoot && o.getRoot(); if (!root) return Promise.resolve([]);
+    return root.getFileHandle(MACHINES, { create: false }).then(function(fh){ return fh.getFile(); }).then(function(f){ return f.text(); }).then(function(t){
+      var j = JSON.parse(t); return Array.isArray(j) ? j.map(function(x){ return String(x || "").trim(); }).filter(Boolean) : [];
+    }).then(null, function(){ return []; });
+  }
+  function saveMachines(o, list){
+    var root = o.getRoot && o.getRoot(); if (!root) return Promise.resolve(false);
+    return root.getFileHandle(MACHINES, { create: true }).then(function(fh){ return fh.createWritable(); }).then(function(w){ return Promise.resolve(w.write(JSON.stringify(list, null, 1))).then(function(){ return w.close(); }); }).then(function(){ return true; }, function(){ return false; });
+  }
+  var FIELD = "width:100%;box-sizing:border-box;font:inherit;min-height:42px;padding:6px 10px;border-radius:8px;border:1px solid rgba(128,128,128,.5);background:transparent;color:inherit;";
+  function dialog(o, who, machines, current, done){
+    var back = document.createElement("div");
+    back.style.cssText = "position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px;";
+    var box = document.createElement("div");
+    box.style.cssText = "background:var(--surface-1,#1c1f22);color:var(--text-primary,#eee);border:1px solid var(--border-strong,#555);border-radius:12px;max-width:460px;width:100%;max-height:92vh;overflow:auto;padding:16px;box-sizing:border-box;";
+    box.innerHTML = "<h2 style=\"margin:0 0 4px;font-size:18px;\">Sent to CNC</h2><p class=\"ucs-sub\" style=\"margin:0 0 10px;opacity:.75;font-size:13px;\"></p><div class=\"ucs-rows\"></div>" +
+      "<button type=\"button\" class=\"mbtn ucs-more\" style=\"margin-top:10px;\">+ Add another file (and machine)</button>" +
+      "<textarea class=\"ucs-cmt\" rows=\"2\" maxlength=\"500\" placeholder=\"Comments (optional) — shown on the item summary and on the first page of the shop drawing\" style=\"" + FIELD + "margin-top:10px;\"></textarea>" +
+      "<p class=\"ucs-err\" hidden style=\"margin:8px 0 0;color:#e77;font-size:13px;\"></p>" +
+      "<div style=\"display:flex;gap:8px;justify-content:flex-end;margin-top:12px;\"><button type=\"button\" class=\"mbtn ucs-cancel\">Cancel</button><button type=\"button\" class=\"mbtn mbtn-accent ucs-save\">Save</button></div>";
+    box.querySelector(".ucs-sub").textContent = o.label || "";
+    back.appendChild(box); document.body.appendChild(back);
+    var rowsEl = box.querySelector(".ucs-rows"), errEl = box.querySelector(".ucs-err"), rows = [], list = machines.slice();
+    list.sort(function(a, b){ return a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }); });
+    function fill(sel, pick){
+      sel.innerHTML = "<option value=\"\">— pick a machine —</option>" + list.map(function(n){ return "<option>" + esc(n) + "</option>"; }).join("") + "<option value=\"__add\">+ Add a machine…</option>";
+      sel.value = pick === "__add" ? "__add" : (pick && list.indexOf(pick) !== -1 ? pick : "");
+    }
+    function addRow(file, machine){
+      var el = document.createElement("div"); if (rows.length) el.style.cssText = "margin-top:10px;padding-top:10px;border-top:1px solid rgba(128,128,128,.4);";
+      el.innerHTML = "<input type=\"text\" class=\"ucs-file\" maxlength=\"120\" placeholder=\"" + (rows.length ? "Another CNC file name" : "CNC file name") + "\" autocomplete=\"off\" style=\"" + FIELD + "\"><select class=\"ucs-sel\" style=\"" + FIELD + "margin-top:8px;\"></select>" +
+        "<input type=\"text\" class=\"ucs-new\" maxlength=\"60\" placeholder=\"New machine name\" style=\"" + FIELD + "margin-top:8px;display:none;\">" + (rows.length ? "<button type=\"button\" class=\"mbtn ucs-rm\" style=\"margin-top:8px;\">Remove this file</button>" : "");
+      var x = { file: el.querySelector(".ucs-file"), sel: el.querySelector(".ucs-sel"), nw: el.querySelector(".ucs-new") };
+      x.file.value = file || ""; fill(x.sel, machine || (rows[0] && rows[0].sel.value !== "__add" ? rows[0].sel.value : ""));
+      x.sel.addEventListener("change", function(){ x.nw.style.display = x.sel.value === "__add" ? "" : "none"; if (x.sel.value === "__add") x.nw.focus(); });
+      var rm = el.querySelector(".ucs-rm"); if (rm) rm.addEventListener("click", function(){ rows = rows.filter(function(y){ return y !== x; }); el.remove(); });
+      rows.push(x); rowsEl.appendChild(el);
+    }
+    var last = ""; try{ last = localStorage.getItem("utzline-last-machine") || ""; }catch(e){}
+    if (current.length) current.forEach(function(f){ addRow(f.fileName, f.machine); }); else addRow("", last);
+    function close(){ if (back.parentNode) back.parentNode.removeChild(back); }
+    box.querySelector(".ucs-more").addEventListener("click", function(){ addRow("", ""); rows[rows.length - 1].file.focus(); });
+    box.querySelector(".ucs-cancel").addEventListener("click", close);
+    back.addEventListener("click", function(e){ if (e.target === back) close(); });
+    box.querySelector(".ucs-save").addEventListener("click", function(){
+      var files = [], bad = "", added = false;
+      rows.forEach(function(x){
+        var f = x.file.value.trim(); if (!f) return;
+        var m = x.sel.value;
+        if (m === "__add"){
+          var n = x.nw.value.trim().replace(/\s+/g, " ");
+          if (n){ var have = list.filter(function(y){ return y.toLowerCase() === n.toLowerCase(); })[0]; if (!have){ list.push(n); added = true; } m = have || n; } else m = "";
+        }
+        if (!m && !bad) bad = f;
+        files.push({ fileName: f, machine: m });
+      });
+      if (!files.length){ errEl.hidden = false; errEl.textContent = "Enter the file name that was sent."; return; }
+      if (bad){ errEl.hidden = false; errEl.textContent = "Pick the machine " + bad + " was sent to (or add it)."; return; }
+      errEl.hidden = true;
+      var cmt = box.querySelector(".ucs-cmt").value.trim(), btn = box.querySelector(".ucs-save"); btn.disabled = true;
+      try{ localStorage.setItem("utzline-last-machine", files[files.length - 1].machine); }catch(e){}
+      done(files, cmt, added ? list : null).then(close, function(err){ console.error("Saving Sent to CNC failed:", err); btn.disabled = false; errEl.hidden = false; errEl.textContent = "Couldn't save just now — try again."; });
+    });
+    rows[0].file.focus();
+  }
+  function write(o, who, files, cmt){
+    var IF = window.UtzItemFiles, when = new Date();
+    return o.items.reduce(function(chain, it){
+      return chain.then(function(){
+        var body = { kind: "sent", level: it.level, room: it.room, joineryId: it.joineryId, fileName: files[0].fileName, machine: files[0].machine, by: who, at: when.toISOString() };
+        if (files.length > 1) body.files = files;
+        if (cmt) body.comment = cmt;
+        return IF.itemDir(o.projectHandle, ROOT, key(o, it), true, { level: it.level, room: it.room }).then(function(dir){
+          return dir.getFileHandle(IF.stamp(when, true) + " - " + IF.initials(who) + " - sent.json", { create: true }).then(function(fh){ return fh.createWritable(); }).then(function(w){ return Promise.resolve(w.write(JSON.stringify(body, null, 1))).then(function(){ return w.close(); }); });
+        }).then(function(){
+          return cmt && window.UtzSdComments ? window.UtzSdComments.add({ projectHandle: o.projectHandle, level: it.level, room: it.room, code: it.joineryId }, cmt, who) : null;
+        });
+      });
+    }, Promise.resolve());
+  }
+  function mount(el, o){
+    if (!el) return;
+    el.innerHTML = "<div class=\"ucs-list\" style=\"margin:0 0 8px;\">Reading…</div><button type=\"button\" class=\"mbtn ucs-open\">Sent to CNC / change files</button>";
+    var listEl = el.querySelector(".ucs-list"), cur = null;
+    function say(m){ if (o.toast) o.toast(m); }
+    function refresh(){
+      return Promise.all((o.items || []).map(function(it){ return readItem(o, it); })).then(function(evs){
+        cur = evs.filter(Boolean).sort(function(a, b){ return String(b.at || "").localeCompare(String(a.at || "")); })[0] || null;
+        listEl.innerHTML = cur ? filesOf(cur).map(function(f){ return esc(f.fileName) + " — <b>" + esc(f.machine) + "</b>"; }).join("<br>") + (cur.comment ? "<br><i>" + esc(cur.comment) + "</i>" : "") +
+          "<br><span style=\"opacity:.7;font-size:12px;\">" + esc((cur.by || "") + (cur.at ? " · " + dayOf(cur.at) : "")) + "</span>" : "<span style=\"opacity:.7;\">Not sent to the CNC yet.</span>";
+      });
+    }
+    refresh();
+    el.querySelector(".ucs-open").addEventListener("click", function(){
+      var who = (window.UtzUsers && window.UtzUsers.name && window.UtzUsers.name()) || "";
+      if (!who){ say("Sign in with your name first — every change is logged against a name."); return; }
+      readMachines(o).then(function(machines){
+        dialog(o, who, machines, filesOf(cur), function(files, cmt, newList){
+          return (newList ? saveMachines(o, newList) : Promise.resolve(true)).then(function(){ return write(o, who, files, cmt); }).then(function(){
+            say("Sent to CNC logged: " + files.map(function(f){ return f.fileName + " (" + f.machine + ")"; }).join(", ") + ".");
+            if (o.onChange) o.onChange(); return refresh();
+          });
+        });
+      });
+    });
+  }
+  window.UtzCncSend = { mount: mount, read: function(o){ return Promise.all((o.items || []).map(function(it){ return readItem(o, it); })).then(function(evs){ return evs.filter(Boolean).sort(function(a, b){ return String(b.at || "").localeCompare(String(a.at || "")); })[0] || null; }); }, filesOf: filesOf };
+})();
+</script>
+<!-- UTZLINE-CNC-SEND END -->
 <!-- UTZLINE-QR-CODE BEGIN (generated from shared/qr -- don't edit here) -->
 <script>
 /* ============================== UTZLINE QR codes (2026-10-01) ==============================
@@ -8637,7 +9548,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   var APP_CODES = [
     ["SiteMeasure", "Site Measure"], ["Viewer", "Viewer"], ["Projects", "Projects"], ["Scheduler", "Scheduler"],
     ["MachineSchedule", "Machine Schedule"], ["SolidSurfaceSchedule", "Solid Surface Schedule"],
-    ["ManufactureITP", "Manufacture ITP"], ["DeliveryITP", "Delivery ITP"], ["InstallITP", "Install ITP"], ["SubOrders", "Sub Orders"], ["ShopDrawings", "Shop Drawings"], ["Drafting", "Drafting Schedule"], ["DollarSummary", "$ Summary (finance)"]
+    ["ManufactureITP", "Manufacture ITP"], ["DeliveryITP", "Delivery ITP"], ["InstallITP", "Install ITP"], ["SubOrders", "Sub Orders"], ["ShopDrawings", "Shop Drawings"], ["Drafting", "Drafting Schedule"], ["DollarSummary", "$ Summary (finance)"],
+    ["Variations", "Variations & RFIs"], ["Defects", "Defects & Handover"], ["ProgressClaims", "Progress Claims"], ["Dashboard", "Management Dashboard"]
   ];
   var DEFAULT_ADMINS = ["Andrew Utz"], ADMIN_FILE = "utzline-admins.json", PENDING_FILE = "utzline-users-pending.json";
   var cfg = null, admins = DEFAULT_ADMINS.slice(), adminsAt = 0, busy = false, shownFor = {};
@@ -8709,7 +9621,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (isAdminName(name)) return true;
     var row = rows.filter(function(r){ return r && low(r.name) === low(name); })[0];
     var own = row ? codesOf(row) : [];
-    if (!deptCache || !deptAppsRead) return own.length ? appMatch(own, code) : true; // departments not read yet (first run, nothing remembered): old rule
+    // (2026-10-09) Andrew: "only people assigned to an app should show on the login page" -- a name with no app ticked used to show EVERYWHERE while the department
+    // files hadn't been read (or don't exist yet); now only the apps ticked on the name (and, once read, its department's) put a name on the login page
+    if (!deptCache || !deptAppsRead) return appMatch(own, code);
     return appMatch(own, code) || appMatch(defaultApps(name) || [], code);
   }
   function showsHere(row, rows){ return !!(row && row.name) && canUse(row.name, rows); }
@@ -9215,7 +10129,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       return p === "granted";
     }, function(){ return false; });
   }
-  window.UtzUsers = { ensureAccess: ensureAccess, canUse: canUse, noAccessNames: noAccessNames, defaultApps: defaultApps, refreshDefaults: refreshDefaults, DEPARTMENTS: DEPARTMENTS, departmentsOf: departmentsOf, setDepartments: setDepartments, pickDepartments: pickDepartments, APP_CODES: APP_CODES, init: init, filterNames: filterNames, showsHere: showsHere, needsApproval: needsApproval, request: request, poke: poke, loadAdmins: loadAdmins, isAdmin: isAdminName, PENDING_FILE: PENDING_FILE, openUsers: openManage, ADMIN_FILE: ADMIN_FILE };
+  window.UtzUsers = { name: function(){ try { return (cfg && cfg.getName && cfg.getName()) || ""; } catch (e) { return ""; } }, rows: function(){ return cfg && cfg.readUsers ? Promise.resolve(cfg.readUsers()).then(function(r){ return r || []; }) : Promise.resolve([]); }, ensureAccess: ensureAccess, canUse: canUse, noAccessNames: noAccessNames, defaultApps: defaultApps, refreshDefaults: refreshDefaults, DEPARTMENTS: DEPARTMENTS, departmentsOf: departmentsOf, setDepartments: setDepartments, pickDepartments: pickDepartments, APP_CODES: APP_CODES, init: init, filterNames: filterNames, showsHere: showsHere, needsApproval: needsApproval, request: request, poke: poke, loadAdmins: loadAdmins, isAdmin: isAdminName, PENDING_FILE: PENDING_FILE, openUsers: openManage, ADMIN_FILE: ADMIN_FILE };
 })();
 </script>
 <!-- UTZLINE-USERS END -->
@@ -10511,6 +11425,13 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       el.querySelector("[data-urw=outTable]").innerHTML = html;
       el.querySelector("[data-urw=outEmpty]").hidden = !!out.length || st.loading;
       el.querySelector("[data-urw=delivTable]").innerHTML = theadHtml() + "<tbody>" + deliv.map(function(r, i){ return rowHtml(r, out.length + i); }).join("") + "</tbody>";
+      // (2026-10-10) Andrew: "all tables need to be sortable, selectable columns" -- the headings already sort; the shared Columns menu (when the app has it) adds
+      // show / hide / move. The tables are rebuilt on every render, so the choice is re-applied each time.
+      if (window.UtzColumns){
+        var tOut = el.querySelector("[data-urw=outTable]"), tDel = el.querySelector("[data-urw=delivTable]");
+        UtzColumns.ensure(tOut, "utzline-rework:columns:outstanding", { frozen: 0, mountBefore: el.querySelector("[data-urw=refresh]").parentNode }); UtzColumns.apply(tOut);
+        UtzColumns.ensure(tDel, "utzline-rework:columns:delivered", { frozen: 0 }); UtzColumns.apply(tDel);
+      }
       el.querySelector("[data-urw=delivEmpty]").hidden = !!deliv.length;
       el.querySelector("[data-urw=delivCard]").hidden = !st.showDelivered;
       el.querySelector("[data-urw=delivToggle]").textContent = "Delivered (" + deliv.length + ") " + (st.showDelivered ? "▾" : "▸");
@@ -11600,7 +12521,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // view with the other still offered as a toggleable reference layer and
   // a badge reading "1" -- exactly as next-version-notes.md's "Shipped in
   // v45.0" section always described.
-  var APP_VERSION = "v130";
+  var APP_VERSION = "v132";
   var RELEASE_LABEL = "RC 1.0"; // (RC 1.0) what people see; APP_VERSION is the build
   // Read-only "viewer" mode -- a distinct standalone build (own manifest,
   // own icon/name -- see the viewer PWA's start_url) for the drafting
@@ -14026,7 +14947,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
             var vw = (rot === 90 || rot === 270) ? h : w, vh = (rot === 90 || rot === 270) ? w : h;
             var seenAngle = Math.atan2(vh, vw) * 180 / Math.PI;            // bottom-left to top-right, as seen
             var angle = seenAngle + rot;                                    // in the page's own coordinates
-            // (2026-10-06) several lines: "\n" between them, the last one half the size (a returned drawing: RETURNED – / NOT FOR CONSTRUCTION / REV · date)
+            // (2026-10-06) several lines: "\n" between them, the last one half the size (a returned drawing: TO RESUBMIT – / NOT FOR CONSTRUCTION / REV · date)
             var lines = String(text).split("\n"), small = lines.length > 1 && smallLast;
             var big = lines.slice(0, small ? -1 : lines.length), widest = big.reduce(function(m, l){ return Math.max(m, font.widthOfTextAtSize(l, 1)); }, 1);
             var fontSize = Math.max(10, Math.hypot(vw, vh) * 0.55 / widest);
@@ -14411,18 +15332,24 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         var wanted = shopFileName(fileToken, key, room, now);
         return UtzItemFiles.docsDir(projectHandle, "SD", key, true, docSub).then(function(dirH){
           // (2026-10-04) every shop drawing is stamped NOT FOR CONSTRUCTION <its revision>; one that can't be is saved as it is
-          var wm = kind === "returned" ? "RETURNED –\nNOT FOR CONSTRUCTION\n" + revLabel + " · " + shopWmDate(new Date()) : "NOT FOR CONSTRUCTION " + revLabel, stampedSd = true; // (2026-10-06) a returned drawing: 2 lines + the date at half size
-          return Promise.all([freeFileName(dirH, wanted), stampWatermark(file, wm, kind === "returned").then(null, function(err){
+          // (2026-10-09) Andrew: "approved pdfs should have approved on the watermark" -- an approved drawing reads like a returned one: APPROVED – / NOT FOR CONSTRUCTION / REV · date
+          var answered = true;   // (2026-10-09) every shop drawing now says what it is: SENT / RETURNED / APPROVED
+          var wm = answered ? (kind === "approved" ? "APPROVED –" : kind === "returned" ? "TO RESUBMIT –" : "SENT –") + "\nNOT FOR CONSTRUCTION\n" + revLabel + " · " + shopWmDate(new Date()) : "NOT FOR CONSTRUCTION " + revLabel, stampedSd = true; // (2026-10-06) a returned drawing: 2 lines + the date at half size
+          return Promise.all([freeFileName(dirH, wanted), stampWatermark(file, wm, answered).then(null, function(err){
             console.error("Couldn't add the Not For Construction watermark to " + (file.name || "a shop drawing") + ":", err);
             stampedSd = false; return file;
           })]).then(function(two){
             var name = two[0], data = two[1];
             return writeNewFile(dirH, name, data).catch(dropEmptyNewGroup).then(function(){
+              // (2026-10-09) the PDF as it came (no watermark) is kept in Originals\ beside it, so Shop Drawings can stamp a corrected date on it later
+              if (!stampedSd) return null;
+              return dirH.getDirectoryHandle("Originals", { create: true }).then(function(od){ return writeNewFile(od, name, file); }).then(null, function(err){ console.error("Couldn't keep the original of the shop drawing:", err); });
+            }).then(function(){
               var info = { kind: "shopDrawing", part: kind, revLabel: revLabel, file: name, original: file.name || "", by: by || "", at: now.toISOString(), watermark: stampedSd ? wm.replace(/\n/g, " ") : "" };
               return writeNewFile(dirH, name.replace(/\.pdf$/i, "") + ".json", new Blob([JSON.stringify(info)], { type: "application/json" })).then(null, function(err){
                 console.error("Couldn't save who added the shop drawing (the drawing itself is saved):", err);
               });
-            }).then(function(){ return { revLabel: revLabel, name: name, kind: kind, stamped: stampedSd }; });
+            }).then(function(){ return { revLabel: revLabel, name: name, kind: kind, stamped: stampedSd, groupId: groupId }; });
           });
         });
       });
@@ -16713,9 +17640,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       return dirH.getDirectoryHandle("Replaced", { create: true }).then(function(repH){
         return move(oldName, repH).then(function(){ return move(side, repH); });
       }).then(function(){
-        var wm = "NOT FOR CONSTRUCTION " + latest.revLabel;
-        return stampWatermark(st.file, wm).then(null, function(){ return st.file; }).then(function(data){
-          return writeNewFile(dirH, oldName, data);
+        var wm = "SENT –\nNOT FOR CONSTRUCTION\n" + latest.revLabel + " · " + shopWmDate(new Date());   // (2026-10-09) "sent to say sent"
+        return stampWatermark(st.file, wm, true).then(null, function(){ return st.file; }).then(function(data){
+          return writeNewFile(dirH, oldName, data).then(function(){
+            return dirH.getDirectoryHandle("Originals", { create: true }).then(function(od){ return writeNewFile(od, oldName, st.file); }).then(null, function(err){ console.error("Couldn't keep the original of the shop drawing:", err); });
+          });
         }).then(function(){
           var info = { kind: "shopDrawing", part: "sent", revLabel: latest.revLabel, file: oldName, original: st.file.name || "", by: deviceUserName || "", at: new Date().toISOString(), replaced: true, watermark: wm };
           return writeNewFile(dirH, side, new Blob([JSON.stringify(info)], { type: "application/json" })).then(null, function(){});
@@ -16798,7 +17727,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         list.forEach(function(m){
           p = p.then(function(){
             var mk = joineryItemPageKey(m.level, m.room, m.joineryId);
-            return addShopDrawingFile(activeProjectHandle, mk, st.file, k, null, by).then(function(){ if (shopDrawingKeySet) shopDrawingKeySet.add(mk); }, function(err){
+            return addShopDrawingFile(activeProjectHandle, mk, st.file, k, null, by).then(function(r2){ m.groupId = r2 && r2.groupId; if (shopDrawingKeySet) shopDrawingKeySet.add(mk); }, function(err){
               console.error("Copying the drawing to " + m.joineryId + " failed:", err);
               showToast("Saved on " + (primaryCode || "this item") + ", but not on " + m.joineryId + " — try again on that item.", 6000);
             });
@@ -16817,6 +17746,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       var also = codes ? (" On " + [primaryCode].concat(others.map(function(m){ return m.joineryId; })).join(", ") + ".")
         : (others.length ? " Also on " + others.map(function(m){ return m.joineryId; }).join(", ") + " (same drawing)." : "");
       showToast((res.kind === "returned" ? "Saved as returned to resubmit (" + res.revLabel + ")." : res.kind === "approved" ? "Saved as approved (" + res.revLabel + ")." : "Saved as sent — " + res.revLabel + ".") + also, (others.length || codes) ? 6000 : undefined);
+      // (2026-10-09) Andrew: a returned / approved drawing -- the comments inside the PDF are found and summarised (tick the ones to keep)
+      if ((k === "returned" || k === "approved") && window.UtzPdfMarkups) window.UtzPdfMarkups.review(st.file, { kind: k, revLabel: res.revLabel, projectHandle: activeProjectHandle, items: [{ level: st.level, room: st.room, joineryId: primaryCode, groupId: res.groupId }].concat(others.filter(function(m){ return m.groupId; }).map(function(m){ return { level: m.level, room: m.room, joineryId: m.joineryId, groupId: m.groupId }; })), toast: showToast, onSaved: function(){ try{ if (vsState && vsState.key === st.key && typeof vsRefreshComments === "function") vsRefreshComments(); }catch(e){} } });
       return res;
     }).catch(function(err){
       console.error("Add shop drawing failed:", err);
@@ -16920,7 +17851,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     openBtn.textContent = "Open";
     openBtn.addEventListener("click", function(){
       var rev = revs[Number(select.value)];
+      var cx = (typeof vsScreen !== "undefined" && vsScreen && !vsScreen.hidden && vsState) ? { level: vsState.level, room: vsState.room, code: vsState.code } : sdViewCtx;
       rev.handle.getFile().then(function(file){
+        // (2026-10-09) the item's shop drawing comments head the first page
+        return cx && window.UtzSdComments ? window.UtzSdComments.withCover(file, { projectHandle: activeProjectHandle, level: cx.level, room: cx.room, code: cx.code, label: UtzItemFiles.label(cx.level, cx.room, cx.code, activeProjectName), groupId: rev.drawingId || "", returns: !!VIEW_ONLY_MODE }) : file; // (2026-10-09) comments taken from returned PDFs: the Viewer shows them too (Site Measure does not)
+      }).then(function(file){
         var url = URL.createObjectURL(file);
         window.open(url, "_blank");
         setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
@@ -16934,7 +17869,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (impBtn) row.appendChild(impBtn);
     return row;
   }
+  var sdViewCtx = null;
   function openViewShopDrawingDialog(obj){
+    sdViewCtx = { level: activeLevelName, room: obj.roomName || "", code: obj.joineryCode || "" };
     var subtitle = [activeLevelName, obj.roomName, roomlinkDisplayText(obj)].filter(Boolean).join(" · ");
     openViewShopDrawingDialogCore(shopDrawingKeyFor(obj), subtitle);
   }
@@ -18527,6 +19464,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       case "delivered": return 5;
       case "manufactured": return 4;
       case "machined": return 3;
+      case "cut": return 2.5; // (2026-10-09) Carcase Cut + CB Cut done (between In manufacture and Machined)
       case "ready_to_inspect": return 3.5; // (2026-10-04) the joinery builder has signed the Manufacture ITP, the factory manager has not
       case "in_manufacture": return 2;
       case "measured": return 1;
@@ -18538,7 +19476,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       case "installed": return "🏆";
       case "delivered": return "🚚";
       case "manufactured": return "📦";
-      case "machined": return "⚙️";
+      case "machined": return "🔨";
+      case "cut": return "⚙️"; // (2026-10-09) cut = cog; machined = hammer
       case "ready_to_inspect": return "🔍";
       case "in_manufacture": return "🏭";
       case "measured": return "📏";
@@ -18559,7 +19498,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (rec.status === "installed") return "🏆";
     if (rec.status === "delivered") return "🚚";
     if (rec.status === "manufactured") return "📦";
-    if (rec.status === "machined") return "⚙️";
+    if (rec.status === "machined") return "🔨";
+    if (rec.status === "cut") return "⚙️";
     if (rec.status === "ready_to_inspect") return "🔍";
     if (rec.status === "in_manufacture") return "🏭";
     // A job note means In manufacture (the rule since 2026-09-23) -- and
@@ -20621,7 +21561,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     editorEl.select();
     if (usePad) openMeasurePad();
     editorEl.addEventListener("input", function(){
-      label.text = editorEl.value;
+      label.text = editorEl.value; measurePadShowText();
       if (obj.type === "dimension" && label.autoPos) repositionDimensionLabel(obj);
       if (obj.type === "angle" && label.autoPos) repositionAngleLabel(obj);
       reflowInlineEditor();
@@ -20713,9 +21653,27 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     function sum(){ var v = prod(); while (t[i] === "+" || t[i] === "-"){ var o = t[i++], r = prod(); v = o === "+" ? v + r : v - r; } return v; }
     try{ var out = sum(); if (i !== t.length || !isFinite(out)) return null; return Math.round(out * 100) / 100; }catch(e){ return null; }
   }
+  // (2026-10-09) Andrew: "and show the calculation history" -- the last sums (worked out with = or copied into the measure), newest first, under the display;
+  // tap one to bring its answer back into the sum. Kept while the page is open.
+  var calcHistory = [];
+  function calcRemember(expr, result){
+    expr = String(expr || "").trim(); if (!expr || /^-?[0-9.]+$/.test(expr)) return; // a bare number is not a sum
+    if (calcHistory.length && calcHistory[0].expr === expr) return;
+    calcHistory.unshift({ expr: expr, result: result }); if (calcHistory.length > 5) calcHistory.length = 5;
+  }
+  function calcShowHistory(){
+    var h = measurePadEl && measurePadEl.querySelector(".mp-calc-hist"); if (!h) return;
+    h.innerHTML = "";
+    if (!calcHistory.length){ var n = document.createElement("div"); n.className = "mp-h-none"; n.textContent = "No sums yet — they are listed here"; h.appendChild(n); return; }
+    calcHistory.forEach(function(e, i){
+      var b = document.createElement("button"); b.type = "button"; b.tabIndex = -1; b.setAttribute("data-key", "h:" + i);
+      b.textContent = e.expr + " = " + e.result; h.appendChild(b);
+    });
+  }
   function calcShow(){
     var pad = measurePadEl; if (!pad) return;
     var d = pad.querySelector(".mp-calc-disp"); if (!d) return;
+    calcShowHistory();
     var v = calcEval(measureCalc.expr);
     d.innerHTML = "";
     var e = document.createElement("span"); e.textContent = measureCalc.expr || "0"; d.appendChild(e);
@@ -20740,11 +21698,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       calcShow(); positionMeasurePad(); return;
     }
     if (k === "c:C"){ measureCalc.expr = ""; calcShow(); return; }
-    if (k === "c:="){ var v = calcEval(measureCalc.expr); if (v != null) measureCalc.expr = String(v); calcShow(); return; }
+    if (k === "c:="){ var v = calcEval(measureCalc.expr); if (v != null){ calcRemember(measureCalc.expr, v); measureCalc.expr = String(v); } calcShow(); return; }
     if (k === "c:copy"){
       var r = calcEval(measureCalc.expr);
       if (r == null){ showToast("Finish the sum first."); return; }
-      calcSetLabel(r);
+      calcSetLabel(r); calcRemember(measureCalc.expr, r);
       measureCalc.expr = ""; measureCalc.on = false; if (pad) pad.classList.remove("calc-on");
       calcShow(); positionMeasurePad(); return;
     }
@@ -20754,7 +21712,8 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (measureCalc.on){
       var cur = calcEval(measureCalc.expr); if (cur == null){ var l = calcLabelNumber(); cur = l; }
       if (cur == null){ showToast("Type a number first."); return; }
-      measureCalc.expr = String(Math.round((cur - n) * 100) / 100); calcShow(); return;
+      var fres = Math.round((cur - n) * 100) / 100; calcRemember(measureCalc.expr, cur); calcRemember(String(cur) + "-" + n, fres);
+      measureCalc.expr = String(fres); calcShow(); return;
     }
     var v = calcLabelNumber();
     if (v == null){ showToast("Type the measure first, then tap \u2212" + n + "."); return; }
@@ -20844,6 +21803,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     if (!editorEl) return;
     if (k === "mic") return measureListen(btn);
     if (k === "say") return measureSay();
+    if (/^h:\d+$/.test(k)){ var he = calcHistory[parseInt(k.slice(2), 10)]; if (he){ measureCalc.expr = String(he.result); calcShow(); } return; }
     if (k === "calc" || /^c:/.test(k)) return measureCalcKey(k);
     if (/^-\d+$/.test(k)) return measureFastKey(parseInt(k.slice(1), 10));
     if (measureCalc.on && /^[0-9.]$/.test(k)){ measureCalc.expr += k; calcShow(); return; }
@@ -20881,9 +21841,12 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     var LABELS = { back: "\u232B", space: "Space", abc: "ABC", done: "Done", "-13": "\u221213", "-26": "\u221226", "-39": "\u221239", calc: "Calc", mic: "\ud83c\udfa4" };
     measureCalc = { on: false, expr: "" };
     var calcBox = document.createElement("div"); calcBox.className = "mp-calc";
-    calcBox.innerHTML = '<div class="mp-calc-disp"></div>' +
+    calcBox.innerHTML = '<div class="mp-calc-disp"></div><div class="mp-calc-hist"></div>' +
       '<div class="mp-calc-row"><button type="button" tabindex="-1" data-key="c:+">+</button><button type="button" tabindex="-1" data-key="c:-">\u2212</button><button type="button" tabindex="-1" data-key="c:*">\u00d7</button><button type="button" tabindex="-1" data-key="c:/">\u00f7</button><button type="button" tabindex="-1" data-key="c:(">(</button><button type="button" tabindex="-1" data-key="c:)">)</button><button type="button" tabindex="-1" data-key="c:=" class="mp-fn">=</button><button type="button" tabindex="-1" data-key="c:C" class="mp-fn">C</button></div>' +
       '<div class="mp-calc-row"><button type="button" tabindex="-1" data-key="c:copy" class="mp-done" style="grid-column:auto;flex:1">Copy into measure</button><button type="button" tabindex="-1" data-key="say" class="mp-fn" style="flex:0 0 64px" aria-label="Read out loud">\ud83d\udd0a Say</button></div>';
+    // (2026-10-09) Andrew: "have the text you're inputting show above the numbers also" -- what is being typed is read out at the top of the pad
+    var readout = document.createElement("div"); readout.className = "mp-text"; readout.setAttribute("aria-live", "polite");
+    pad.appendChild(readout);
     pad.appendChild(calcBox);
     layout.forEach(function(row){
       row.forEach(function(k){
@@ -20912,7 +21875,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       b.classList.add("mp-hit");
       setTimeout(function(){ b.classList.remove("mp-hit"); }, 120);
       try{ measurePadKey(b.getAttribute("data-key"), b); }
-      finally{ setTimeout(function(){ measurePadHolding = false; }, 0); }
+      finally{ measurePadShowText(); setTimeout(function(){ measurePadHolding = false; }, 0); }
     }
     pad.addEventListener("pointerdown", press);
     ["mousedown", "touchstart", "click", "dblclick", "pointerup", "contextmenu"].forEach(function(t){
@@ -20920,8 +21883,13 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     });
     stage.appendChild(pad);
     measurePadEl = pad;
+    measurePadShowText();
     calcShow();
     positionMeasurePad();
+  }
+  function measurePadShowText(){
+    var rd = measurePadEl && measurePadEl.querySelector(".mp-text");
+    if (rd) rd.textContent = (editorEl && editorEl.value) || "";
   }
   function closeMeasurePad(){
     if (measurePadEl && measurePadEl.parentNode) measurePadEl.parentNode.removeChild(measurePadEl);
@@ -22773,12 +23741,13 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       else UtzBuilders.mount(topEl, null, "").then(showTop);
     }
     if (activeRoomName){
-      sub.textContent = prefix + activeLevelName + " — " + activeRoomName;
+      sub.textContent = prefix + lzFull(activeLevelName) + " — " + activeRoomName;
     } else if (activeLevelName){
-      sub.textContent = prefix + activeLevelName;
+      sub.textContent = prefix + lzFull(activeLevelName);
     } else {
       sub.textContent = activeProjectName || "plan markup";
     }
+    lzPlanTabs();
   }
   // Press-and-hold on a project/level row deletes it, gated behind two
   // sequential confirmations (a mis-tap that only gets past the first is
@@ -23112,16 +24081,31 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
           : emptyMessage;
         listEl.appendChild(empty);
       }
-      split.visible.forEach(function(name){
+      // (2026-10-10) Andrew: "zones are not levels" -- a level split over several plans (Projects saves "LEVEL 1 (H1a)",
+      // "LEVEL 1 (H1b)") is listed ONCE: the level as a heading that opens its first plan, its plans under it (shared/level-zones).
+      var rowsToRender = split.visible.map(function(name){ return { name: name, text: name }; });
+      if (kind === "level" && window.UtzLevelZones){
+        rowsToRender = [];
+        UtzLevelZones.groups(split.visible, UtzLevelZones.use(activeProjectHandle)).forEach(function(g){
+          if (g.members.length < 2){ rowsToRender.push({ name: g.members[0].name, text: g.members[0].zone ? g.level : g.members[0].name }); return; }
+          rowsToRender.push({ name: g.members[0].name, text: g.level, group: g.level, sub: g.members.length + " plans" });
+          g.members.forEach(function(m){ rowsToRender.push({ name: m.name, text: m.zone || m.name, zone: true }); });
+        });
+      }
+      rowsToRender.forEach(function(r){
+        var name = r.name;
         var row = document.createElement("button");
         row.type = "button";
-        row.className = "project-row";
+        row.className = "project-row" + (r.zone ? " project-row-zone" : "");
+        if (r.zone) row.style.paddingLeft = "32px";
+        row.setAttribute("data-level", name);
+        if (r.group) row.setAttribute("data-level-group", r.group);
         row.title = VIEW_ONLY_MODE ? "Tap to open — press and hold to remove from your list" : "Tap to open";
         var label = document.createElement("span");
-        label.textContent = name;
+        label.textContent = r.text;
         var arrow = document.createElement("span");
         arrow.className = "project-row-arrow";
-        arrow.textContent = "Open →";
+        arrow.textContent = r.sub || "Open →";
         row.appendChild(label);
         row.appendChild(arrow);
         row.addEventListener("click", function(){
@@ -23668,7 +24652,11 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // Same shape as populateProjectList, one folder deeper: lists the levels
   // inside whichever project is currently open (activeProjectHandle).
   function populateLevelList(){
-    return listExistingLevels().then(function(names){
+    // (2026-10-10) the level/zone file is read first so a split level lists as one group straight away (shared/level-zones)
+    if (window.UtzLevelZones) UtzLevelZones.forget(activeProjectHandle); // Projects may have re-split the level since
+    lzTabNames = null;
+    var metaP = window.UtzLevelZones ? UtzLevelZones.load(activeProjectHandle).then(null, function(){ return null; }) : Promise.resolve(null);
+    return metaP.then(listExistingLevels).then(function(names){
       var emptyMessage = VIEW_ONLY_MODE ? "No levels here." : "No levels here yet — create one in UTZLINE Projects.";
       return renderPickerList(levelListItems, "level", names, emptyMessage, openLevel, populateLevelList);
     });
@@ -23976,6 +24964,22 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // and nothing about this changes how a level's own main floor plan works.
   // Auto-saves whatever's currently open first, same as switchProject()
   // above (see its own comment).
+  // (2026-10-10) the real level with its zone ("LEVEL 1 · H1a") for headings; activeLevelName stays the plan's disk name.
+  function lzFull(name){ return (window.UtzLevelZones && activeProjectHandle) ? UtzLevelZones.full(name, UtzLevelZones.use(activeProjectHandle)) : name; }
+  // The level's plans are tabs in the top bar while its plan is open (a tab opens that plan; unsaved work is saved first, like any level change).
+  var lzTabNames = null, lzTabProject = "";
+  function lzPlanTabs(){
+    var el = document.getElementById("brandPlanTabs"); if (!el || !window.UtzLevelZones) return;
+    if (!activeProjectHandle || !activeLevelName || activeRoomName || activeJoineryItemPage){ el.hidden = true; return; }
+    var lvl = activeLevelName, proj = activeProjectHandle.name;
+    var namesP = (lzTabNames && lzTabProject === proj) ? Promise.resolve(lzTabNames) : listExistingLevels().then(function(n){ lzTabNames = n; lzTabProject = proj; return n; });
+    namesP.then(function(names){
+      if (activeLevelName !== lvl || activeRoomName || activeJoineryItemPage) return;
+      UtzLevelZones.tabs(el, lvl, names, UtzLevelZones.use(activeProjectHandle), function(n){
+        openLevel(n).catch(function(err){ if (err && err.code === "nav_cancelled") return; console.error("Open plan failed:", err); showToast("Couldn't open that plan — try again."); });
+      });
+    }, function(){ el.hidden = true; });
+  }
   function openRoomsPicker(){
     function goToGate(){
       activeRoomName = ""; activeRoomHandle = null;
@@ -23985,7 +24989,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       state.fileBase = "plan";
       updateFileNameBtn();
       populateRoomList().then(function(){
-        gateRoomsLabel.textContent = "“" + activeLevelName + "” — choose a room, or open its main floor plan.";
+        gateRoomsLabel.textContent = "“" + lzFull(activeLevelName) + "” — choose a room, or open its main floor plan.";
         showGateState("rooms");
       });
     }
@@ -27951,7 +28955,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
     var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
     return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
   }
-  var VS_STATUS_LABELS = { created: "Created", measured: "Check measured", in_manufacture: "In manufacture", machined:"Machined", ready_to_inspect:"Ready to inspect", manufactured: "Ready to dispatch", delivered: "Delivered", installed: "Installed" };
+  var VS_STATUS_LABELS = { created: "Created", measured: "Check measured", in_manufacture: "In manufacture", machined:"Machined", cut:"Cut", ready_to_inspect:"Ready to inspect", manufactured: "Ready to dispatch", delivered: "Delivered", installed: "Installed" };
   function vsStatusLabel(k){ return VS_STATUS_LABELS[k] || (k ? String(k) : "Created"); }
   function vsOpenHandle(handle){
     handle.getFile().then(function(file){
@@ -28139,6 +29143,7 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         "<dt>Status</dt><dd>" + vsEsc(joineryStatusIcon(st)) + " " + vsEsc(vsStatusLabel(st)) + (statusRec && statusRec.jobNote ? "<span class=\"vs-pill\">Job note</span>" : "") +
         (statusRec && (statusRec.at || statusRec.by) ? "<span class=\"vs-row-sub\">" + vsEsc([statusRec.by, vsWhen(statusRec.at)].filter(Boolean).join(", ")) + "</span>" : "") + "</dd>" +
         "<dt>Shop drawing</dt><dd data-shop-line=\"1\">" + (vsState && vsState.shopStatusHtml ? vsState.shopStatusHtml : "Loading…") + "</dd>" +
+        "<dt>Solid surface</dt><dd id=\"vsSolidTick\"></dd>" + // (2026-10-09) locked tick: changing it asks the PIN (shared/solid-tick)
         "<dt>Required delivery</dt><dd>" + vsEsc(sch.requiredDeliveryDate ? vsDate(sch.requiredDeliveryDate) : "Not set") + "</dd>" +
         "<dt>Manufacture start</dt><dd>" + vsEsc(sch.manufactureStartDate ? vsDate(sch.manufactureStartDate) : "Not set") + (sch.manufactureLeadTimeDays != null && sch.manufactureLeadTimeDays !== "" ? " <span class=\"vs-row-sub\">lead time " + vsEsc(sch.manufactureLeadTimeDays) + " days</span>" : "") + "</dd>";
       if (hist.length){
@@ -28146,6 +29151,13 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
         html += "<dt>Status history</dt><dd>" + hist.slice(0, 8).map(function(h){ return (h.reversed ? vsEsc(vsStatusLabel(h.status)) + " <em>reversed</em>" : (h.cancelled ? "<s>" + vsEsc(vsStatusLabel(h.status)) + "</s>" : vsEsc(vsStatusLabel(h.status)))) + " <span class=\"vs-row-sub\" style=\"display:inline\">" + vsEsc([h.by, vsWhen(h.at)].filter(Boolean).join(", ")) + "</span>"; }).join("<br>") + "</dd>";
       }
       vsMeta.innerHTML = html;
+      var cncEl = document.getElementById("vsCnc");
+      if (cncEl && window.UtzCncSend) window.UtzCncSend.mount(cncEl, { projectHandle: activeProjectHandle, getRoot: function(){ return projectsRootHandle; }, items: [{ level: level, room: room, joineryId: code }], label: UtzItemFiles.label(level, room, code, activeProjectName), toast: showToast });
+      var cmEl = document.getElementById("vsSdComments");
+      if (cmEl && window.UtzSdComments && vsState) vsState.cmApi = window.UtzSdComments.mount(cmEl, { returns: !!VIEW_ONLY_MODE, projectHandle: activeProjectHandle, level: level, room: room, code: code, label: UtzItemFiles.label(level, room, code, activeProjectName), toast: showToast });
+      if (vsState && vsState.cmApi && vsState.cmDrawings) vsState.cmApi.setDrawings(vsState.cmDrawings); // the drawings were read before the card existed
+      var tickEl = document.getElementById("vsSolidTick");
+      if (tickEl && window.UtzSolidTick) window.UtzSolidTick.mount(tickEl, { projectHandle: activeProjectHandle, level: level, room: room, code: code, has: it.hasSolidSurface === true, toast: showToast });
     }).catch(function(err){ console.error("Joinery summary details failed:", err); if (live()) vsMeta.innerHTML += "<dt></dt><dd class=\"vs-empty\">Couldn't read this item's details.</dd>"; });
     // Cutting file / Notes / History (the shared item-extras cards)
     try{
@@ -28334,6 +29346,9 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       if (!vsState || vsState.seq !== seq) return;
       vsShopSent.innerHTML = ""; vsShopReturned.innerHTML = ""; vsShopApproved.innerHTML = "";
       document.getElementById("vsShopStatusLine").innerHTML = vsShopStatusHtml(groups);
+      // the comments card works per drawing: give it this item's drawings (name + latest revision)
+      if (vsState) vsState.cmDrawings = groups.filter(function(g){ return g.revisions.length; }).map(function(g){ var last = g.revisions[g.revisions.length - 1]; return { id: g.drawingId, label: (last.displayName || "Drawing") + " (" + last.revLabel + ")" }; });
+      if (vsState && vsState.cmApi) vsState.cmApi.setDrawings(vsState.cmDrawings);
       if (vsState) vsState.shopStatusHtml = vsShopStatusHtml(groups);
       var shopDd = vsMeta.querySelector("dd[data-shop-line]"); if (shopDd) shopDd.innerHTML = vsShopStatusHtml(groups);
       var sent = groups.filter(function(g){ return g.revisions.length; }), ret = groups.filter(function(g){ return g.returned.length; }), appr = groups.filter(function(g){ return g.approved && g.approved.length; });
@@ -28413,38 +29428,75 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
   // (2026-10-07) Andrew: "when add job note is closed, popup asking for machine name and cnc filename (like rework does)" / "same popup as print job note"
   // In the Viewer the "Job note added" popup also asks which machine + the CNC file name; closing it with a file name writes
   // a Sent to CNC event for each item (Drafting Schedule shows Sent to CNC). Left blank = nothing recorded.
-  var fxCncBlock = document.getElementById("fxCncBlock"), fxCncFile = document.getElementById("fxCncFile"), fxCncMachine = document.getElementById("fxCncMachine"), fxCncNew = document.getElementById("fxCncNew"), fxCncErr = document.getElementById("fxCncErr");
+  var fxCncBlock = document.getElementById("fxCncBlock"), fxCncFile = document.getElementById("fxCncFile"), fxCncMachine = document.getElementById("fxCncMachine"), fxCncNew = document.getElementById("fxCncNew"), fxCncAddBtn = document.getElementById("fxCncAddBtn"), fxCncErr = document.getElementById("fxCncErr");
   var fxCncList = [];
   function fxCncRoot(){ return projectsRootHandle; }
+  // (2026-10-09) the machine drop-down used esc(), which does not exist out here: any machine in the list threw, so the list never showed and Add a machine did nothing
+  function fxEsc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function fxCncFill(pick){
     fxCncList.sort(function(a, b){ return a.localeCompare(b, undefined, { sensitivity: "base" }); });
-    fxCncMachine.innerHTML = "<option value=\"\">— pick a machine —</option>" + fxCncList.map(function(n){ return "<option>" + esc(n) + "</option>"; }).join("") + "<option value=\"__add\">+ Add a machine…</option>";
+    fxCncMachine.innerHTML = "<option value=\"\">— pick a machine —</option>" + fxCncList.map(function(n){ return "<option>" + fxEsc(n) + "</option>"; }).join("") + "<option value=\"__add\">+ Add a machine…</option>";
     fxCncMachine.value = pick && fxCncList.indexOf(pick) !== -1 ? pick : "";
-    fxCncNew.hidden = true;
+    fxCncNew.hidden = true; fxCncAddBtn.hidden = true;
+    fxCncExtras.forEach(function(r){ fxCncFillSel(r.sel, r.sel.value); });
   }
   function fxCncSetup(res){
     var on = !!(res && res.kind === "note" && res.items && res.items.length && VIEW_ONLY_MODE);
-    fxCncBlock.hidden = !on; fxCncErr.hidden = true; fxCncFile.value = "";
+    fxCncBlock.hidden = !on; fxCncErr.hidden = true; fxCncFile.value = ""; document.getElementById("fxCncComment").value = ""; fxCncClearRows();
     if (!on) return;
     var root = fxCncRoot(), last = ""; try{ last = localStorage.getItem("utzline-last-machine") || ""; }catch(e){}
     fxCncList = []; fxCncFill(last);
     if (!root) return;
     root.getFileHandle("utzline-machines.json", { create: false }).then(function(fh){ return fh.getFile(); }).then(function(f){ return f.text(); }).then(function(t){
-      var j = JSON.parse(t); fxCncList = Array.isArray(j) ? j.map(function(x){ return String(x || "").trim(); }).filter(Boolean) : []; fxCncFill(last);
+      var j = JSON.parse(t); var keepAdd = fxCncMachine.value === "__add", keepNew = fxCncNew.value, cur = fxCncMachine.value; fxCncList = Array.isArray(j) ? j.map(function(x){ return String(x || "").trim(); }).filter(Boolean) : []; fxCncFill(cur && cur !== "__add" ? cur : last);
+      if (keepAdd){ fxCncMachine.value = "__add"; fxCncNew.hidden = false; fxCncAddBtn.hidden = false; fxCncNew.value = keepNew; }
     }).catch(function(){});
   }
-  fxCncMachine.addEventListener("change", function(){ fxCncNew.hidden = fxCncMachine.value !== "__add"; if (!fxCncNew.hidden) fxCncNew.focus(); });
+  fxCncMachine.addEventListener("change", function(){ fxCncNew.hidden = fxCncAddBtn.hidden = fxCncMachine.value !== "__add"; if (!fxCncNew.hidden) fxCncNew.focus(); });
+  // (2026-10-09) Andrew: "add a machine does not work" -- the typed name is now added at once (Add this machine / Enter): it joins the list, is
+  // picked in the drop-down, and the shared list file is written; Close also adds it if that was not pressed
+  function fxCncAddNew(){
+    fxCncErr.hidden = true;
+    return fxCncMachineName().then(function(n){
+      if (!n){ fxCncErr.hidden = false; fxCncErr.textContent = "Type the new machine's name first."; return ""; }
+      fxCncFill(n); showToast("Machine added: " + n + ".");
+      return n;
+    });
+  }
+  fxCncAddBtn.addEventListener("click", function(){ fxCncAddNew(); });
+  fxCncNew.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); fxCncAddNew(); } });
   // resolves the machine name (adding a typed new one to the shared list), or "" when none was picked
-  function fxCncMachineName(){
-    if (fxCncMachine.value !== "__add") return Promise.resolve(fxCncMachine.value);
-    var n = fxCncNew.value.trim().replace(/\s+/g, " "); if (!n) return Promise.resolve("");
+  // one row's machine name (adding a typed new one to the shared list), or "" when none was picked
+  function fxCncResolve(sel, nw){
+    if (sel.value !== "__add") return Promise.resolve(sel.value);
+    var n = nw.value.trim().replace(/\s+/g, " "); if (!n) return Promise.resolve("");
     var have = fxCncList.filter(function(x){ return x.toLowerCase() === n.toLowerCase(); })[0];
     if (have) return Promise.resolve(have);
     fxCncList.push(n);
     var root = fxCncRoot(); if (!root) return Promise.resolve(n);
     return root.getFileHandle("utzline-machines.json", { create: true }).then(function(fh){ return fh.createWritable(); }).then(function(w){ return Promise.resolve(w.write(JSON.stringify(fxCncList, null, 1))).then(function(){ return w.close(); }); }).then(function(){ return n; }, function(){ return n; });
   }
-  function fxCncRecord(items, fileName, machine){
+  function fxCncMachineName(){ return fxCncResolve(fxCncMachine, fxCncNew); }
+  // (2026-10-09) Andrew: "add option to add multiple filenames (and different machines per filename)" -- extra rows: a file name + its own machine
+  var fxCncExtras = [], fxCncMore = document.getElementById("fxCncMore"), fxCncMoreBtn = document.getElementById("fxCncMoreBtn");
+  function fxCncFillSel(sel, pick){
+    sel.innerHTML = "<option value=\"\">— pick a machine —</option>" + fxCncList.map(function(n){ return "<option>" + fxEsc(n) + "</option>"; }).join("") + "<option value=\"__add\">+ Add a machine…</option>";
+    sel.value = pick === "__add" ? "__add" : (pick && fxCncList.indexOf(pick) !== -1 ? pick : "");
+  }
+  function fxCncAddRow(){
+    var el = document.createElement("div"); el.style.cssText = "margin-top:10px;padding-top:10px;border-top:1px solid var(--border,#444);";
+    var st = "width:100%;box-sizing:border-box;font:inherit;min-height:42px;padding:6px 10px;border-radius:8px;margin-top:8px;";
+    el.innerHTML = "<input type=\"text\" class=\"fxx-file\" maxlength=\"120\" placeholder=\"Another CNC file name\" autocomplete=\"off\" style=\"" + st + "margin-top:0;\"><select class=\"fxx-sel\" style=\"" + st + "\"></select>" +
+      "<input type=\"text\" class=\"fxx-new\" maxlength=\"60\" placeholder=\"New machine name\" hidden style=\"" + st + "\"><button type=\"button\" class=\"mbtn fxx-rm\" style=\"margin-top:8px;\">Remove this file</button>";
+    var r = { el: el, file: el.querySelector(".fxx-file"), sel: el.querySelector(".fxx-sel"), nw: el.querySelector(".fxx-new") };
+    fxCncFillSel(r.sel, fxCncMachine.value !== "__add" ? fxCncMachine.value : "");
+    r.sel.addEventListener("change", function(){ r.nw.hidden = r.sel.value !== "__add"; if (!r.nw.hidden) r.nw.focus(); });
+    el.querySelector(".fxx-rm").addEventListener("click", function(){ fxCncExtras = fxCncExtras.filter(function(x){ return x !== r; }); el.remove(); });
+    fxCncExtras.push(r); fxCncMore.appendChild(el); r.file.focus();
+  }
+  fxCncMoreBtn.addEventListener("click", fxCncAddRow);
+  function fxCncClearRows(){ fxCncExtras = []; fxCncMore.innerHTML = ""; }
+  function fxCncRecord(items, files, comment){ // files: [{ fileName, machine }, ...] (one or several, each its own machine)
     var by = deviceUserName || "Viewer", ini = (String(by).trim().split(/\s+/).filter(Boolean).map(function(w){ return w.charAt(0).toUpperCase(); }).join("").slice(0, 3)) || "XX";
     var d = new Date(), p2 = function(n){ return n < 10 ? "0" + n : "" + n; };
     var stamp = String(d.getFullYear()).slice(2) + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + " " + p2(d.getHours()) + "-" + p2(d.getMinutes()) + "-" + p2(d.getSeconds());
@@ -28452,21 +29504,29 @@ window.UTZLINE_LOGO_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ
       return chain.then(function(){
         var key = jobNoteKeyFor(o), loc = { level: o.dupLevel || activeLevelName, room: o.roomName || "" };
         return UtzItemFiles.itemDir(activeProjectHandle, ["Project Saves", "Drafting Schedule"], key, true, loc).then(function(dir){
-          var body = { kind: "sent", level: loc.level, room: loc.room, joineryId: o.joineryCode || "", fileName: fileName, machine: machine, by: by, at: d.toISOString() };
+          var body = { kind: "sent", level: loc.level, room: loc.room, joineryId: o.joineryCode || "", fileName: files[0].fileName, machine: files[0].machine, by: by, at: d.toISOString() };
+          if (files.length > 1) body.files = files;
+          if (comment) body.comment = comment;
           return dir.getFileHandle(stamp + " - " + ini + " - sent.json", { create: true }).then(function(fh){ return fh.createWritable(); }).then(function(w){ return Promise.resolve(w.write(JSON.stringify(body, null, 1))).then(function(){ return w.close(); }); });
+        }).then(function(){
+          // (2026-10-09) the comment is also a shop drawing comment on the item's summary (and heads the shop drawing's first page)
+          return comment && window.UtzSdComments ? window.UtzSdComments.add({ projectHandle: activeProjectHandle, level: loc.level, room: loc.room, code: o.joineryCode || "" }, comment, by) : null;
         });
       });
     }, Promise.resolve());
   }
   fxDoneCloseBtn.addEventListener("click", function(){
-    var res = fxDoneRes, file = fxCncFile.value.trim();
-    if (!res || fxCncBlock.hidden || !file){ fxDoneBackdrop.hidden = true; fxDoneRes = null; return; }
-    fxCncMachineName().then(function(machine){
-      if (!machine){ fxCncErr.hidden = false; fxCncErr.textContent = "Pick the machine it was sent to (or add it) — or clear the file name to skip."; return; }
-      try{ localStorage.setItem("utzline-last-machine", machine); }catch(e){}
-      return fxCncRecord(res.items, file, machine).then(function(){
+    var res = fxDoneRes;
+    var rows = [{ file: fxCncFile, sel: fxCncMachine, nw: fxCncNew }].concat(fxCncExtras).filter(function(r){ return r.file.value.trim(); });
+    if (!res || fxCncBlock.hidden || !rows.length){ fxDoneBackdrop.hidden = true; fxDoneRes = null; return; }
+    // each file name needs its machine; a new machine typed on a row is added to the shared list
+    rows.reduce(function(chain, r){ return chain.then(function(out){ return fxCncResolve(r.sel, r.nw).then(function(m){ out.push({ fileName: r.file.value.trim(), machine: m }); return out; }); }); }, Promise.resolve([])).then(function(files){
+      var bad = files.filter(function(f){ return !f.machine; })[0];
+      if (bad){ fxCncErr.hidden = false; fxCncErr.textContent = "Pick the machine " + bad.fileName + " was sent to (or add it) — or clear its file name to skip."; return; }
+      try{ localStorage.setItem("utzline-last-machine", files[files.length - 1].machine); }catch(e){}
+      return fxCncRecord(res.items, files, document.getElementById("fxCncComment").value.trim()).then(function(){
         fxDoneBackdrop.hidden = true; fxDoneRes = null;
-        showToast("Sent to CNC recorded: " + file + " (" + machine + ").");
+        showToast("Sent to CNC recorded: " + files.map(function(f){ return f.fileName + " (" + f.machine + ")"; }).join(", ") + ".");
       }, function(err){ console.error("Recording Sent to CNC failed:", err); fxCncErr.hidden = false; fxCncErr.textContent = "Couldn't record that — try again, or clear the file name to skip."; });
     });
   });
